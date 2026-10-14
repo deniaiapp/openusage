@@ -26,6 +26,12 @@ node_modules/
 *.xcresult
 .build-test/
 
+# Windows .NET port
+windows/**/bin/
+windows/**/obj/
+# `*.app` above would otherwise hide the WPF project folder
+!windows/OpenUsage.App/
+
 # Local appcast / Sparkle feed output
 feed/
 appcast.xml

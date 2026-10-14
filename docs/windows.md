@@ -1,0 +1,21 @@
+# OpenUsage on Windows
+
+Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tray app. They are a port of the Swift menu-bar app, not a replacement for it.
+
+The dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles / usage trend, global shortcut, and loopback API behave the same way as on macOS. Credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
+
+A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.
+
+Ollama stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and calls Cloud Code for the quota summary.
+
+Provider details that match macOS:
+
+- **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
+- **Codex:** Pro 100 / 200 / 500 plan names, auto-review usage free from October 6, Ultrafast priced at 6x on GPT-6 Astra. A slow history scan shows a warning instead of holding back live limits.
+- **Cursor:** Today / Yesterday / Last 30 Days and the usage trend, fetched day by day; finished days are cached per account.
+- **Ollama:** Monthly and Purchased Credits from the balance endpoint; a warning shows when the plan can't be read.
+- **OpenCode:** reads OpenCode 2's database (usage and Go key) and falls back to `auth.json` on OpenCode 1.
+
+Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
+
+See the [Windows README](../windows/README.md) for how to build it and which providers are wired up.

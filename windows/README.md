@@ -1,0 +1,56 @@
+# OpenUsage for Windows
+
+Native Windows port of [OpenUsage](https://github.com/robinebers/openusage): a system-tray app that shows AI provider usage (Claude, Codex, Cursor, Copilot, Grok, OpenRouter, Z.ai, OpenCode, Devin).
+
+The macOS app stays on Swift / SwiftUI. This folder is a separate .NET 8 WPF tray app that reuses the same provider APIs, metric vocabulary, and layout defaults.
+
+## Run
+
+Requires the .NET 8 SDK (the .NET 10 SDK can build it too).
+
+```powershell
+cd windows
+dotnet test
+dotnet run --project OpenUsage.App
+```
+
+The app lives in the notification area (system tray). Left-click the icon to open the dashboard popover. Right-click for Options.
+
+On first launch a welcome screen lists the AI tools already signed in on this PC. Pick the ones to follow and click **Connect Selected**, or **Skip for Now** and turn providers on later in **Customize**. Closing the welcome window quits the app; it shows again next time.
+
+## What it reads
+
+Same idea as macOS: credentials already on the machine, no extra login for most providers.
+
+| Provider | Windows credential sources |
+|---|---|
+| Claude | `%USERPROFILE%\.claude\.credentials.json`, Windows Credential Manager (`Claude Code-credentials`), `CLAUDE_CODE_OAUTH_TOKEN` |
+| Codex | `%USERPROFILE%\.codex\auth.json`, `%USERPROFILE%\.config\codex\auth.json`, Credential Manager (`cli\|<home hash>.Codex Auth`, the per-home key Codex itself writes) |
+| Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |
+| Copilot | `%USERPROFILE%\.config\github-copilot\apps.json`, `gh` `hosts.yml`, Credential Manager (`gh:github.com`) |
+| Grok | `%USERPROFILE%\.grok\auth.json` |
+| OpenCode | `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
+| Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a short-lived cache under `%APPDATA%\OpenUsage\antigravity` |
+| Ollama | `%USERPROFILE%\.ollama\id_ed25519` (opt-in in Customize; never auto-enabled). Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
+| Devin | `credentials.toml` under `.local\share\devin` / `%LOCALAPPDATA%\devin`, or the Devin/Windsurf `state.vscdb` |
+| OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
+
+Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
+
+OpenUsage only refreshes expired Claude and Codex tokens that came from a file, and it keeps the rest of that file intact. Tokens from Credential Manager are left for the CLI to refresh — run `claude` or `codex` once if the card says the session expired.
+
+When an update adds a new default metric, it's turned on once for existing layouts too. If you turn it off, it stays off.
+
+## Local HTTP API
+
+Loopback-only, same port as macOS: `http://127.0.0.1:6736/v1/limits`.
+
+## Not in this port yet
+
+macOS-only pieces left out on purpose:
+
+- iCloud spend sync
+- Sparkle auto-update
+- Share-screenshot cards
+
+Proxy support still honors `~\.openusage\config.json` (or `%APPDATA%\OpenUsage\config.json`) with a `proxy` URL.

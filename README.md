@@ -57,10 +57,20 @@ Behavior docs live in [docs/](docs/README.md): the [dashboard](docs/dashboard.md
 
 For working on the code, see the developer docs: [architecture](docs/architecture.md), [adding a provider](docs/adding-a-provider.md), and [debugging & capturing logs](docs/debugging.md).
 
+## Windows
+
+A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF). It is not a substitute for the macOS app; see [OpenUsage on Windows](docs/windows.md).
+
+```powershell
+cd windows
+dotnet run --project OpenUsage.App
+```
+
 ## Requirements
 
 - macOS 15 (Sequoia) or later
 - Universal binary — runs natively on both Apple Silicon and Intel Macs
+- Windows port: Windows 10/11 and the .NET 8 runtime (SDK to build)
 
 The Today / Yesterday / Last 30 Days spend tiles are computed natively from local CLI logs (Claude,
 Codex, and Grok) or Cursor's usage export — no Node.js or other runtime needed. Dollars are estimated

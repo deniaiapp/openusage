@@ -1,0 +1,216 @@
+using System.Text.Json.Nodes;
+using OpenUsage.Core.Models;
+using OpenUsage.Core.Support;
+
+namespace OpenUsage.Core.Providers.Copilot;
+
+public sealed class CopilotAuthStore
+{
+    public static IEnumerable<string> EditorConfigPaths()
+    {
+        yield return AppPaths.Expand("~/.config/github-copilot/apps.json");
+        yield return AppPaths.Expand("~/.config/github-copilot/hosts.json");
+        yield return Path.Combine(AppPaths.AppData, "GitHub Copilot", "apps.json");
+        yield return Path.Combine(AppPaths.LocalAppData, "github-copilot", "apps.json");
+    }
+
+    public static IEnumerable<string> GhHostsPaths()
+    {
+        yield return AppPaths.Expand("~/.config/gh/hosts.yml");
+        yield return Path.Combine(AppPaths.AppData, "GitHub CLI", "hosts.yml");
+        yield return Path.Combine(AppPaths.LocalAppData, "GitHub CLI", "hosts.yml");
+    }
+
+    public string? LoadToken() =>
+        LoadFromEditorConfig() ?? LoadFromGhConfig() ?? LoadFromGhCredential();
+
+    private static string? LoadFromEditorConfig()
+    {
+        foreach (var path in EditorConfigPaths())
+        {
+            if (!File.Exists(path)) continue;
+            try
+            {
+                var obj = JsonUtil.ParseObject(File.ReadAllText(path));
+                if (obj is null) continue;
+                foreach (var property in obj)
+                {
+                    if (property.Value is JsonObject entry)
+                    {
+                        var token = JsonUtil.String(entry["oauth_token"]) ?? JsonUtil.String(entry["token"]);
+                        if (!string.IsNullOrEmpty(token)) return token;
+                    }
+                }
+            }
+            catch (Exception ex) { AppLog.Warn("copilot", $"editor config unreadable: {ex.Message}"); }
+        }
+        return null;
+    }
+
+    private static string? LoadFromGhConfig()
+    {
+        foreach (var path in GhHostsPaths())
+        {
+            if (!File.Exists(path)) continue;
+            try
+            {
+                foreach (var line in File.ReadAllLines(path))
+                {
+                    var trimmed = line.Trim();
+                    if (trimmed.StartsWith("oauth_token:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var token = trimmed["oauth_token:".Length..].Trim().Trim('"', '\'');
+                        if (!string.IsNullOrEmpty(token)) return token;
+                    }
+                }
+            }
+            catch (Exception ex) { AppLog.Warn("copilot", $"gh hosts unreadable: {ex.Message}"); }
+        }
+        return null;
+    }
+
+    private static string? LoadFromGhCredential() =>
+        WindowsCredentialStore.UnwrapGoKeyring(
+            WindowsCredentialStore.ReadAny("gh:github.com", "gh:github.com:oauth_token"));
+}
+
+public static class CopilotUsageMapper
+{
+    public static (string? Plan, List<MetricLine> Lines) Map(JsonObject body)
+    {
+        var plan = PlanLabel(JsonUtil.String(body["copilot_plan"]));
+        var resetsAt = Iso8601.Parse(JsonUtil.String(body["quota_reset_date"]))
+            ?? ParseDay(JsonUtil.String(body["limited_user_reset_date"]));
+        var lines = new List<MetricLine>();
+        var snapshots = JsonUtil.Object(body["quota_snapshots"]);
+        var premium = snapshots?["premium_interactions"];
+        var credits = SnapshotLine("Credits", premium, resetsAt);
+        if (credits is not null) lines.Add(credits);
+        if (credits is not null && OverageLine(premium) is { } extra) lines.Add(extra);
+        if (SnapshotLine("Chat", snapshots?["chat"], resetsAt) is { } chat) lines.Add(chat);
+        if (SnapshotLine("Completions", snapshots?["completions"], resetsAt) is { } completions) lines.Add(completions);
+
+        if (lines.Count == 0)
+        {
+            var limited = JsonUtil.Object(body["limited_user_quotas"]);
+            var monthly = JsonUtil.Object(body["monthly_quotas"]);
+            if (LimitedLine("Chat", limited?["chat"], monthly?["chat"], resetsAt) is { } legacyChat) lines.Add(legacyChat);
+            if (LimitedLine("Completions", limited?["completions"], monthly?["completions"], resetsAt) is { } legacyComp) lines.Add(legacyComp);
+        }
+
+        if (lines.Count == 0)
+        {
+            if (JsonUtil.Bool(body["token_based_billing"]) != true)
+                throw new InvalidOperationException("Copilot quota unavailable. Try again later.");
+            if (JsonUtil.Object(premium) is { } snapshot &&
+                JsonUtil.Number(snapshot["credits_used"]) is { } used && used > 0)
+            {
+                lines.Add(MetricLine.Values("Credits", [new MetricValue(used, MetricKind.Count)]));
+            }
+        }
+        return (plan, lines);
+    }
+
+    private static MetricLine? SnapshotLine(string label, JsonNode? raw, DateTimeOffset? resetsAt)
+    {
+        if (JsonUtil.Object(raw) is not { } snapshot) return null;
+        var entitlement = JsonUtil.Number(snapshot["entitlement"]);
+        var remaining = JsonUtil.Number(snapshot["remaining"]);
+        if (JsonUtil.Bool(snapshot["unlimited"]) == true || entitlement == -1 || remaining == -1) return null;
+        if (entitlement == 0) return null;
+        double usedPercent;
+        if (JsonUtil.Number(snapshot["percent_remaining"]) is { } percentRemaining)
+            usedPercent = JsonUtil.ClampPercent(100 - percentRemaining);
+        else if (entitlement is { } e && e > 0 && remaining is { } r)
+            usedPercent = JsonUtil.ClampPercent(100 - r / e * 100);
+        else
+            return null;
+        return MetricLine.Progress(label, usedPercent, 100, ProgressFormat.Percent, resetsAt, MetricPeriod.MonthMs);
+    }
+
+    private static MetricLine? OverageLine(JsonNode? raw)
+    {
+        if (JsonUtil.Object(raw) is not { } snapshot) return null;
+        if (JsonUtil.Bool(snapshot["overage_permitted"]) != true) return null;
+        var overage = Math.Max(0, JsonUtil.Number(snapshot["overage_count"]) ?? 0);
+        return MetricLine.Values("Extra Usage", [new MetricValue(overage, MetricKind.Count)]);
+    }
+
+    private static MetricLine? LimitedLine(string label, JsonNode? remainingNode, JsonNode? totalNode, DateTimeOffset? resetsAt)
+    {
+        if (JsonUtil.Number(totalNode) is not { } total || total <= 0) return null;
+        if (JsonUtil.Number(remainingNode) is not { } remaining) return null;
+        var used = Math.Max(0, total - remaining);
+        return MetricLine.Progress(label, JsonUtil.ClampPercent(used / total * 100), 100, ProgressFormat.Percent, resetsAt, MetricPeriod.MonthMs);
+    }
+
+    private static string? PlanLabel(string? raw) =>
+        string.IsNullOrWhiteSpace(raw) ? null : JsonUtil.TitleCase(raw);
+
+    private static DateTimeOffset? ParseDay(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (DateTimeOffset.TryParse(raw, out var date)) return date;
+        return Iso8601.Parse(raw);
+    }
+}
+
+public sealed class CopilotProvider : IProviderRuntime
+{
+    public static readonly Uri UsageUrl = new("https://api.github.com/copilot_internal/user");
+    private readonly CopilotAuthStore _auth = new();
+    private readonly AppHttp _http;
+
+    public CopilotProvider(AppHttp http) => _http = http;
+
+    public Provider Provider { get; } = new(
+        "copilot", "Copilot", "copilot",
+        [new ProviderLink("Dashboard", "https://github.com/settings/copilot")]);
+
+    public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
+    [
+        WidgetDescriptor.Percent("copilot.premium", Provider, "Credits"),
+        WidgetDescriptor.Values("copilot.extra", Provider, "Extra Usage"),
+        WidgetDescriptor.Percent("copilot.chat", Provider, "Chat"),
+        WidgetDescriptor.Percent("copilot.completions", Provider, "Completions")
+    ];
+
+    public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(_auth.LoadToken() is not null);
+
+    public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        var token = _auth.LoadToken();
+        if (token is null)
+            return ProviderSnapshot.Error(Provider, "Sign in to GitHub Copilot in your editor, or run gh auth login, and try again.");
+        try
+        {
+            var response = await _http.SendAsync(new AppHttpRequest(
+                "GET", UsageUrl,
+                new Dictionary<string, string>
+                {
+                    ["Authorization"] = $"token {token}",
+                    ["Accept"] = "application/json",
+                    ["Editor-Version"] = "vscode/1.96.2",
+                    ["Editor-Plugin-Version"] = "copilot-chat/0.26.7",
+                    ["User-Agent"] = "GitHubCopilotChat/0.26.7",
+                    ["X-Github-Api-Version"] = "2025-04-01"
+                },
+                TimeoutSeconds: 15), cancellationToken);
+            if (response.StatusCode is 401 or 403)
+                return ProviderSnapshot.Error(Provider, "GitHub token invalid or expired. Re-authenticate (gh auth login) and try again.");
+            if (!response.IsSuccess)
+                return ProviderSnapshot.Error(Provider, ProviderErrors.RequestFailed(response.StatusCode));
+            if (response.Json is not { } body)
+                return ProviderSnapshot.Error(Provider, "Copilot usage response invalid. Try again later.");
+            var mapped = CopilotUsageMapper.Map(body);
+            var lines = mapped.Lines.ToList();
+            MetricLine.AppendNoDataIfNeeded(lines);
+            return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
+        }
+        catch (Exception ex)
+        {
+            return ProviderSnapshot.Error(Provider, ex);
+        }
+    }
+}

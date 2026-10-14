@@ -35,6 +35,10 @@ What each provider tracks, where its credentials come from, and what to do when 
 - [OpenRouter](providers/openrouter.md)
 - [Z.ai](providers/zai.md)
 
+## Windows
+
+- [OpenUsage on Windows](windows.md) — the system-tray port under `windows/`
+
 ## For developers
 
 How the app is built and how to extend it.
