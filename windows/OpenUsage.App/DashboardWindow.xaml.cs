@@ -59,30 +59,44 @@ public partial class DashboardWindow : Window
             return;
         }
         _screen = DashboardScreen.Dashboard;
-        PositionNearTray();
         Render();
-        Show();
+        ShowAnchored();
         Activate();
     }
 
     public void ShowScreen(DashboardScreen screen)
     {
         _screen = screen;
-        if (!IsVisible)
-        {
-            PositionNearTray();
-            Show();
-        }
         Render();
+        if (!IsVisible) ShowAnchored();
         Activate();
     }
 
+    private const double TrayGap = 12;
+    // The panel's 8px transparent shadow margin already separates it from the taskbar.
+    private const double TaskbarGap = 0;
+
+    private void ShowAnchored()
+    {
+        PositionNearTray();
+        Show();
+    }
+
+    /// <summary>
+    /// Places the window in the taskbar's corner at its full height. The window itself never resizes or
+    /// moves while open: the panel hugs the taskbar edge inside it and the transparent rest clicks
+    /// through, so switching screens redraws in one frame instead of a resize-then-move flash.
+    /// </summary>
     private void PositionNearTray()
     {
         var work = SystemParameters.WorkArea;
-        Left = work.Right - Width - 12;
-        Top = work.Bottom - 520;
-        if (Top < work.Top + 12) Top = work.Top + 12;
+        Height = Math.Min(720, work.Height - TaskbarGap * 2);
+        // The work area is inset on the taskbar's side; a top or left taskbar moves the panel there.
+        var taskbarOnLeft = work.Left > 0;
+        var taskbarOnTop = work.Top > 0;
+        Left = taskbarOnLeft ? work.Left + TrayGap : work.Right - Width - TrayGap;
+        Top = taskbarOnTop ? work.Top + TaskbarGap : work.Bottom - Height - TaskbarGap;
+        RootBorder.VerticalAlignment = taskbarOnTop ? VerticalAlignment.Top : VerticalAlignment.Bottom;
     }
 
     private void OnDeactivated(object sender, EventArgs e)
@@ -225,7 +239,7 @@ public partial class DashboardWindow : Window
             };
             title.Children.Add(warn);
         }
-        var headerButton = new Button { Style = (Style)FindResource("GhostButton"), Padding = new Thickness(0) };
+        var headerButton = new Button { Style = (Style)FindResource("GhostButton"), Padding = new Thickness(0, 4, 0, 4) };
         headerButton.Content = new StackPanel { Orientation = Orientation.Horizontal, Children = { icon, title } };
         headerButton.Click += (_, _) =>
         {
@@ -461,7 +475,7 @@ public partial class DashboardWindow : Window
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var icon = ProviderIcon.Create(provider.IconId, 18);
             icon.SetValue(FrameworkElement.MarginProperty, new Thickness(0, 0, 10, 0));
-            var name = new StackPanel();
+            var name = new StackPanel { Margin = new Thickness(0, 0, 12, 0) };
             name.Children.Add(new TextBlock { Text = provider.DisplayName, FontWeight = FontWeights.SemiBold });
             name.Children.Add(new TextBlock
             {
@@ -469,8 +483,10 @@ public partial class DashboardWindow : Window
                 Style = (Style)FindResource("MutedText")
             });
             var toggle = new CheckBox { IsChecked = _container.Layout.IsProviderEnabled(provider.Id), VerticalAlignment = VerticalAlignment.Center };
-            toggle.Checked += (_, _) => _container.Layout.SetProviderEnabled(provider.Id, true);
-            toggle.Unchecked += (_, _) => _container.Layout.SetProviderEnabled(provider.Id, false);
+            toggle.Checked += (_, _) => { _container.Layout.SetProviderEnabled(provider.Id, true); row.Opacity = 1; };
+            toggle.Unchecked += (_, _) => { _container.Layout.SetProviderEnabled(provider.Id, false); row.Opacity = 0.55; };
+            // The checkbox's Click bubbles to the row button; stop it so toggling doesn't open the detail page.
+            toggle.Click += (_, e) => e.Handled = true;
             Grid.SetColumn(name, 1);
             Grid.SetColumn(toggle, 2);
             grid.Children.Add(icon);

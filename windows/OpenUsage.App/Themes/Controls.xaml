@@ -262,4 +262,9 @@
             </Setter.Value>
         </Setter>
     </Style>
+
+    <!-- Separators inside menus look up this key, not the implicit style; WPF's default indents them past the icon column. -->
+    <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator" BasedOn="{StaticResource {x:Type Separator}}">
+        <Setter Property="Margin" Value="6,4"/>
+    </Style>
 </ResourceDictionary>
