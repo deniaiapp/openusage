@@ -143,6 +143,28 @@ public class MapperTests
     }
 
     [Fact]
+    public void ZaiMapper_CodingProSearchLimitsDoNotHideTokenWindows()
+    {
+        var quota = JsonUtil.ParseObject("""
+            {"success":true,"data":{"limits":[
+              {"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":17,"nextResetTime":1782724971179},
+              {"type":"TOKENS_LIMIT","unit":6,"number":1,"percentage":3,"nextResetTime":1783305486997},
+              {"type":"TIME_LIMIT","unit":5,"number":1,"usage":1000,"currentValue":7,"nextResetTime":1785292686976}
+            ]}}
+            """)!;
+        Assert.Collection(ZaiUsageMapper.MapQuota(quota),
+            session => Assert.Equal(17, Assert.IsType<MetricLine.ProgressLine>(session).Used),
+            weekly => Assert.Equal(3, Assert.IsType<MetricLine.ProgressLine>(weekly).Used),
+            search =>
+            {
+                var line = Assert.IsType<MetricLine.ProgressLine>(search);
+                Assert.Equal(7, line.Used);
+                Assert.Equal(1000, line.Limit);
+                Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(1785292686976), line.ResetsAt);
+            });
+    }
+
+    [Fact]
     public void Pace_ProjectsBehindWhenBurnIsTooFast()
     {
         var now = DateTimeOffset.Parse("2026-09-13T10:00:00Z");
