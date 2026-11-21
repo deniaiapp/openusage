@@ -55,9 +55,9 @@ final class PanelHeightBridgeTests: XCTestCase {
             openingApply.fulfill()
         }
 
-        PanelHeightBridge.push(480) // queued by the previous session
+        PanelHeightBridge.push(480)
         PanelHeightBridge.invalidate()
-        PanelHeightBridge.push(760) // measured for the display being opened on now
+        PanelHeightBridge.push(760)
 
         await fulfillment(of: [openingApply], timeout: 1)
         XCTAssertEqual(applied, [760])
@@ -74,7 +74,7 @@ final class PanelHeightBridgeTests: XCTestCase {
             firstApply.fulfill()
         }
 
-        _ = PanelHeightModifier(height: 640).effectValue(size: CGSize(width: 320, height: 640))
+        _ = PanelHeightModifier(from: 640, to: 640, progress: 1).effectValue(size: CGSize(width: 320, height: 640))
 
         await fulfillment(of: [firstApply], timeout: 1)
         XCTAssertEqual(applied, [640])
