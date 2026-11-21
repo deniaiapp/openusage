@@ -88,6 +88,8 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
 
+Copilot sign-in keeps the same GitHub device code through a brief network interruption.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App
