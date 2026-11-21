@@ -14,6 +14,8 @@ Choose **Replace API Key** next to an additional account to change its key witho
 
 In **Customize**, use the up and down arrows to move a provider and its accounts together on the dashboard. The order is saved; **Undo Reorder** restores the previous order during the current session.
 
+Your metric choices are saved even if you clear an entire group of settings, such as unpinning every metric. New metrics can still appear with their defaults after an update.
+
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
 
 OpenRouter only uses API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY`, enter the key in **Customize → OpenRouter**. Already saved keys keep working.
