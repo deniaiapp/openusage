@@ -62,17 +62,25 @@ public sealed class LayoutStore
     internal void RegisterAccount(IProviderRuntime runtime, string providerId)
     {
         var id = runtime.Provider.Id;
+        bool IsProviderGroup(string candidate) =>
+            candidate == providerId || candidate.StartsWith(providerId + "@", StringComparison.Ordinal);
+
         var providers = Providers.ToList();
         var index = providers.FindIndex(p => p.Provider.Id == id);
         if (index >= 0) providers[index] = runtime;
-        else providers.Add(runtime);
+        else
+        {
+            var last = providers.FindLastIndex(p => IsProviderGroup(p.Provider.Id));
+            providers.Insert(last < 0 ? providers.Count : last + 1, runtime);
+        }
 
         if (!_settings.ProviderOrder.Contains(id))
         {
             var order = _settings.ProviderOrder.ToList();
             foreach (var other in providers.Where(p => p.Provider.Id != id))
                 if (!order.Contains(other.Provider.Id)) order.Add(other.Provider.Id);
-            order.Add(id);
+            var last = order.FindLastIndex(IsProviderGroup);
+            order.Insert(last < 0 ? order.Count : last + 1, id);
             _settings.ProviderOrder = order;
             SeedAccountLayout(runtime, providerId);
             SetProviderEnabled(id, true);

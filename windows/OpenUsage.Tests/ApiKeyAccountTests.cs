@@ -43,6 +43,37 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [Fact]
+    public void AddingAccountsKeepsEachProviderGroupTogetherAcrossRestart()
+    {
+        using var http = new AppHttp();
+        var keys = new ApiKeyStore();
+        var openRouter = new OpenRouterProvider(http, keys);
+        var zai = new ZaiProvider(http, keys);
+        var factory = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+        var work = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Work");
+        var coding = new ApiKeyAccount(Guid.NewGuid(), "zai", "Coding");
+        var personal = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Personal");
+        var settingsPath = Path.Combine(_directory, "settings.json");
+
+        void Register(LayoutStore layout)
+        {
+            layout.RegisterAccount(factory.MakeRuntime(work, openRouter), work.ProviderId);
+            layout.RegisterAccount(factory.MakeRuntime(coding, zai), coding.ProviderId);
+            layout.RegisterAccount(factory.MakeRuntime(personal, openRouter), personal.ProviderId);
+        }
+
+        var settings = AppSettings.Load(settingsPath);
+        settings.EnabledProviders.UnionWith(["openrouter", "zai"]);
+        var initial = new LayoutStore(settings, [openRouter, zai]);
+        Register(initial);
+        var restored = new LayoutStore(AppSettings.Load(settingsPath), [openRouter, zai]);
+        Register(restored);
+        string[] expected = ["openrouter", work.CardId, personal.CardId, "zai", coding.CardId];
+        Assert.Equal(expected, restored.VisibleProviders.Select(p => p.Provider.Id));
+        Assert.Equal(expected, restored.Providers.Select(p => p.Provider.Id));
+    }
+
+    [Fact]
     public async Task UnsupportedProvidersAndInvalidInputNeverMakeARequest()
     {
         using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected request"));
