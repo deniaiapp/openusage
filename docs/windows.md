@@ -24,7 +24,7 @@ Ollama's local sign-in stays off until you turn it on in Customize — the local
 
 Provider details that match macOS:
 
-- **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
+- **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile. If usage is rate limited, OpenUsage keeps the last reading and pauses requests for that sign-in for five minutes, or up to an hour if Claude asks it to wait longer.
 - **Codex:** Pro 100 / 200 / 500 plan names.
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, extra usage is measured against the matching personal or pooled budget. Spend history is fetched day by day and finished days are cached per account.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
