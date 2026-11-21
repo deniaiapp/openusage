@@ -95,6 +95,8 @@ dotnet run --project OpenUsage.App
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
+If Claude's first check for rate limit resets can't connect, the next refresh tries again.
+
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
 ## License
