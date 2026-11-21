@@ -34,3 +34,9 @@ Claude, Codex, and Grok show live limits without reading local session logs. Est
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
+
+## Privacy Mode
+
+Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. The tray icon and its tooltip do not show usage while the setting is on.
+
+This is off by default and stays set after a restart. Not every capture method honors Windows' protection. Check your capture preview before sharing; the CLI and saved data are unchanged.

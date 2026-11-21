@@ -12,6 +12,7 @@ public sealed class AppSettings
     public WidgetDisplayMode MeterStyle { get; set; } = WidgetDisplayMode.Remaining;
     public ResetDisplayMode ResetDisplay { get; set; } = ResetDisplayMode.Relative;
     public bool AlwaysShowPacing { get; set; }
+    public bool PrivacyMode { get; set; }
     public bool LaunchAtLogin { get; set; }
     public string? GlobalHotkey { get; set; }
     public int RefreshIntervalSeconds { get; set; } = 300;

@@ -32,6 +32,7 @@ public sealed class TrayController : IDisposable
         _notify.MouseClick += OnClick;
         _notify.ContextMenuStrip = BuildMenu();
         _container.Data.Changed += () => Application.Current.Dispatcher.Invoke(Update);
+        _window.PrivacyModeChanged += Update;
         _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _clock.Tick += (_, _) => Update();
         _clock.Start();
@@ -65,7 +66,7 @@ public sealed class TrayController : IDisposable
 
     private void Update()
     {
-        var pins = _container.Data.PinnedTiles();
+        var pins = _container.Settings.PrivacyMode ? [] : _container.Data.PinnedTiles();
         var tooltip = pins.Count == 0
             ? "OpenUsage"
             : string.Join(Environment.NewLine,
@@ -119,6 +120,7 @@ public sealed class TrayController : IDisposable
     public void Dispose()
     {
         _clock.Stop();
+        _window.PrivacyModeChanged -= Update;
         _notify.Visible = false;
         _notify.Dispose();
         _icon?.Dispose();

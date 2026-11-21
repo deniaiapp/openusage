@@ -84,7 +84,7 @@ How everything works, in [docs/](docs/README.md):
 
 ## Windows
 
-A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). It is not a substitute for the macOS app; see [OpenUsage on Windows](docs/windows.md).
+A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). See [OpenUsage on Windows](docs/windows.md) and its [Privacy Mode](docs/windows.md#privacy-mode).
 
 ```powershell
 cd windows
