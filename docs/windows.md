@@ -4,6 +4,8 @@ Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tra
 
 The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, and global shortcut. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
 
+The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Both tabs respect which providers and metrics you have turned on.
+
 To add one, open **Customize**, choose **OpenRouter** or **Z.ai**, and enter a name and API key under **Additional Accounts**. OpenUsage checks the key before saving it with Windows user encryption. New cards go after the provider's existing additional accounts or its visible main card. If neither exists, the new card goes at the bottom. Rename or remove the account in the same section. Existing API keys and provider settings stay in place.
 
 Ollama Cloud connects with API keys only. Get a key from [Ollama settings](https://ollama.com/settings/keys), then add it under **Customize → Ollama → Accounts**. The first new Ollama account gets the default Monthly tray pin. Existing API-key accounts keep their settings. If you used the old local Ollama sign-in, add a key to resume tracking cloud usage.
@@ -28,9 +30,15 @@ Provider details that match macOS:
 - **OpenCode:** reads OpenCode 2's database (usage and Go key) and falls back to `auth.json` on OpenCode 1.
 - **Z.ai:** A rejected API key prompts you to replace it in Customize.
 
+For Copilot on GitHub.com, open **Customize → Copilot → Sign In with GitHub**. Copy the code into GitHub's device sign-in page, then turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. Choose **Sign In Again** to replace it without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
+
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
 
 Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown; Cursor's provider-reported history is unchanged.
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
+
+## Priority Limits
+
+In **Settings → Priority Limits**, choose when the dashboard and tray icon warn about low limits. The defaults are 30% left for orange and 10% left for red. A limit that's on pace to run out can still turn red earlier.
