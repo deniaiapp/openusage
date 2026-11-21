@@ -95,6 +95,8 @@ dotnet run --project OpenUsage.App
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
+On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
+
 Windows shows available Z.ai Limit Resets when you expand the account card.
 
 ## License
