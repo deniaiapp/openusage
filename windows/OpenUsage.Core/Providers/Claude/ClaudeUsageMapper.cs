@@ -7,6 +7,7 @@ namespace OpenUsage.Core.Providers.Claude;
 public static class ClaudeUsageMapper
 {
     public const string RateLimitResetsLabel = "Rate Limit Resets";
+    private const int MaxCachedResets = 1_000;
 
     public static (string? Plan, List<MetricLine> Lines, string? Warning) Map(JsonObject body, ClaudeOAuth credentials)
     {
@@ -53,10 +54,16 @@ public static class ClaudeUsageMapper
         {
             foreach (var grant in grants.OfType<JsonObject>())
             {
-                if (JsonUtil.Number(grant["resets_left"]) is not { } left || left < 1) continue;
-                var resets = (int)Math.Floor(left);
                 var endsAt = ResetDate(grant["ends_at"]);
                 if (endsAt is { } end && end <= now) continue;
+                if (JsonUtil.Number(grant["resets_left"]) is not { } left)
+                    throw new InvalidOperationException(ProviderErrors.InvalidResponse);
+                if (left < 1) continue;
+                var whole = Math.Floor(left);
+                // The cache stores a deadline per reset, so bound the total before expanding the list.
+                if (whole > MaxCachedResets - count)
+                    throw new InvalidOperationException(ProviderErrors.InvalidResponse);
+                var resets = (int)whole;
                 count += resets;
                 if (endsAt is { } deadline) expiries.AddRange(Enumerable.Repeat(deadline, resets));
             }
