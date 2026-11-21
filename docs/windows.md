@@ -28,7 +28,7 @@ Provider details that match macOS:
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** reads OpenCode 2's database (usage and Go key) and falls back to `auth.json` on OpenCode 1.
-- **Z.ai:** A rejected API key prompts you to replace it in Customize.
+- **Z.ai:** Expand an account card to see available Limit Resets and their expiries. OpenUsage checks the balance hourly and does not spend resets. A rejected API key prompts you to replace it in Customize.
 
 For Copilot on GitHub.com, open **Customize → Copilot → Sign In with GitHub**. Copy the code into GitHub's device sign-in page, then turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. Choose **Sign In Again** to replace it without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
 

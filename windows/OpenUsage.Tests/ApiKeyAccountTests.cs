@@ -18,6 +18,105 @@ public sealed class ApiKeyAccountTests : IDisposable
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
+    [Fact]
+    public void ZaiLimitResetsSeedInOrderWithoutOverwritingAnExistingAccountsPreferences()
+    {
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new ZaiProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+        var settingsPath = Path.Combine(_directory, "settings.json");
+        var settings = AppSettings.Load(settingsPath);
+        var account = new ApiKeyAccount(Guid.NewGuid(), "zai", "Work");
+        var accountRuntime = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile)).MakeRuntime(account, provider);
+        var accountMetric = accountRuntime.WidgetDescriptors.Last().Id;
+        settings.ProviderOrder = [account.CardId];
+        settings.EnabledMetrics.Add("zai.session");
+        settings.SeededDefaultMetrics = new HashSet<string>(DefaultLayout.MigrationBaselineMetricIds);
+        var layout = new LayoutStore(settings, [provider]);
+        layout.RegisterAccount(accountRuntime, "zai");
+
+        Assert.Equal(["Session", "Weekly", "Web Searches", "Limit Resets"],
+            provider.WidgetDescriptors.Select(descriptor => descriptor.Title));
+        foreach (var id in new[] { ZaiProvider.ResetsMetricId, accountMetric })
+        {
+            Assert.True(layout.IsMetricEnabled(id));
+            Assert.True(layout.IsOnDemand(id));
+            Assert.DoesNotContain(id, settings.PinnedMetrics);
+        }
+
+        layout.SetMetricEnabled(accountMetric, false);
+        var restored = new LayoutStore(AppSettings.Load(settingsPath), [provider]);
+        restored.RegisterAccount(accountRuntime, "zai");
+        Assert.False(restored.IsMetricEnabled(accountMetric));
+    }
+
+    [Fact]
+    public async Task ZaiResetBalanceUsesAnHourlyListAndRemovesExpiredResetsBetweenReads()
+    {
+        var now = DateTimeOffset.Parse("2026-11-21T03:00:00Z");
+        var requests = 0;
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal(ZaiResetBalance.ListUrl, request.RequestUri);
+            Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+            requests++;
+            return (200, """
+                {"success":true,"data":{
+                    "fiveHourResets":[
+                        {"available":true,"expireTime":"2026-11-21 11:10:00"},
+                        {"available":false,"expireTime":"2026-12-01 01:00:00"},
+                        {"available":true,"expireTime":"2026-11-21 10:00:00"}],
+                    "weekResets":[{"available":true,"expireTime":"2026-11-22 04:00:00"}]
+                }}
+                """);
+        });
+        var balance = new ZaiResetBalance(http, () => now);
+
+        var first = Assert.IsType<MetricLine.ValuesLine>(await balance.ReadAsync("fixture-key", default));
+        Assert.Equal(2, Assert.Single(first.Items).Number);
+        Assert.Equal(now.AddMinutes(10), first.ExpiriesAt!.First());
+
+        now = now.AddMinutes(10);
+        var held = Assert.IsType<MetricLine.ValuesLine>(await balance.ReadAsync("fixture-key", default));
+        Assert.Equal(1, Assert.Single(held.Items).Number);
+        Assert.Equal(1, requests);
+
+        now = now.AddMinutes(50);
+        Assert.NotNull(await balance.ReadAsync("fixture-key", default));
+        Assert.Equal(2, requests);
+    }
+
+    [Fact]
+    public async Task ZaiResetListFailureDoesNotHideQuotaAndIsIsolatedFromAnotherAccount()
+    {
+        var listRequests = 0;
+        using var http = MakeHttp(request =>
+        {
+            if (request.RequestUri == ZaiProvider.QuotaUrl)
+                return (200, """{"data":{"limits":[{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":20}]}}""");
+            if (request.RequestUri == ZaiProvider.SubscriptionUrl) return (200, "{}");
+            Assert.Equal(ZaiResetBalance.ListUrl, request.RequestUri);
+            listRequests++;
+            return request.Headers.Authorization?.Parameter == "fixture-denied"
+                ? (403, "{}")
+                : (200, """{"data":{"weekResets":[]}}""");
+        });
+        var provider = new ZaiProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+        var denied = provider.AccountRefresh();
+        var other = provider.AccountRefresh();
+        for (var i = 0; i < 2; i++)
+        {
+            var snapshot = await denied("fixture-denied", default);
+            Assert.False(snapshot.IsError);
+            Assert.NotNull(snapshot.Line("Session"));
+            Assert.Null(snapshot.Line(ZaiResetBalance.Label));
+        }
+
+        var connected = await other("fixture-allowed", default);
+        Assert.Equal(0, LimitsProjection.Project(connected, provider.WidgetDescriptors)["rateLimitResets"].Available);
+        Assert.Equal(2, listRequests);
+    }
+
     [Theory]
     [InlineData("ollama", 401, "{}", "rejected")]
     [InlineData("ollama", 200, """{"included":{}}""", "unavailable")]

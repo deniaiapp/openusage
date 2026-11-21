@@ -90,6 +90,8 @@ public sealed class LayoutStore
             SeedAccountLayout(runtime, providerId);
             SetProviderEnabled(id, true);
         }
+        else if (SeedNewAccountMetrics(runtime, providerId))
+            _settings.Save();
         _registry = Registry.From(providers);
     }
 
@@ -103,6 +105,23 @@ public sealed class LayoutStore
             if (DefaultLayout.ExpandedMetricIds.Contains(templateId))
                 _settings.ExpandedMetrics.Add(descriptor.Id);
         }
+        SeedNewAccountMetrics(runtime, providerId);
+    }
+
+    private bool SeedNewAccountMetrics(IProviderRuntime runtime, string providerId)
+    {
+        var seeded = _settings.SeededDefaultMetrics!;
+        var changed = false;
+        foreach (var descriptor in runtime.WidgetDescriptors)
+        {
+            var templateId = providerId + descriptor.Id[runtime.Provider.Id.Length..];
+            if (!DefaultLayout.NewAccountMetricIds.Contains(templateId) || !seeded.Add(descriptor.Id))
+                continue;
+            if (_settings.EnabledMetrics.Add(descriptor.Id) && DefaultLayout.ExpandedMetricIds.Contains(templateId))
+                _settings.ExpandedMetrics.Add(descriptor.Id);
+            changed = true;
+        }
+        return changed;
     }
 
     internal void RemoveAccount(string id)
@@ -117,6 +136,7 @@ public sealed class LayoutStore
             _settings.EnabledMetrics.Remove(descriptor.Id);
             _settings.ExpandedMetrics.Remove(descriptor.Id);
             _settings.PinnedMetrics.Remove(descriptor.Id);
+            _settings.SeededDefaultMetrics?.Remove(descriptor.Id);
         }
         SetProviderEnabled(id, false);
     }

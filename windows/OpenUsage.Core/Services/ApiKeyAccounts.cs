@@ -18,7 +18,7 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
             (OllamaProvider ollama, "ollama") => new AccountRuntime(account, provider, store, ollama.RefreshWithApiKeyAsync),
             (OpenRouterProvider openRouter, "openrouter") =>
                 new AccountRuntime(account, provider, store, (key, ct) => openRouter.RefreshWithKeyAsync(key, ct, requireKey: true)),
-            (ZaiProvider zai, "zai") => new AccountRuntime(account, provider, store, zai.RefreshWithKeyAsync),
+            (ZaiProvider zai, "zai") => new AccountRuntime(account, provider, store, zai.AccountRefresh()),
             _ => throw new ArgumentException("The account does not match the provider.")
         };
 

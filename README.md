@@ -95,6 +95,8 @@ dotnet run --project OpenUsage.App
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
+Windows shows available Z.ai Limit Resets when you expand the account card.
+
 ## License
 
 [MIT](LICENSE)
