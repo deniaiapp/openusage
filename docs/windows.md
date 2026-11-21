@@ -4,7 +4,7 @@ Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tra
 
 The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, global shortcut, and loopback API. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
 
-To add one, open **Customize**, choose **OpenRouter** or **Z.ai**, and enter a name and API key under **Additional Accounts**. OpenUsage checks the key before saving it with Windows user encryption. The new account has its own dashboard card and can be renamed or removed in the same section. Existing API keys and provider settings stay in place.
+To add one, open **Customize**, choose **OpenRouter** or **Z.ai**, and enter a name and API key under **Additional Accounts**. OpenUsage checks the key before saving it with Windows user encryption. The new dashboard card appears after that provider's last visible card, or at the bottom if none is visible. Rename or remove the account in the same section. Existing API keys and provider settings stay in place.
 
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
 
