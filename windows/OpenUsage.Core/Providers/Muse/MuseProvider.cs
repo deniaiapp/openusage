@@ -103,7 +103,7 @@ public sealed class MuseProvider : IDeviceSignInProvider
             {
                 var reset = window.Reset is >= -62_135_596_800 and <= 253_402_300_799d and var seconds
                     ? DateTimeOffset.FromUnixTimeSeconds((long)seconds) : (DateTimeOffset?)null;
-                return MetricLine.Progress(label, JsonUtil.ClampPercent(window.Used), 100, ProgressFormat.Percent, reset, period);
+                return MetricLine.Progress(label, window.Used, 100, ProgressFormat.Percent, reset, period);
             }
             if (account.Usage is null && lastKnown?.Line(label) is MetricLine.ProgressLine prior
                 && (prior.ResetsAt is null || prior.ResetsAt > now)) return prior;

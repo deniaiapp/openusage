@@ -119,6 +119,18 @@ public sealed class MuseProviderTests
     }
 
     [Fact]
+    public async Task UsageAboveTheLimitIsKeptInTheSnapshotAndCli()
+    {
+        using var http = MakeHttp(_ => Task.FromResult(Reply(Account.Replace("\"used_percent\":40", "\"used_percent\":130.5"))));
+        var provider = new MuseProvider(http, () => "fixture-auth", _ => { });
+
+        var snapshot = await provider.RefreshAsync(default);
+
+        Assert.Equal(130.5, Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Weekly")).Used);
+        Assert.Equal(130.5, LimitsProjection.Project(snapshot, provider.WidgetDescriptors)["weekly"].Used);
+    }
+
+    [Fact]
     public void ExistingLayoutSeedsApprovedMuseDefaultsInOrder()
     {
         using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected request"));
