@@ -7,6 +7,7 @@ using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Grok;
+using OpenUsage.Core.Providers.Muse;
 using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Providers.OpenCode;
 using OpenUsage.Core.Providers.OpenRouter;
@@ -25,9 +26,10 @@ public static class ProviderCatalog
         new CursorProvider(http),
         new AmpProvider(http, keys),
         new AntigravityProvider(http),
-        new CopilotProvider(http),
+        new CopilotProvider(http, keys),
         new DevinProvider(http),
         new GrokProvider(http),
+        new MuseProvider(http, keys),
         new OllamaProvider(http),
         new OpenCodeProvider(http),
         new OpenRouterProvider(http, keys),
