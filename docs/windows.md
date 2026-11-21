@@ -28,3 +28,7 @@ Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsa
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
+
+## Usage Notifications
+
+Enable these in Settings to get a Windows notification before a limit runs out at its current pace, or before a weekly or longer limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit. Click one to open the dashboard.
