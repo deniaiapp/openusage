@@ -127,6 +127,39 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [Fact]
+    public void MovingProviderGroupsPersistsAndUndoDoesNotRevertVisibility()
+    {
+        using var http = new AppHttp();
+        var keys = new ApiKeyStore();
+        var openRouter = new OpenRouterProvider(http, keys);
+        var zai = new ZaiProvider(http, keys);
+        var work = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Work");
+        var account = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile)).MakeRuntime(work, openRouter);
+        var settingsPath = Path.Combine(_directory, "settings.json");
+        var settings = AppSettings.Load(settingsPath);
+        settings.EnabledProviders.Add("zai");
+        var layout = new LayoutStore(settings, [openRouter, zai]);
+        layout.RegisterAccount(account, work.ProviderId);
+
+        Assert.Equal(["zai", "openrouter"], layout.ProviderGroups().Select(group => group.Key));
+        Assert.False(layout.MoveProviderGroup("zai", -1));
+        Assert.False(layout.CanUndoProviderOrder);
+        Assert.True(layout.MoveProviderGroup("openrouter", -1));
+        Assert.Equal([work.CardId, "zai"], layout.VisibleProviders.Select(p => p.Provider.Id));
+
+        var restored = new LayoutStore(AppSettings.Load(settingsPath), [openRouter, zai]);
+        restored.RegisterAccount(account, work.ProviderId);
+        Assert.Equal([work.CardId, "zai"], restored.VisibleProviders.Select(p => p.Provider.Id));
+        Assert.False(restored.CanUndoProviderOrder);
+
+        layout.SetProviderEnabled(work.CardId, false);
+        Assert.True(layout.UndoProviderOrder());
+        Assert.Equal(["zai", "openrouter"], layout.ProviderGroups().Select(group => group.Key));
+        Assert.False(layout.IsProviderEnabled(work.CardId));
+        Assert.False(layout.UndoProviderOrder());
+    }
+
+    [Fact]
     public void HiddenAdditionalAccountKeepsItsPlaceWhenAnotherAccountIsAdded()
     {
         using var http = new AppHttp();

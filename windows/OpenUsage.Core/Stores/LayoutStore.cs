@@ -6,8 +6,10 @@ namespace OpenUsage.Core.Stores;
 public sealed class LayoutStore
 {
     public const int MaxPinsPerProvider = 2;
+    private const int MaxOrderUndoSteps = 40;
 
     private readonly AppSettings _settings;
+    private readonly List<List<string>> _orderUndo = [];
     private volatile Registry _registry;
     private Dictionary<string, WidgetDescriptor> _descriptors => _registry.Descriptors;
 
@@ -70,6 +72,7 @@ public sealed class LayoutStore
         if (index >= 0) providers[index] = runtime;
         else
         {
+            _orderUndo.Clear();
             var last = providers.FindLastIndex(p => IsProviderGroup(p.Provider.Id));
             providers.Insert(last < 0 ? providers.Count : last + 1, runtime);
         }
@@ -104,6 +107,7 @@ public sealed class LayoutStore
 
     internal void RemoveAccount(string id)
     {
+        _orderUndo.Clear();
         var descriptors = Providers.FirstOrDefault(p => p.Provider.Id == id)?.WidgetDescriptors ?? [];
         _registry = Registry.From(Providers.Where(p => p.Provider.Id != id).ToArray());
         _settings.ProviderOrder = _settings.ProviderOrder.Where(provider => provider != id).ToList();
@@ -117,21 +121,55 @@ public sealed class LayoutStore
         SetProviderEnabled(id, false);
     }
 
-    public IReadOnlyList<IProviderRuntime> VisibleProviders
+    private IEnumerable<IProviderRuntime> OrderedProviders()
     {
-        get
+        var order = _settings.ProviderOrder;
+        return Providers.OrderBy(p =>
         {
-            var enabled = Providers.Where(p => IsProviderEnabled(p.Provider.Id)).ToList();
-            var order = _settings.ProviderOrder;
-            if (order.Count == 0) return enabled;
-            return enabled
-                .OrderBy(p =>
-                {
-                    var index = order.IndexOf(p.Provider.Id);
-                    return index < 0 ? int.MaxValue : index;
-                })
-                .ToList();
-        }
+            var index = order.IndexOf(p.Provider.Id);
+            return index < 0 ? int.MaxValue : index;
+        });
+    }
+
+    public IReadOnlyList<IProviderRuntime> VisibleProviders =>
+        OrderedProviders().Where(p => IsProviderEnabled(p.Provider.Id)).ToList();
+
+    public IGrouping<string, IProviderRuntime>[] ProviderGroups()
+    {
+        var order = OrderedProviders().ToList();
+        return order.GroupBy(p => p.Provider.Id.Split('@', 2)[0], StringComparer.Ordinal)
+            .OrderBy(group => order.IndexOf(
+                group.FirstOrDefault(p => p.Provider.Id == group.Key && IsProviderEnabled(p.Provider.Id))
+                ?? group.FirstOrDefault(p => p.Provider.Id != group.Key)
+                ?? group.First()))
+            .ToArray();
+    }
+
+    public bool MoveProviderGroup(string providerId, int offset)
+    {
+        var groups = ProviderGroups();
+        var from = Array.FindIndex(groups, group => group.Key == providerId);
+        if (from < 0 || offset is not (-1 or 1)) return false;
+        var to = from + offset;
+        if (to < 0 || to >= groups.Length) return false;
+
+        (groups[from], groups[to]) = (groups[to], groups[from]);
+        _orderUndo.Add(_settings.ProviderOrder.ToList());
+        if (_orderUndo.Count > MaxOrderUndoSteps) _orderUndo.RemoveAt(0);
+        _settings.ProviderOrder = groups.SelectMany(group => group).Select(p => p.Provider.Id).ToList();
+        _settings.Save();
+        return true;
+    }
+
+    public bool CanUndoProviderOrder => _orderUndo.Count > 0;
+
+    public bool UndoProviderOrder()
+    {
+        if (!CanUndoProviderOrder) return false;
+        _settings.ProviderOrder = _orderUndo[^1];
+        _orderUndo.RemoveAt(_orderUndo.Count - 1);
+        _settings.Save();
+        return true;
     }
 
     public bool IsProviderEnabled(string providerId) => _settings.EnabledProviders.Contains(providerId);
@@ -214,6 +252,7 @@ public sealed class LayoutStore
 
     public void ResetToDefault()
     {
+        _orderUndo.Clear();
         var accountLayouts = Providers.Where(p => p.Provider.Id.Contains('@')).ToArray();
         _settings.EnabledProviders = new HashSet<string>(DefaultLayout.StarterProviders, StringComparer.Ordinal);
         _settings.EnabledMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal);
