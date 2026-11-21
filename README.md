@@ -86,6 +86,8 @@ How everything works, in [docs/](docs/README.md):
 
 A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). It is not a substitute for the macOS app; see [OpenUsage on Windows](docs/windows.md).
 
+On Windows, OpenCode shows live Go limits instead of totaling local session history.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App

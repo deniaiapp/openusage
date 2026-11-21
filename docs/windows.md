@@ -25,7 +25,7 @@ Provider details that match macOS:
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, extra usage is measured against the matching personal or pooled budget. Spend history is fetched day by day and finished days are cached per account.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
-- **OpenCode:** reads OpenCode 2's database (usage and Go key) and falls back to `auth.json` on OpenCode 1.
+- **OpenCode:** shows live Go session, weekly, and monthly limits. Windows still reads the Go sign-in from OpenCode 2's credential database or OpenCode 1's `auth.json`, but no longer totals local Go or Zen session history.
 - **Z.ai:** A rejected API key prompts you to replace it in Customize.
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.

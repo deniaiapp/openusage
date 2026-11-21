@@ -191,50 +191,54 @@ public class MiscProvidersUpstreamTests
     }
 
     [Fact]
-    public void OpenCode_ScanUnionsV1AndV2AndCountsMigratedRowsOnce()
+    public async Task OpenCode_LocalHistoryDoesNotDetectAnAccount()
     {
         using var dir = new TempDir();
-        var now = DateTimeOffset.Now;
-        var ms = now.AddMinutes(-5).ToUnixTimeMilliseconds();
-        dir.Db("opencode.db", $$$"""
-            CREATE TABLE message(id TEXT, time_created INTEGER, data TEXT);
-            CREATE TABLE session_message(id TEXT, time_created INTEGER, data TEXT, type TEXT);
-            INSERT INTO message VALUES('m1',{{{ms}}},'{"role":"assistant","providerID":"opencode-go","modelID":"glm","cost":1.0,"tokens":{"total":100}}');
-            INSERT INTO session_message VALUES('m1',{{{ms}}},'{"model":{"id":"glm","providerID":"opencode-go"},"cost":1.0,"tokens":{"total":100}}','assistant');
-            INSERT INTO session_message VALUES('m2',{{{ms}}},'{"model":{"id":"glm","providerID":"opencode"},"cost":2.0,"tokens":{"cache":{"read":5},"input":10,"output":5}}','assistant');
-            INSERT INTO session_message VALUES('m3',{{{ms}}},'{"model":{"id":"glm","providerID":"opencode"},"cost":0.5,"status":"completed","tokens":{"total":30}}','compaction');
-            INSERT INTO session_message VALUES('m4',{{{ms}}},'{"model":{"id":"glm","providerID":"opencode"},"cost":9.0,"status":"running"}','compaction');
-            INSERT INTO session_message VALUES('m5',{{{ms}}},'{"model":{"id":"gpt","providerID":"openai"},"cost":9.0}','assistant');
-            """);
-        var scan = OpenCodeUsageScanner.Scan(now: now, dataDirectory: dir.Path);
-        Assert.NotNull(scan);
-        var today = scan!.Series.Daily.Single(d => d.Date == DailyUsageAccumulatorDay(now));
-        Assert.Equal(3.5, today.CostUsd!.Value, 6);
-        Assert.Equal(150, today.TotalTokens);
-        Assert.True(OpenCodeUsageScanner.HasHostedUsage(dir.Path));
+        WriteLocalUsage(dir);
+        var requests = 0;
+        var http = new AppHttp(new HttpClient(new StubHandler(_ => { requests++; return (HttpStatusCode.OK, "{}"); })));
+        var provider = new OpenCodeProvider(http, dir.Path);
+        Assert.False(await provider.HasLocalCredentialsAsync());
+        var snapshot = await provider.RefreshAsync();
+        Assert.True(snapshot.IsError);
+        Assert.Equal(OpenCodeErrors.NotLoggedIn, Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+        Assert.Equal(0, requests);
     }
 
-    [Fact]
-    public async Task OpenCode_GoFailureKeepsLocalSpendTiles()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OpenCode_GoUsesApiWithoutFallingBackToLocalSpend(bool authorized)
     {
         using var dir = new TempDir();
+        WriteLocalUsage(dir);
+        dir.AuthJson("""{"opencode-go":{"key":"fixture-go-key"}}""");
+        var http = new AppHttp(new HttpClient(new StubHandler(request =>
+        {
+            Assert.Equal(OpenCodeProvider.UsageUrl, request.RequestUri);
+            Assert.Equal("fixture-go-key", request.Headers.Authorization?.Parameter);
+            return authorized
+                ? (HttpStatusCode.OK, GoUsage(25, Captured.AddHours(4)).ToJsonString())
+                : (HttpStatusCode.Unauthorized, "{}");
+        })));
+        var provider = new OpenCodeProvider(http, dir.Path);
+        Assert.True(await provider.HasLocalCredentialsAsync());
+        var snapshot = await provider.RefreshAsync();
+        Assert.Equal(!authorized, snapshot.IsError);
+        Assert.Equal(["Session", "Weekly", "Monthly"], provider.WidgetDescriptors.Select(d => d.MetricLabel));
+        if (authorized)
+            Assert.Equal(["Session", "Weekly", "Monthly"], snapshot.Lines.Select(l => l.Label));
+        else
+            Assert.Equal(OpenCodeErrors.Unauthorized, Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+    }
+
+    private static void WriteLocalUsage(TempDir dir)
+    {
         var ms = DateTimeOffset.Now.AddMinutes(-5).ToUnixTimeMilliseconds();
-        dir.AuthJson("""{"opencode-go":{"key":"k"}}""");
         dir.Db("opencode.db", $$$"""
             CREATE TABLE message(id TEXT, time_created INTEGER, data TEXT);
             INSERT INTO message VALUES('m1',{{{ms}}},'{"role":"assistant","providerID":"opencode-go","cost":1.25,"tokens":{"total":10}}');
             """);
-        var http = new AppHttp(new HttpClient(new StubHandler(_ => (HttpStatusCode.Unauthorized, "{}"))));
-        var snapshot = await new OpenCodeProvider(http, dir.Path).RefreshAsync();
-        Assert.False(snapshot.IsError);
-        Assert.NotNull(snapshot.Line("Today"));
-        Assert.Null(snapshot.Line("Session"));
-
-        using var empty = new TempDir();
-        empty.AuthJson("""{"opencode-go":{"key":"k"}}""");
-        var failed = await new OpenCodeProvider(http, empty.Path).RefreshAsync();
-        Assert.True(failed.IsError);
-        Assert.Contains("rejected", ((MetricLine.BadgeLine)failed.Lines[0]).Message);
     }
 
     private const string ImportedCredentialSchema = $"""
@@ -242,9 +246,6 @@ public class MiscProvidersUpstreamTests
         INSERT INTO migration VALUES('{OpenCodeAuthStore.CredentialsImportedMigration}');
         CREATE TABLE credential(id TEXT, integration_id TEXT, value TEXT, active INTEGER, time_updated INTEGER);
         """;
-
-    private static string DailyUsageAccumulatorDay(DateTimeOffset date) =>
-        OpenUsage.Core.Providers.DailyUsageAccumulator.DayKey(date);
 
     // MARK: Devin
 
