@@ -1,6 +1,7 @@
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Ollama;
+using OpenUsage.Core.Providers.OpenCode;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
 using OpenUsage.Core.Stores;
@@ -10,12 +11,14 @@ namespace OpenUsage.Core.Services;
 
 public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
 {
-    public static bool Supports(string providerId) => providerId is "ollama" or "openrouter" or "zai";
+    public static bool Supports(string providerId) => providerId is "ollama" or "opencode" or "openrouter" or "zai";
 
     public IProviderRuntime MakeRuntime(ApiKeyAccount account, IProviderRuntime provider) =>
         (provider, account.ProviderId) switch
         {
             (OllamaProvider ollama, "ollama") => new AccountRuntime(account, provider, store, ollama.RefreshWithApiKeyAsync),
+            (OpenCodeProvider openCode, "opencode") =>
+                new AccountRuntime(account, provider, store, openCode.RefreshWithApiKeyAsync, openCode.GoWidgetDescriptors),
             (OpenRouterProvider openRouter, "openrouter") =>
                 new AccountRuntime(account, provider, store, (key, ct) => openRouter.RefreshWithKeyAsync(key, ct, requireKey: true)),
             (ZaiProvider zai, "zai") => new AccountRuntime(account, provider, store, zai.RefreshWithKeyAsync),
@@ -47,6 +50,7 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
         var request = providerId switch
         {
             "ollama" => OllamaProvider.ApiKeyRequest("GET", OllamaProvider.BalancePath, key),
+            "opencode" => OpenCodeProvider.UsageRequest(key),
             "openrouter" => BearerGet(OpenRouterProvider.KeyUrl, key),
             "zai" => BearerGet(ZaiProvider.QuotaUrl, key),
             _ => throw new ArgumentException("This provider does not support API key accounts.")
@@ -54,6 +58,8 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
         var response = await http.SendAsync(request, ct);
         ct.ThrowIfCancellationRequested();
 
+        if (providerId == "opencode" && OpenCodeProvider.IsNoGoSubscription(response))
+            throw new ProviderRequestException(OpenCodeErrors.NoGoSubscription);
         if (AuthRetry.IsAuthFailure(response))
             throw new ProviderRequestException("The provider rejected this API key.");
         if (!response.IsSuccess)
@@ -64,6 +70,14 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
         if (providerId == "ollama")
         {
             try { _ = OllamaUsageMapper.BalanceLines(body); }
+            catch (InvalidOperationException ex)
+            {
+                throw new ProviderRequestException(ProviderErrors.InvalidResponse, ex);
+            }
+        }
+        else if (providerId == "opencode")
+        {
+            try { _ = OpenCodeUsageMapper.MeterLines(response, DateTimeOffset.Now); }
             catch (InvalidOperationException ex)
             {
                 throw new ProviderRequestException(ProviderErrors.InvalidResponse, ex);
@@ -96,7 +110,8 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
 
     private sealed class AccountRuntime(
         ApiKeyAccount account, IProviderRuntime template, ApiKeyAccountStore accounts,
-        Func<string, CancellationToken, Task<ProviderSnapshot>> refresh) : IProviderRuntime
+        Func<string, CancellationToken, Task<ProviderSnapshot>> refresh,
+        IReadOnlyList<WidgetDescriptor>? descriptors = null) : IProviderRuntime
     {
         public Provider Provider => template.Provider with
         {
@@ -104,7 +119,7 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
             DisplayName = $"{template.Provider.DisplayName} · {account.Label}"
         };
 
-        public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => template.WidgetDescriptors
+        public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => (descriptors ?? template.WidgetDescriptors)
             .Select(d => d with
             {
                 Id = account.CardId + d.Id[template.Provider.Id.Length..],

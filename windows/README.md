@@ -20,7 +20,7 @@ On first launch a welcome screen lists the AI tools already signed in on this PC
 
 ## What it reads
 
-Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For Ollama, OpenRouter, and Z.ai, use **Additional Accounts** in Customize to connect API keys.
+Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For Ollama, OpenCode Go, OpenRouter, and Z.ai, use **Additional Accounts** in Customize to connect API keys.
 
 | Provider | Windows credential sources |
 |---|---|
@@ -29,7 +29,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com), or existing editor and GitHub CLI credentials |
 | Grok | `%USERPROFILE%\.grok\auth.json` |
-| OpenCode | `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
+| OpenCode | Go API key in Customize, or `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
 | Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a short-lived cache under `%APPDATA%\OpenUsage\antigravity` |
 | Ollama | API key in Customize, or `%USERPROFILE%\.ollama\id_ed25519` (opt-in; never auto-enabled). Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
 | Devin | `credentials.toml` under `.local\share\devin` / `%LOCALAPPDATA%\devin`, or the Devin/Windsurf `state.vscdb` |

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Ollama;
+using OpenUsage.Core.Providers.OpenCode;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
 using OpenUsage.Core.Services;
@@ -13,6 +14,13 @@ namespace OpenUsage.Tests;
 
 public sealed class ApiKeyAccountTests : IDisposable
 {
+    private const string OpenCodeUsage = """
+        {"usage":{
+            "rolling":{"percent":12,"resetsAt":"2026-12-01T05:00:00Z"},
+            "weekly":{"percent":20,"resetsAt":"2026-12-07T00:00:00Z"},
+            "monthly":{"percent":30,"resetsAt":"2027-01-01T00:00:00Z"}
+        }}
+        """;
     private readonly string _directory = Directory.CreateTempSubdirectory("openusage-accounts-").FullName;
     private string AccountFile => Path.Combine(_directory, "accounts.bin");
 
@@ -116,6 +124,55 @@ public sealed class ApiKeyAccountTests : IDisposable
         {
             Environment.SetEnvironmentVariable(variable, previous);
         }
+    }
+
+    [Theory]
+    [InlineData(401, "{}", "rejected")]
+    [InlineData(403, """{"error":{"type":"EntitlementError"}}""", "No OpenCode Go subscription")]
+    [InlineData(200, """{"usage":{}}""", "unavailable")]
+    public async Task OpenCodeRejectsUnverifiedCredentials(int status, string body, string message)
+    {
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal(OpenCodeProvider.UsageUrl, request.RequestUri);
+            Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+            return (status, body);
+        });
+        var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+
+        var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
+            service.ConnectAsync("opencode", "Work", "fixture-key"));
+
+        Assert.Contains(message, error.Message);
+        Assert.False(File.Exists(AccountFile));
+    }
+
+    [WindowsFact]
+    public async Task OpenCodeRestoresAnAppSavedAccountWithoutReadingLocalOpenCodeData()
+    {
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal(OpenCodeProvider.UsageUrl, request.RequestUri);
+            Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+            Assert.False(request.Headers.Contains("x-opencode-org-id"));
+            return (200, OpenCodeUsage);
+        });
+        var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+        var connected = await service.ConnectAsync("opencode", "Work", "fixture-key");
+        File.WriteAllText(Path.Combine(_directory, "auth.json"), "invalid local credential file");
+
+        var loaded = new ApiKeyAccountStore(AccountFile);
+        var restored = Assert.Single(loaded.List());
+        Assert.Equal(connected, restored);
+        var template = new OpenCodeProvider(http, _directory);
+        var runtime = new ApiKeyAccounts(http, loaded).MakeRuntime(restored, template);
+        Assert.Equal(new[] { "Session", "Weekly", "Monthly" }, runtime.WidgetDescriptors.Select(d => d.Title));
+        var snapshot = await runtime.RefreshAsync();
+        Assert.Equal(restored.CardId, snapshot.ProviderId);
+        Assert.Equal("OpenCode · Work", snapshot.DisplayName);
+        Assert.Null(snapshot.Plan);
+        Assert.Equal(12, Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Session")).Used);
     }
 
     [WindowsFact]
