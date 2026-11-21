@@ -17,7 +17,7 @@ Ollama stays off until you turn it on in Customize — the local signing key exi
 Provider details that match macOS:
 
 - **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
-- **Codex:** Pro 100 / 200 / 500 plan names, auto-review usage free from October 6, Ultrafast priced at 6x on GPT-6 Astra. A slow history scan shows a warning instead of holding back live limits.
+- **Codex:** Pro 100 / 200 / 500 plan names.
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, extra usage is measured against the matching personal or pooled budget. Spend history is fetched day by day and finished days are cached per account.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
@@ -25,6 +25,8 @@ Provider details that match macOS:
 - **Z.ai:** A rejected API key prompts you to replace it in Customize.
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
+
+Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown; Cursor's provider-reported history is unchanged.
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.

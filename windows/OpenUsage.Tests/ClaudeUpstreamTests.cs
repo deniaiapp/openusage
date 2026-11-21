@@ -78,58 +78,6 @@ public class ClaudeUpstreamTests
         Assert.Null(ClaudeUsageMapper.FormatLivePlan(JsonUtil.ParseObject("""{ "account": { "uuid": "a" } }""")!, stored));
     }
 
-    // MARK: - Log parsing
-
-    [Fact]
-    public void ScannerKeepsRecordWhoseNestedIterationModelIsNull()
-    {
-        var line = """
-            {"timestamp":"2026-02-20T12:00:00Z","message":{"id":"m1","model":"claude-fable-5-1","usage":{"input_tokens":2,"output_tokens":100,"iterations":[{"type":"message","model":null,"input_tokens":2,"output_tokens":100}]}}}
-            """;
-        var entry = Assert.Single(ClaudeLogUsageScanner.ParseLine(line));
-        Assert.Equal("claude-fable-5-1", entry.Model);
-        Assert.Equal(100, entry.Tokens.Output);
-    }
-
-    [Fact]
-    public void ScanCache_ReadsOnlyAppendedLinesOfAGrowingLog()
-    {
-        using var dir = new TempDir();
-        var path = Path.Combine(dir.Path, "session.jsonl");
-        File.WriteAllText(path, UsageLine("m1") + "\n" + UsageLine("m2") + "\n");
-        var cache = new ClaudeLogScanCache();
-
-        Assert.Equal(2, cache.Entries([path]).Count);
-        Assert.Equal(1, cache.FullParses);
-
-        File.AppendAllText(path, UsageLine("m3") + "\n");
-        var entries = cache.Entries([path]);
-        Assert.Equal(["m1", "m2", "m3"], entries.Select(e => e.MessageId));
-        Assert.Equal(1, cache.FullParses);
-        Assert.Equal(1, cache.TailParses);
-    }
-
-    [Fact]
-    public void ScanCache_RereadsWhenThePrefixChangesOrTheAppendIsIncomplete()
-    {
-        using var dir = new TempDir();
-        var path = Path.Combine(dir.Path, "session.jsonl");
-        File.WriteAllText(path, UsageLine("m1") + "\n");
-        var cache = new ClaudeLogScanCache();
-        cache.Entries([path]);
-
-        // Rewritten prefix: same shape, different content, then longer.
-        File.WriteAllText(path, UsageLine("x1") + "\n" + UsageLine("x2") + "\n");
-        Assert.Equal(["x1", "x2"], cache.Entries([path]).Select(e => e.MessageId));
-        Assert.Equal(2, cache.FullParses);
-
-        // A half-written trailing record is still read in full, never cached as a resume point.
-        File.AppendAllText(path, UsageLine("x3"));
-        Assert.Equal(["x1", "x2", "x3"], cache.Entries([path]).Select(e => e.MessageId));
-        Assert.Equal(3, cache.FullParses);
-        Assert.Equal(0, cache.TailParses);
-    }
-
     // MARK: - Credential document preservation
 
     [Fact]
@@ -182,7 +130,7 @@ public class ClaudeUpstreamTests
             """{ "claudeAiOauth": { "accessToken": "token", "refreshToken": "refresh", "subscriptionType": "max", "rateLimitTier": "default_claude_max_5x" } }""");
         var handler = new FakeAnthropic();
         var clock = Now;
-        var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), store, () => clock, () => null);
+        var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), store, () => clock);
 
         var first = await provider.RefreshAsync();
         Assert.Equal("Max 20x", first.Plan);
@@ -210,11 +158,6 @@ public class ClaudeUpstreamTests
         await provider.RefreshAsync();
         Assert.Equal(2, handler.ResetGrantCalls);
     }
-
-    private static string UsageLine(string id) =>
-        "{\"timestamp\":\"2026-10-14T10:00:00Z\",\"sessionId\":\"s\",\"requestId\":\"r-" + id
-        + "\",\"message\":{\"id\":\"" + id
-        + "\",\"model\":\"claude-sonnet-4-20250514\",\"usage\":{\"input_tokens\":10,\"output_tokens\":5}}}";
 
     private sealed class TempDir : IDisposable
     {

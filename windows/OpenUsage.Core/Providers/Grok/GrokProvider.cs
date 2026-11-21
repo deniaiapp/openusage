@@ -112,9 +112,8 @@ public static class GrokUsageMapper
         JsonUtil.String(response.Json?["error"]) is { } error &&
         error.Contains("no personal team", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>Header warning when the credits endpoint refuses a team principal; local spend tiles still load.</summary>
     public const string TeamBillingUnavailableWarning =
-        "Team accounts have no personal quota. Spend below is still from your Grok logs.";
+        "Team accounts have no personal quota.";
 }
 
 public sealed class GrokProvider : IProviderRuntime
@@ -135,8 +134,7 @@ public sealed class GrokProvider : IProviderRuntime
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
     [
         WidgetDescriptor.Percent("grok.weekly", Provider, "Weekly", "Weekly limit"),
-        WidgetDescriptor.Badge("grok.payAsYouGo", Provider, "Pay as you go"),
-        ..SpendTileMapper.HistoryWidgets(Provider)
+        WidgetDescriptor.Badge("grok.payAsYouGo", Provider, "Pay as you go")
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
@@ -175,8 +173,7 @@ public sealed class GrokProvider : IProviderRuntime
         string? warning = null;
         if (GrokUsageMapper.IsTeamBillingUnavailable(credits))
         {
-            // Keep the snapshot successful so local spend tiles still load under a header warning.
-            AppLog.Warn("grok", "credits config unavailable: team principal has no personal team; weekly/pay-as-you-go omitted, local spend still loads");
+            AppLog.Warn("grok", "credits config unavailable: team principal has no personal team");
             lines = [];
             warning = GrokUsageMapper.TeamBillingUnavailableWarning;
         }
@@ -199,12 +196,6 @@ public sealed class GrokProvider : IProviderRuntime
         }
         catch (Exception ex) { AppLog.Warn("grok", $"settings fetch failed: {ex.Message}"); }
 
-        await SpendTileMapper.AppendScanAsync(
-            lines,
-            () => GrokLogUsageScanner.Scan(),
-            "From your Grok usage history (estimated)",
-            "grok",
-            ct);
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now, warning);
     }
