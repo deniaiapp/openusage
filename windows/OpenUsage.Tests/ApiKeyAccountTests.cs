@@ -131,6 +131,37 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [Fact]
+    public async Task OpenRouterDoesNotUseAnEnvironmentKey()
+    {
+        const string variable = "OPENROUTER_API_KEY";
+        var previous = Environment.GetEnvironmentVariable(variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(variable, "fixture-environment-key");
+            using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+            var provider = new OpenRouterProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+            Assert.Null(provider.LoadKey());
+            Assert.False(await provider.HasLocalCredentialsAsync());
+            Assert.True((await provider.RefreshAsync()).IsError);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, previous);
+        }
+    }
+
+    [WindowsFact]
+    public async Task OpenRouterStillUsesTheSavedKeyAfterRestart()
+    {
+        var path = Path.Combine(_directory, "keys.bin");
+        new ApiKeyStore(path).Set("openrouter", "fixture-saved-key");
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new OpenRouterProvider(http, new ApiKeyStore(path));
+        Assert.Equal("fixture-saved-key", provider.LoadKey());
+        Assert.True(await provider.HasLocalCredentialsAsync());
+    }
+
+    [Fact]
     public async Task OpenRouterManagementAccountTotalsAllListedKeys()
     {
         var firstPage = Enumerable.Repeat(new { usage_daily = 1, usage_weekly = 2, usage_monthly = 3 }, 100);
