@@ -31,7 +31,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 Provider details that match macOS:
 
 - **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
-- **Codex:** Pro 100 / 200 / 500 plan names.
+- **Codex:** Pro 100 / 200 / 500 plan names. Credits show a reported balance, including zero, unless ChatGPT says the account has no credits.
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, extra usage is measured against the matching personal or pooled budget. Spend history is fetched day by day and finished days are cached per account.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.

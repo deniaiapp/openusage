@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json.Nodes;
+using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Support;
 using Xunit;
@@ -39,6 +40,36 @@ public class CodexUpstreamTests
         using var http = new AppHttp();
         var link = Assert.Single(new CodexProvider(http).Provider.Links!, l => l.Label == "Dashboard");
         Assert.Equal("https://chatgpt.com/settings/usage", link.Url);
+    }
+
+    [Theory]
+    [InlineData("""{"credits":{"has_credits":false}}""", null, null, null)]
+    [InlineData("""{"credits":{"has_credits":false,"balance":250}}""", "true", "500", null)]
+    [InlineData("""{"credits":{"balance":250}}""", "false", "500", null)]
+    [InlineData("{}", "false", "500", null)]
+    [InlineData("""{"credits":{"has_credits":true,"balance":0}}""", "false", "500", 0d)]
+    [InlineData("""{"credits":{"has_credits":true}}""", "true", "0", 0d)]
+    [InlineData("{}", null, "250", 10d)]
+    [InlineData("{}", "true", null, null)]
+    public void Credits_RespectAvailabilityAndKeepReportedZero(
+        string body, string? hasCreditsHeader, string? balanceHeader, double? expectedDollars)
+    {
+        var headers = new Dictionary<string, string> { ["x-codex-primary-used-percent"] = "30" };
+        if (hasCreditsHeader is not null) headers["x-codex-credits-has-credits"] = hasCreditsHeader;
+        if (balanceHeader is not null) headers["x-codex-credits-balance"] = balanceHeader;
+        var response = new AppHttpResponse(200, Encoding.UTF8.GetBytes(body), headers);
+
+        var (_, lines) = CodexUsageMapper.Map(response, null, DateTimeOffset.UtcNow);
+
+        var session = Assert.IsType<MetricLine.ProgressLine>(Assert.Single(lines, line => line.Label == "Session"));
+        Assert.Equal(30, session.Used);
+        if (expectedDollars is null)
+            Assert.DoesNotContain(lines, line => line.Label == "Credits");
+        else
+        {
+            var credits = Assert.IsType<MetricLine.ValuesLine>(Assert.Single(lines, line => line.Label == "Credits"));
+            Assert.Equal(expectedDollars.Value, Assert.Single(credits.Items, value => value.Kind == MetricKind.Dollars).Number);
+        }
     }
 
     // #1322

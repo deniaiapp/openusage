@@ -163,12 +163,12 @@ public static class CodexUsageMapper
 
     private static double? ReadCreditsRemaining(AppHttpResponse response, JsonObject body)
     {
-        if (JsonUtil.Object(body["credits"]) is { } credits)
-        {
-            if (JsonUtil.Number(credits["balance"]) is { } balance) return balance;
-            if (JsonUtil.Bool(credits["has_credits"]) == false) return 0;
-        }
-        return JsonUtil.Number(ToNode(response.Header("x-codex-credits-balance")));
+        var credits = JsonUtil.Object(body["credits"]);
+        var hasCredits = JsonUtil.Bool(credits?["has_credits"])
+            ?? JsonUtil.Bool(ToNode(response.Header("x-codex-credits-has-credits")));
+        if (hasCredits == false) return null;
+        return JsonUtil.Number(credits?["balance"])
+            ?? JsonUtil.Number(ToNode(response.Header("x-codex-credits-balance")));
     }
 
     public static string? FormatPlan(string? raw)
