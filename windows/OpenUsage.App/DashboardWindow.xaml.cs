@@ -4,7 +4,6 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
@@ -41,8 +40,6 @@ public partial class DashboardWindow : Window
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
     public event Action<string?>? HotkeyChanged;
-    internal event Action? PrivacyModeChanged;
-    private bool _captureProtectionApplied;
 
     public DashboardWindow(AppContainer container)
     {
@@ -55,17 +52,6 @@ public partial class DashboardWindow : Window
         _clock.Start();
         Loaded += (_, _) => Render();
         PreviewKeyDown += OnKey;
-        AddHandler(ToolTipService.ToolTipOpeningEvent, new ToolTipEventHandler((_, e) =>
-        {
-            if (_container.Settings.PrivacyMode) e.Handled = true;
-        }));
-    }
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        if (_container.Settings.PrivacyMode)
-            _captureProtectionApplied = CapturePrivacy.Apply(new WindowInteropHelper(this).Handle, true);
     }
 
     public void ToggleFromTray()
@@ -165,7 +151,6 @@ public partial class DashboardWindow : Window
 
     private void Render(bool preserveEditor = false)
     {
-        var conceal = _container.Settings.PrivacyMode && !_captureProtectionApplied && _screen != DashboardScreen.Settings;
         var remaining = _container.Data.NextRefresh - DateTimeOffset.Now;
         RefreshLabel.Text = _container.Data.IsRefreshing
             ? "Updating…"
@@ -174,7 +159,7 @@ public partial class DashboardWindow : Window
                 : $"Next update in {Formatters.CompactDuration(remaining) ?? "soon"} — click to refresh";
 
         TopBar.Visibility = _screen == DashboardScreen.Dashboard ? Visibility.Collapsed : Visibility.Visible;
-        TopTitle.Text = conceal ? "OpenUsage" : _screen switch
+        TopTitle.Text = _screen switch
         {
             DashboardScreen.Customize => "Customize",
             DashboardScreen.CustomizeDetail => _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId)?.Provider.DisplayName ?? "Provider",
@@ -182,19 +167,10 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (!conceal && preserveEditor && _accountEditor is not null) return;
+        if (preserveEditor && _accountEditor is not null) return;
         _accountEditor = null;
         ContentHost.Children.Clear();
-        if (conceal)
-        {
-            ContentHost.Children.Add(new TextBlock
-            {
-                Text = "Privacy Mode hides usage and accounts because Windows could not protect this window.",
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(4, 6, 4, 8)
-            });
-            return;
-        }
+        if (ShowPrivacyPlaceholder()) return;
         switch (_screen)
         {
             case DashboardScreen.Dashboard:
@@ -677,9 +653,6 @@ public partial class DashboardWindow : Window
             _container.Settings.Save();
         }));
 
-        ContentHost.Children.Add(SectionTitle("Privacy"));
-        ContentHost.Children.Add(SettingToggle("Privacy Mode", _container.Settings.PrivacyMode, SetPrivacyMode));
-
         ContentHost.Children.Add(SectionTitle("Refresh"));
         ContentHost.Children.Add(SettingCombo("Interval", new[] { "1 minute", "5 minutes", "15 minutes" },
             _container.Settings.RefreshIntervalSeconds switch { 60 => 0, 900 => 2, _ => 1 },
@@ -689,6 +662,7 @@ public partial class DashboardWindow : Window
                 _container.Settings.Save();
             }));
 
+        RenderPrivacySettings();
         var reset = new Button { Content = "Reset Layout to Default", Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 12, 0, 0) };
         reset.Click += (_, _) =>
         {
@@ -707,16 +681,6 @@ public partial class DashboardWindow : Window
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 0)
         });
-    }
-
-    private void SetPrivacyMode(bool enabled)
-    {
-        _container.Settings.PrivacyMode = enabled;
-        var applied = CapturePrivacy.Apply(new WindowInteropHelper(this).Handle, enabled);
-        _captureProtectionApplied = applied && enabled;
-        _container.Settings.Save();
-        PrivacyModeChanged?.Invoke();
-        Render();
     }
 
     private UIElement Sparkline(WidgetData data)
