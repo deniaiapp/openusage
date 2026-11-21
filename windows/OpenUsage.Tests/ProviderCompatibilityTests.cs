@@ -136,6 +136,11 @@ public class ProviderCompatibilityTests
         var total = Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Total usage"));
         Assert.Equal(needsFallback ? 120 : 42, total.Used);
         Assert.Equal(needsFallback ? 500 : 100, total.Limit);
+        var descriptor = Assert.Single(provider.WidgetDescriptors, d => d.Id == "cursor.usage");
+        Assert.Equal(needsFallback ? "120 of 500 requests used" : "42% used",
+            WidgetData.Resolve(descriptor, total, WidgetDisplayMode.Used, ResetDisplayMode.Relative, false).Headline);
+        Assert.Equal(needsFallback ? "380 of 500 requests left" : "58% left",
+            WidgetData.Resolve(descriptor, total, WidgetDisplayMode.Remaining, ResetDisplayMode.Relative, false).Headline);
     }
 
     private sealed class CursorFixtureHandler(Func<HttpRequestMessage, (HttpStatusCode Status, string Body)> send) : HttpMessageHandler

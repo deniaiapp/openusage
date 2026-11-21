@@ -308,12 +308,12 @@ public sealed class CursorProvider : IProviderRuntime
 
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
     [
-        WidgetDescriptor.Percent("cursor.usage", Provider, "Total Usage", "Total usage"),
+        WidgetDescriptor.Percent("cursor.usage", Provider, "Total Usage", "Total usage") with { ShowsCountLimit = true },
         WidgetDescriptor.Percent("cursor.auto", Provider, "Cursor Models"),
         WidgetDescriptor.Percent("cursor.api", Provider, "Other Models"),
         WidgetDescriptor.Percent("cursor.grokBot", Provider, "Grok Bot", "Grok Bot usage"),
         WidgetDescriptor.BoundedDollars("cursor.onDemand", Provider, "Extra Usage", 100, "On-demand", valueWord: "spent"),
-        WidgetDescriptor.BoundedCount("cursor.requests", Provider, "Requests", 500, "requests", MetricPeriod.MonthMs),
+        WidgetDescriptor.BoundedCount("cursor.requests", Provider, "Requests", 500, "requests", MetricPeriod.MonthMs) with { ShowsCountLimit = true },
         WidgetDescriptor.DollarBalance("cursor.credits", Provider, "Credits", "left"),
         ..SpendTileMapper.HistoryWidgets(Provider, CursorUsageHistoryNote)
     ];

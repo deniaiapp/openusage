@@ -14,6 +14,7 @@ public sealed record WidgetData
     public double Used { get; init; }
     public double? Limit { get; init; }
     public string? CountSuffix { get; init; }
+    public bool ShowsCountLimit { get; init; }
     public string? ValuePrefix { get; init; }
     public WidgetDisplayMode DisplayMode { get; set; } = WidgetDisplayMode.Used;
     public ResetDisplayMode ResetDisplayMode { get; set; } = ResetDisplayMode.Relative;
@@ -93,7 +94,10 @@ public sealed record WidgetData
             if (IsBounded)
             {
                 if (ValueTextOverride is not null) return ValueTextOverride;
-                return $"{ValueText} {DisplayMode.Label().ToLowerInvariant()}";
+                var label = DisplayMode.Label().ToLowerInvariant();
+                if (ShowsCountLimit && Kind == MetricKind.Count && Limit is { } limit)
+                    return $"{ValueText} of {MetricFormatter.Number(limit, Kind, MetricFormatter.Style.Full)} {CountSuffix} {label}";
+                return $"{ValueText} {label}";
             }
             return ValueText;
         }
@@ -267,6 +271,7 @@ public sealed record WidgetData
             ResetDisplayMode = resetDisplayMode,
             AlwaysShowPacing = alwaysShowPacing,
             PriorityLimits = priorityLimits ?? PriorityLimits.Default,
+            ShowsCountLimit = descriptor.ShowsCountLimit,
             HasData = false
         };
         if (line is null) return sample;
