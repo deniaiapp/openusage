@@ -75,7 +75,8 @@ public sealed class CursorAuthStore
 public static class CursorUsageMapper
 {
     public static (string? Plan, List<MetricLine> Lines) Map(
-        JsonObject usage, string? planName, JsonObject? creditGrants, double stripeBalanceCents)
+        JsonObject usage, string? planName, JsonObject? creditGrants, double stripeBalanceCents,
+        CursorUnifiedBilling? unified = null)
     {
         if (JsonUtil.Bool(usage["enabled"]) == false)
             throw new InvalidOperationException("No active Cursor subscription.");
@@ -89,7 +90,11 @@ public static class CursorUsageMapper
             throw new InvalidOperationException("Total usage limit missing from API response.");
 
         var lines = new List<MetricLine>();
-        AppendCredits(creditGrants, stripeBalanceCents, lines);
+        if (unified is null)
+            AppendCredits(creditGrants, stripeBalanceCents, lines);
+        else if (unified.CreditBalance is { } balance)
+            lines.Add(MetricLine.Values("Credits",
+                [new MetricValue(JsonUtil.CentsToDollars(Math.Max(0, JsonUtil.Number(balance["usdRemainingCents"]) ?? 0)), MetricKind.Dollars)]));
 
         var planUsedCents = JsonUtil.Number(planUsage["totalSpend"])
             ?? ((limit ?? 0) - (JsonUtil.Number(planUsage["remaining"]) ?? 0));
@@ -122,6 +127,13 @@ public static class CursorUsageMapper
                 cycle.ResetsAt, cycle.PeriodMs));
         }
 
+        if (unified is not null)
+        {
+            if (MapAdditionalUsage(unified.UsageStatus) is { } additionalUsage)
+                lines.Add(additionalUsage);
+            return (PlanLabel(planName), lines);
+        }
+
         if (JsonUtil.Number(planUsage["autoPercentUsed"]) is { } autoPercent)
             lines.Add(MetricLine.Progress("Cursor Models", autoPercent, 100, ProgressFormat.Percent, cycle.ResetsAt, cycle.PeriodMs));
         if (JsonUtil.Number(planUsage["apiPercentUsed"]) is { } apiPercent)
@@ -129,18 +141,7 @@ public static class CursorUsageMapper
 
         if (spendLimitUsage is not null)
         {
-            var onDemandLimit = JsonUtil.Number(spendLimitUsage["individualLimit"])
-                ?? JsonUtil.Number(spendLimitUsage["pooledLimit"]) ?? 0;
-            var remaining = JsonUtil.Number(spendLimitUsage["individualRemaining"])
-                ?? JsonUtil.Number(spendLimitUsage["pooledRemaining"]) ?? 0;
-            var reported = new[]
-            {
-                JsonUtil.Number(spendLimitUsage["individualUsed"]),
-                JsonUtil.Number(spendLimitUsage["pooledUsed"]),
-                JsonUtil.Number(spendLimitUsage["totalSpend"])
-            }.Where(v => v is not null).Select(v => v!.Value).ToList();
-            var spent = reported.FirstOrDefault(v => v > 0);
-            if (spent == 0) spent = Math.Max(0, onDemandLimit - remaining);
+            var (onDemandLimit, spent) = OnDemandBudget(spendLimitUsage, isTeam);
             if (onDemandLimit > 0)
                 lines.Add(MetricLine.Progress("On-demand", JsonUtil.CentsToDollars(spent),
                     JsonUtil.CentsToDollars(onDemandLimit), ProgressFormat.Dollars));
@@ -149,6 +150,39 @@ public static class CursorUsageMapper
         }
 
         return (PlanLabel(planName), lines);
+    }
+
+    private static (double Limit, double Spent) OnDemandBudget(JsonObject usage, bool isTeam)
+    {
+        var (limit, reported, remaining) = JsonUtil.Number(usage["individualLimit"]) is { } personal
+            ? (personal, isTeam || JsonUtil.Number(usage["pooledUsed"]) > 0
+                ? new[] { "individualUsed" } : new[] { "individualUsed", "totalSpend" }, "individualRemaining")
+            : JsonUtil.Number(usage["pooledLimit"]) is > 0 and var pooled
+                ? (pooled, new[] { "pooledUsed" }, "pooledRemaining")
+                : (0, new[] { "individualUsed", "pooledUsed", "totalSpend" }, null);
+        var spent = reported.Select(field => JsonUtil.Number(usage[field]) ?? 0).FirstOrDefault(value => value > 0);
+        if (spent == 0 && remaining is not null && JsonUtil.Number(usage[remaining]) is { } left)
+            spent = Math.Max(0, limit - left);
+        return (limit, spent);
+    }
+
+    private static MetricLine? MapAdditionalUsage(JsonObject? status)
+    {
+        if (status is null || (JsonUtil.String(status["availability"]) ?? "available") != "available"
+            || JsonUtil.Object(status["monthlyUsage"]) is not { } monthly
+            || JsonUtil.Bool(monthly["additionalUsageOff"]) == true)
+            return null;
+        var limit = JsonUtil.Number(monthly["limitCents"]);
+        if (limit == 0) return null;
+        var used = JsonUtil.CentsToDollars(Math.Max(0, JsonUtil.Number(monthly["usedCents"]) ?? 0));
+        if (limit is not > 0)
+            return MetricLine.Values("On-demand", [new MetricValue(used, MetricKind.Dollars)]);
+        var reset = Iso8601.Parse(JsonUtil.String(monthly["resetsAt"]));
+        var start = Iso8601.Parse(JsonUtil.String(monthly["periodStart"]));
+        var periodMs = reset is { } end && start is { } beginning && end > beginning
+            ? (long)(end - beginning).TotalMilliseconds : MetricPeriod.MonthMs;
+        return MetricLine.Progress("On-demand", used, JsonUtil.CentsToDollars(limit.Value),
+            ProgressFormat.Dollars, reset, periodMs);
     }
 
     public static MetricLine? MapGrokBot(JsonObject? usage)
@@ -221,6 +255,8 @@ public static class CursorUsageMapper
     }
 }
 
+public sealed record CursorUnifiedBilling(JsonObject? CreditBalance, JsonObject? UsageStatus);
+
 public sealed class CursorProvider : IProviderRuntime
 {
     public static readonly Uri UsageUrl = new("https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage");
@@ -229,6 +265,8 @@ public sealed class CursorProvider : IProviderRuntime
     public static readonly Uri RefreshUrl = new("https://api2.cursor.sh/oauth/token");
     public static readonly Uri CreditsUrl = new("https://api2.cursor.sh/aiserver.v1.DashboardService/GetCreditGrantsBalance");
     public static readonly Uri StripeUrl = new("https://cursor.com/api/auth/stripe");
+    private static readonly Uri UnifiedCreditsUrl = new("https://api2.cursor.sh/aiserver.v1.DashboardService/GetComplatCreditBalance");
+    private static readonly Uri UsageStatusUrl = new("https://cursor.com/api/dashboard/v2/usage-status?scope=user");
 
     private readonly CursorAuthStore _auth = new();
     private readonly AppHttp _http;
@@ -309,36 +347,59 @@ public sealed class CursorProvider : IProviderRuntime
             throw new InvalidOperationException(ProviderErrors.RequestFailed(usageResponse.StatusCode));
         var usage = usageResponse.Json ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
 
-        string? planName = null;
-        JsonObject? credits = null;
-        JsonObject? stripe = null;
+        var plan = await ReadOptionalAsync("plan", () => ConnectPost(PlanUrl, access, ct), ct);
+        var planName = JsonUtil.String(JsonUtil.Object(plan?["planInfo"])?["planName"]
+            ?? plan?["planName"] ?? plan?["membershipType"]);
         JsonObject? grok = null;
-        try { planName = JsonUtil.String((await ConnectPost(PlanUrl, access, ct)).Json?["planName"] ?? (await ConnectPost(PlanUrl, access, ct)).Json?["membershipType"]); }
-        catch (Exception ex) { AppLog.Warn("cursor", $"plan fetch failed: {ex.Message}"); }
-        try { credits = (await ConnectPost(CreditsUrl, access, ct)).Json; }
-        catch (Exception ex) { AppLog.Warn("cursor", $"credits fetch failed: {ex.Message}"); }
-        try { grok = (await ConnectPost(GrokBotUrl, access, ct)).Json; }
-        catch (Exception ex) { AppLog.Warn("cursor", $"grok bot fetch failed: {ex.Message}"); }
-        try
+        (string? Plan, List<MetricLine> Lines) mapped;
+        if (JsonUtil.Bool(plan?["isMerged"]) == true)
         {
-            if (CursorSession.From(access) is { } session)
-            {
-                var stripeResponse = await _http.SendAsync(new AppHttpRequest(
-                    "GET", StripeUrl,
-                    new Dictionary<string, string> { ["Cookie"] = $"WorkosCursorSessionToken={session.SessionToken}" },
-                    TimeoutSeconds: 10), ct);
-                stripe = stripeResponse.Json;
-            }
+            var balance = await ReadOptionalAsync("credit balance", () => ConnectPost(UnifiedCreditsUrl, access, ct), ct);
+            var status = await ReadDashboardAsync("usage status", UsageStatusUrl, access, ct);
+            mapped = CursorUsageMapper.Map(usage, planName, null, 0, new CursorUnifiedBilling(balance, status));
         }
-        catch (Exception ex) { AppLog.Warn("cursor", $"stripe fetch failed: {ex.Message}"); }
+        else
+        {
+            var credits = await ReadOptionalAsync("credits", () => ConnectPost(CreditsUrl, access, ct), ct);
+            grok = await ReadOptionalAsync("Grok Bot usage", () => ConnectPost(GrokBotUrl, access, ct), ct);
+            var stripe = await ReadDashboardAsync("Stripe balance", StripeUrl, access, ct);
+            mapped = CursorUsageMapper.Map(usage, planName, credits, CursorUsageMapper.StripeBalanceCents(stripe));
+        }
 
-        var mapped = CursorUsageMapper.Map(usage, planName, credits, CursorUsageMapper.StripeBalanceCents(stripe));
         var lines = mapped.Lines.ToList();
         if (CursorUsageMapper.MapGrokBot(grok) is { } grokLine)
             lines.Add(grokLine);
         await AppendSpendLinesAsync(lines, access, ct);
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
+    }
+
+    private async Task<JsonObject?> ReadDashboardAsync(string label, Uri url, string access, CancellationToken ct)
+    {
+        if (CursorSession.From(access) is not { } session)
+        {
+            AppLog.Warn("cursor", $"could not prepare {label} request from the current session");
+            return null;
+        }
+        return await ReadOptionalAsync(label, () => _http.SendAsync(new AppHttpRequest(
+            "GET", url,
+            new Dictionary<string, string> { ["Cookie"] = $"WorkosCursorSessionToken={session.SessionToken}" },
+            TimeoutSeconds: 10), ct), ct);
+    }
+
+    private static async Task<JsonObject?> ReadOptionalAsync(string label, Func<Task<AppHttpResponse>> send, CancellationToken ct)
+    {
+        try
+        {
+            var response = await send();
+            if (response.IsSuccess && response.Json is { } data) return data;
+            AppLog.Warn("cursor", $"{label} request did not return usable data (HTTP {response.StatusCode})");
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            AppLog.Warn("cursor", $"{label} fetch failed: {ex.Message}");
+        }
+        return null;
     }
 
     /// <summary>Spend history is best-effort and never affects the live Cursor usage mapping.</summary>

@@ -129,15 +129,14 @@ public static class OllamaUsageMapper
     /// <summary>Session and Weekly (legacy plans) or Monthly (current plans), then Purchased Credits.</summary>
     public static List<MetricLine> BalanceLines(JsonObject? root)
     {
-        // `included` is the plan allowance this provider exists to show; missing, or matching neither
-        // documented shape, is a loud failure rather than an empty dashboard.
+        // Free accounts can have an empty included allowance and only report purchased credits.
         var included = JsonUtil.Object(root?["included"]) ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
         var lines = new List<MetricLine>();
         if (LegacyLine(included["session"], "Session", SessionPeriodMs) is { } session) lines.Add(session);
         if (LegacyLine(included["weekly"], "Weekly", WeeklyPeriodMs) is { } weekly) lines.Add(weekly);
         if (MonthlyLine(included) is { } monthly) lines.Add(monthly);
-        if (lines.Count == 0) throw new InvalidOperationException(ProviderErrors.InvalidResponse);
         if (PurchasedLine(root!["purchased"]) is { } purchased) lines.Add(purchased);
+        if (lines.Count == 0) throw new InvalidOperationException(ProviderErrors.InvalidResponse);
         return lines;
     }
 

@@ -94,7 +94,7 @@ public static class GrokUsageMapper
                 (int)(config.End - config.Start).TotalMilliseconds));
         }
         var capText = config.OnDemandCap > 0
-            ? $"{(config.OnDemandCap == Math.Round(config.OnDemandCap) ? ((int)config.OnDemandCap).ToString() : config.OnDemandCap.ToString())} cap"
+            ? $"{MetricFormatter.Number(JsonUtil.CentsToDollars(config.OnDemandCap), MetricKind.Dollars, MetricFormatter.Style.Row)} cap"
             : "Disabled";
         lines.Add(MetricLine.Badge("Pay as you go", capText, config.OnDemandCap > 0 ? "#22c55e" : "#a3a3a3"));
         return lines;

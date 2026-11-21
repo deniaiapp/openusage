@@ -123,7 +123,7 @@ public class MapperTests
             """)!;
         var lines = GrokUsageMapper.MapCreditsConfig(body);
         Assert.Contains(lines, l => l is MetricLine.ProgressLine p && p.Label == "Weekly limit" && p.Used == 22.5);
-        Assert.Contains(lines, l => l is MetricLine.BadgeLine b && b.Message == "2500 cap");
+        Assert.Contains(lines, l => l is MetricLine.BadgeLine b && b.Message == "$25.00 cap");
     }
 
     [Fact]
