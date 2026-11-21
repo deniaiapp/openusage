@@ -33,6 +33,8 @@ public sealed class AntigravityQuotaClientTests
         Assert.Equal("Weekly", weekly.Label);
         Assert.Equal(20, weekly.Used, 6);
         var provider = new AntigravityProvider(http);
+        Assert.Equal(["Session", "Weekly", "Claude", "Claude Weekly"],
+            provider.WidgetDescriptors.Select(d => d.MetricLabel));
         var widget = WidgetData.Resolve(provider.WidgetDescriptors[0], session, WidgetDisplayMode.Remaining, ResetDisplayMode.Relative, false);
         Assert.True(widget.HasResetLabel(DateTimeOffset.Parse("2026-11-21T01:00:00Z")));
     }

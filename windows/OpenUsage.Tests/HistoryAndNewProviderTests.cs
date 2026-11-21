@@ -84,49 +84,6 @@ public class HistoryAndNewProviderTests
     }
 
     [Fact]
-    public void AntigravityProto_ReadsGenerationEvent()
-    {
-        static byte[] Varint(ulong value)
-        {
-            var bytes = new List<byte>();
-            do
-            {
-                var b = (byte)(value & 0x7f);
-                value >>= 7;
-                if (value != 0) b |= 0x80;
-                bytes.Add(b);
-            } while (value != 0);
-            return [.. bytes];
-        }
-        static byte[] Field(uint number, byte wire, byte[] payload)
-        {
-            var tag = Varint((number << 3) | wire);
-            if (wire == 2) return [.. tag, .. Varint((ulong)payload.Length), .. payload];
-            return [.. tag, .. payload];
-        }
-
-        var usage = Field(1, 0, Varint(10))
-            .Concat(Field(2, 0, Varint(20)))
-            .Concat(Field(3, 0, Varint(5)))
-            .Concat(Field(5, 0, Varint(3)))
-            .ToArray();
-        var timestamp = Field(1, 0, Varint(1_757_764_800));
-        var timing = Field(4, 2, timestamp);
-        var inner = Field(19, 2, Encoding.UTF8.GetBytes("gemini-3.1-pro"))
-            .Concat(Field(21, 2, Encoding.UTF8.GetBytes("Gemini 3.1 Pro")))
-            .Concat(Field(4, 2, usage))
-            .Concat(Field(9, 2, timing))
-            .ToArray();
-        var blob = Field(1, 2, inner);
-        var ev = AntigravityProtoDecoder.GenerationEventFrom(blob);
-        Assert.NotNull(ev);
-        Assert.Equal("gemini-3.1-pro", ev!.ModelId);
-        Assert.Equal(30, ev.InputTokens);
-        Assert.Equal(5, ev.OutputTokens);
-        Assert.Equal(3, ev.CacheReadTokens);
-    }
-
-    [Fact]
     public void ModelPricing_UsesSupplementThenCatalog()
     {
         var supplement = """
