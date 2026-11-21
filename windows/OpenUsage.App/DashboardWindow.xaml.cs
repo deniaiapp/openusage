@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -469,7 +470,20 @@ public partial class DashboardWindow : Window
 
     private void RenderCustomize()
     {
-        foreach (var runtime in _container.Layout.Providers)
+        var layout = _container.Layout;
+        var undo = new Button
+        {
+            Content = "Undo Reorder", IsEnabled = layout.CanUndoProviderOrder,
+            Style = (Style)FindResource("GhostButton"), HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        undo.Click += (_, _) => { if (layout.UndoProviderOrder()) Render(); };
+        ContentHost.Children.Add(undo);
+
+        var groups = layout.ProviderGroups();
+        var rows = groups.SelectMany((group, groupIndex) => group.Select((runtime, index) =>
+            (Runtime: runtime, GroupIndex: groupIndex, GroupId: group.Key, First: index == 0)));
+        foreach (var (runtime, groupIndex, groupId, first) in rows)
         {
             var provider = runtime.Provider;
             var row = Card();
@@ -503,7 +517,33 @@ public partial class DashboardWindow : Window
                 _detailProviderId = provider.Id;
                 ShowScreen(DashboardScreen.CustomizeDetail);
             };
-            row.Child = button;
+            if (first)
+            {
+                var orderedRow = new DockPanel();
+                var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                var providerName = runtime.Provider.DisplayName;
+                Button MoveButton(string arrow, string direction, int offset, bool canMove)
+                {
+                    var move = new Button
+                    {
+                        Content = arrow, IsEnabled = canMove, Style = (Style)FindResource("GhostButton"),
+                        Padding = new Thickness(7, 4, 7, 4)
+                    };
+                    AutomationProperties.SetName(move, $"Move {providerName} group {direction}");
+                    move.Click += (_, _) => { if (layout.MoveProviderGroup(groupId, offset)) Render(); };
+                    return move;
+                }
+                actions.Children.Add(MoveButton("↑", "up", -1, groupIndex > 0));
+                actions.Children.Add(MoveButton("↓", "down", 1, groupIndex < groups.Length - 1));
+                DockPanel.SetDock(actions, Dock.Right);
+                orderedRow.Children.Add(actions);
+                orderedRow.Children.Add(button);
+                row.Child = orderedRow;
+            }
+            else
+            {
+                row.Child = button;
+            }
             row.Margin = new Thickness(0, 0, 0, 8);
             row.Opacity = _container.Layout.IsProviderEnabled(provider.Id) ? 1 : 0.55;
             ContentHost.Children.Add(row);
