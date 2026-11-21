@@ -90,7 +90,24 @@ public sealed class LayoutStore
             SeedAccountLayout(runtime, providerId);
             SetProviderEnabled(id, true);
         }
+        if (SeedNewAccountMetrics(runtime, providerId)) _settings.Save();
         _registry = Registry.From(providers);
+    }
+
+    private bool SeedNewAccountMetrics(IProviderRuntime runtime, string providerId)
+    {
+        var seeded = _settings.SeededDefaultMetrics!;
+        var changed = false;
+        foreach (var descriptor in runtime.WidgetDescriptors)
+        {
+            var templateId = providerId + descriptor.Id[runtime.Provider.Id.Length..];
+            if (!DefaultLayout.NewAccountMetricIds.Contains(templateId) || !seeded.Add(descriptor.Id))
+                continue;
+            if (_settings.EnabledMetrics.Add(descriptor.Id) && DefaultLayout.ExpandedMetricIds.Contains(templateId))
+                _settings.ExpandedMetrics.Add(descriptor.Id);
+            changed = true;
+        }
+        return changed;
     }
 
     private void SeedAccountLayout(IProviderRuntime runtime, string providerId)
@@ -117,6 +134,7 @@ public sealed class LayoutStore
             _settings.EnabledMetrics.Remove(descriptor.Id);
             _settings.ExpandedMetrics.Remove(descriptor.Id);
             _settings.PinnedMetrics.Remove(descriptor.Id);
+            _settings.SeededDefaultMetrics?.Remove(descriptor.Id);
         }
         SetProviderEnabled(id, false);
     }
@@ -264,6 +282,7 @@ public sealed class LayoutStore
         {
             _settings.EnabledProviders.Add(runtime.Provider.Id);
             SeedAccountLayout(runtime, runtime.Provider.Id.Split('@')[0]);
+            SeedNewAccountMetrics(runtime, runtime.Provider.Id.Split('@')[0]);
         }
         _settings.OpenCards.Clear();
         _settings.Save();

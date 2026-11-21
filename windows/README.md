@@ -36,6 +36,8 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Devin | `credentials.toml` under `.local\share\devin` / `%LOCALAPPDATA%\devin`, or the Devin/Windsurf `state.vscdb` |
 | OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
 
+OpenRouter management keys show Yesterday and Prior 30 Days spend when you expand the account card. These periods count only completed days in UTC.
+
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
 If a manual and scheduled refresh overlap for one provider, OpenUsage shares the same request

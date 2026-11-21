@@ -31,7 +31,7 @@ public static class DefaultLayout
         "opencode.today", "opencode.yesterday", "opencode.last30",
 
         "openrouter.credits", "openrouter.balance",
-        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
+        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.yesterday", "openrouter.prior30", "openrouter.keyLimit",
 
         "zai.session", "zai.weekly", "zai.webSearches"
     ];
@@ -63,11 +63,13 @@ public static class DefaultLayout
         "grok.payAsYouGo",
         "ollama.purchasedCredits",
         "opencode.today", "opencode.yesterday", "opencode.last30",
-        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
+        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.yesterday", "openrouter.prior30", "openrouter.keyLimit",
         "zai.webSearches"
     ];
 
     public static readonly string[] StarterProviders = ["claude", "codex", "cursor"];
+
+    internal static readonly string[] NewAccountMetricIds = ["openrouter.yesterday", "openrouter.prior30"];
 
     /// <summary>
     /// Defaults that layouts saved before seeding was tracked already had. Anything in
@@ -75,5 +77,6 @@ public static class DefaultLayout
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
         .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly"])
+        .Except(NewAccountMetricIds)
         .ToArray();
 }
