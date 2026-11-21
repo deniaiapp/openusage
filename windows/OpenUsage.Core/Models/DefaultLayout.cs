@@ -7,11 +7,11 @@ public static class DefaultLayout
         "antigravity.geminiPro", "antigravity.geminiWeekly", "antigravity.claude", "antigravity.claudeWeekly",
         "antigravity.trend", "antigravity.today", "antigravity.yesterday", "antigravity.last30",
 
-        "claude.session", "claude.weekly", "claude.fable", "claude.trend",
-        "claude.extra", "claude.rateLimitResets", "claude.today", "claude.yesterday", "claude.last30",
+        "claude.session", "claude.weekly", "claude.fable",
+        "claude.extra", "claude.rateLimitResets",
 
-        "codex.session", "codex.weekly", "codex.spark", "codex.sparkWeekly", "codex.trend",
-        "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
+        "codex.session", "codex.weekly", "codex.spark", "codex.sparkWeekly",
+        "codex.credits", "codex.rateLimitResets",
 
         "cursor.usage", "cursor.auto", "cursor.api", "cursor.grokBot", "cursor.trend",
         "cursor.onDemand", "cursor.today", "cursor.yesterday", "cursor.last30",
@@ -21,8 +21,7 @@ public static class DefaultLayout
 
         "devin.daily", "devin.weekly", "devin.extra",
 
-        "grok.weekly", "grok.trend",
-        "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
+        "grok.weekly", "grok.payAsYouGo",
 
         "ollama.session", "ollama.weekly", "ollama.monthly", "ollama.purchasedCredits",
 
@@ -51,14 +50,14 @@ public static class DefaultLayout
     [
         "antigravity.claude", "antigravity.claudeWeekly",
         "antigravity.today", "antigravity.yesterday", "antigravity.last30",
-        "claude.sonnet", "claude.rateLimitResets", "claude.today", "claude.yesterday", "claude.last30",
+        "claude.sonnet", "claude.rateLimitResets",
         "codex.spark", "codex.sparkWeekly",
-        "codex.credits", "codex.rateLimitResets", "codex.today", "codex.yesterday", "codex.last30",
+        "codex.credits", "codex.rateLimitResets",
         "cursor.grokBot", "cursor.onDemand", "cursor.requests", "cursor.credits",
         "cursor.today", "cursor.yesterday", "cursor.last30",
         "copilot.orgCredits", "copilot.orgSpend", "copilot.chat", "copilot.completions",
         "devin.extra",
-        "grok.payAsYouGo", "grok.today", "grok.yesterday", "grok.last30",
+        "grok.payAsYouGo",
         "ollama.purchasedCredits",
         "opencode.today", "opencode.yesterday", "opencode.last30",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
