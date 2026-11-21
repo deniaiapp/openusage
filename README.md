@@ -93,6 +93,8 @@ cd windows
 dotnet run --project OpenUsage.App
 ```
 
+In **Settings → Priority Limits**, choose when low limits turn orange or red.
+
 ## License
 
 [MIT](LICENSE)
