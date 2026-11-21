@@ -39,6 +39,7 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
 
     public DashboardWindow(AppContainer container)
@@ -61,8 +62,13 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        _screen = DashboardScreen.Dashboard;
-        Render();
+        if (_copilotLoginEditor?.ResumeIfPending() == true)
+            Render(preserveEditor: true);
+        else
+        {
+            _screen = DashboardScreen.Dashboard;
+            Render();
+        }
         ShowAnchored();
         Activate();
     }
@@ -167,8 +173,9 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && _accountEditor is not null) return;
+        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null)) return;
         _accountEditor = null;
+        _copilotLoginEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -554,6 +561,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is OpenUsage.Core.Providers.Copilot.CopilotProvider copilot)
+        {
+            ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
+            _copilotLoginEditor = new CopilotLoginView(_container, copilot, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_copilotLoginEditor);
+        }
         if (runtime is IApiKeyManaging keys)
         {
             ContentHost.Children.Add(SectionTitle("API Key"));

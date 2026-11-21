@@ -1,4 +1,5 @@
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -70,6 +71,14 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public async Task ConnectCopilotAsync(Action<string> showCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var copilot = Providers.OfType<CopilotProvider>().Single();
+        var snapshot = await copilot.ConnectAsync(showCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
 
     public async Task ConnectAccountAsync(string providerId, string label, string key)
     {
