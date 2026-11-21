@@ -96,24 +96,6 @@ public sealed class LimitsCommandTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacyHttpPayloadDoesNotExposeAdditionalAccounts()
-    {
-        var account = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Private label");
-        var settings = AppSettings.Load(Settings);
-        settings.EnabledProviders.UnionWith(["codex", account.CardId]);
-        var layout = new LayoutStore(settings, [new CodexRuntime(), new AccountRuntime(account, 11)]);
-        var store = new WidgetDataStore(layout, settings, Cache);
-        await store.RefreshAllAsync(false);
-        Assert.NotNull(store.Snapshot(account.CardId));
-
-        using var api = new LocalApiServer(store, layout);
-        using var payload = JsonSerializer.SerializeToDocument(api.BuildPayload());
-        var provider = Assert.Single(payload.RootElement.GetProperty("providers").EnumerateArray());
-        Assert.Equal("codex", provider.GetProperty("id").GetString());
-        Assert.DoesNotContain("Private label", payload.RootElement.GetRawText());
-    }
-
-    [Fact]
     public async Task ProviderFilterIncludesItsAccountsAndAccountFilterIsExact()
     {
         var work = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Work");

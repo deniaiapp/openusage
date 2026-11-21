@@ -2,7 +2,7 @@
 
 Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tray app. They are a port of the Swift menu-bar app, not a replacement for it.
 
-The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, global shortcut, and loopback API. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
+The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, and global shortcut. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
 
 To add one, open **Customize**, choose **OpenRouter** or **Z.ai**, and enter a name and API key under **Additional Accounts**. OpenUsage checks the key before saving it with Windows user encryption. New cards go after the provider's existing additional accounts or its visible main card. If neither exists, the new card goes at the bottom. Rename or remove the account in the same section. Existing API keys and provider settings stay in place.
 
@@ -25,4 +25,4 @@ Provider details that match macOS:
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
-[command-line helper](../windows/README.md#command-line) reads saved limits even when the tray app is closed.
+[command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.

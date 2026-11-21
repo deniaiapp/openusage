@@ -44,11 +44,10 @@ OpenUsage only refreshes expired Claude and Codex tokens that came from a file, 
 
 When an update adds a new default metric, it's turned on once for existing layouts too. If you turn it off, it stays off.
 
-## Local HTTP API
-
-Loopback-only, same port as macOS: `http://127.0.0.1:6736/v1/limits`. For additional accounts, use the CLI; their names and usage are not served over HTTP.
-
 ## Command line
+
+Windows no longer serves the legacy loopback HTTP API. Update scripts that called `/v1/limits`
+or `/v1/usage` to run the CLI and read the JSON from standard output.
 
 After refreshing a provider with this build of the tray app, read its saved limits:
 
