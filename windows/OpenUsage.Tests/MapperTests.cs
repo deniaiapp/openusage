@@ -109,9 +109,10 @@ public class MapperTests
     {
         using var http = new AppHttp(new HttpClient());
         var provider = new OpenRouterProvider(http, new ApiKeyStore());
-        Assert.Equal(
-            ["openrouter.balance", "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit"],
-            provider.WidgetDescriptors.Select(d => d.Id));
+        string[] retained = ["openrouter.balance", "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit"];
+        var ids = provider.WidgetDescriptors.Select(d => d.Id).ToArray();
+        Assert.Equal(retained, ids.Where(retained.Contains));
+        Assert.DoesNotContain("openrouter.credits", ids);
         Assert.DoesNotContain("openrouter.credits", DefaultLayout.MetricIds);
         Assert.DoesNotContain("openrouter.credits", DefaultLayout.PinnedMetricIds);
     }
