@@ -134,6 +134,10 @@ public sealed class LayoutStore
     public IReadOnlyList<IProviderRuntime> VisibleProviders =>
         OrderedProviders().Where(p => IsProviderEnabled(p.Provider.Id)).ToList();
 
+    public bool HasVisibleMetrics =>
+        Providers.Any(p => IsProviderEnabled(p.Provider.Id) &&
+            p.WidgetDescriptors.Any(d => IsMetricEnabled(d.Id)));
+
     public IGrouping<string, IProviderRuntime>[] ProviderGroups()
     {
         var order = OrderedProviders().ToList();

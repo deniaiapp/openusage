@@ -18,6 +18,8 @@ The app lives in the notification area (system tray). Left-click the icon to ope
 
 On first launch a welcome screen lists the AI tools already signed in on this PC. Pick the ones to follow and click **Connect Selected**, or **Skip for Now** and turn providers on later in **Customize**. Closing the welcome window quits the app; it shows again next time.
 
+If metrics are all hidden for the providers that are on, the dashboard links to **Customize** so you can turn them back on without reconnecting.
+
 ## What it reads
 
 Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For Ollama, OpenRouter, and Z.ai, use **Additional Accounts** in Customize to connect API keys.

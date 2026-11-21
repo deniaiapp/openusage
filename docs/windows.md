@@ -4,7 +4,7 @@ Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tra
 
 The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, and global shortcut. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
 
-The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Both tabs respect which providers and metrics you have turned on.
+The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Both tabs respect which providers and metrics you have turned on. If every metric is hidden, choose **Customize** on the dashboard to turn metrics back on without reconnecting.
 
 To add one, open **Customize**, choose **OpenRouter** or **Z.ai**, and enter a name and API key under **Additional Accounts**. OpenUsage checks the key before saving it with Windows user encryption. New cards go after the provider's existing additional accounts or its visible main card. If neither exists, the new card goes at the bottom. Rename or remove the account in the same section. Existing API keys and provider settings stay in place.
 
