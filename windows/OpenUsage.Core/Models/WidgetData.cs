@@ -265,6 +265,7 @@ public sealed record WidgetData
     {
         var sample = descriptor.Sample with
         {
+            Title = line?.Title ?? descriptor.Sample.Title,
             DisplayMode = displayMode,
             ResetDisplayMode = resetDisplayMode,
             AlwaysShowPacing = alwaysShowPacing,
