@@ -106,7 +106,53 @@ internal sealed class ApiKeyAccountsView : StackPanel
         controls.Children.Add(rename);
         controls.Children.Add(remove);
         row.Children.Add(controls);
+        AddKeyReplacement(row, account);
         return row;
+    }
+
+    private void AddKeyReplacement(StackPanel row, ApiKeyAccount account)
+    {
+        var replace = ActionButton("Replace API Key");
+        row.Children.Add(replace);
+        var editor = new StackPanel { Visibility = Visibility.Collapsed };
+        row.Children.Add(editor);
+        var field = new PasswordBox { Margin = new Thickness(0, 3, 0, 6), Padding = new Thickness(6) };
+        AutomationProperties.SetName(field, $"New API key for {account.Label}");
+        editor.Children.Add(field);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal };
+        var save = ActionButton("Save Key");
+        var cancel = ActionButton("Cancel");
+        actions.Children.Add(save);
+        actions.Children.Add(cancel);
+        editor.Children.Add(actions);
+
+        void CloseEditor()
+        {
+            field.Clear();
+            editor.Visibility = Visibility.Collapsed;
+            replace.Visibility = Visibility.Visible;
+        }
+
+        replace.Click += (_, _) =>
+        {
+            replace.Visibility = Visibility.Collapsed;
+            editor.Visibility = Visibility.Visible;
+            field.Focus();
+        };
+        cancel.Click += (_, _) => CloseEditor();
+        save.Click += async (_, _) =>
+        {
+            IsEnabled = false;
+            _status.Text = "Checking the API key…";
+            try
+            {
+                await _container.ReplaceAccountKeyAsync(account, field.Password);
+                CloseEditor();
+                _status.Text = "API key replaced.";
+            }
+            catch (Exception ex) { ShowError(ex); }
+            finally { IsEnabled = true; }
+        };
     }
 
     private void Update(Action change, string message)

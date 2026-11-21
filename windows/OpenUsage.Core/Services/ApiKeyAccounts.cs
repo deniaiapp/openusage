@@ -23,8 +23,22 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
     public async Task<ApiKeyAccount> ConnectAsync(
         string providerId, string label, string key, CancellationToken ct = default)
     {
-        ct.ThrowIfCancellationRequested();
         label = ApiKeyAccountStore.NormalizeLabel(label);
+        key = await ValidateKeyAsync(providerId, key, ct);
+        ct.ThrowIfCancellationRequested();
+        return store.Add(providerId, label, key);
+    }
+
+    public async Task ReplaceKeyAsync(ApiKeyAccount account, string key, CancellationToken ct = default)
+    {
+        key = await ValidateKeyAsync(account.ProviderId, key, ct);
+        ct.ThrowIfCancellationRequested();
+        store.ReplaceKey(account, key);
+    }
+
+    private async Task<string> ValidateKeyAsync(string providerId, string key, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
         key = key.Trim();
         if (key.Length == 0 || key.Any(char.IsControl))
             throw new ArgumentException("Enter a valid API key.");
@@ -63,8 +77,7 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
             throw new ProviderRequestException(ProviderErrors.InvalidResponse);
         }
 
-        ct.ThrowIfCancellationRequested();
-        return store.Add(providerId, label, key);
+        return key;
     }
 
     private sealed class AccountRuntime(

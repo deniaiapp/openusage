@@ -40,6 +40,49 @@ public sealed class ProviderRefreshTests
         finally { directory.Delete(recursive: true); }
     }
 
+    [Fact]
+    public async Task InvalidatedAccountRefreshCannotPublishOrEvictItsReplacement()
+    {
+        var directory = Directory.CreateTempSubdirectory("openusage-refresh-");
+        try
+        {
+            var previous = new TaskCompletionSource<ProviderSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var replacement = new TaskCompletionSource<ProviderSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var runtime = new AccountRuntime(previous.Task, replacement.Task);
+            var cardId = runtime.Provider.Id;
+            var settings = AppSettings.Load(Path.Combine(directory.FullName, "settings.json"));
+            var layout = new LayoutStore(settings, []);
+            layout.RegisterAccount(runtime, "openrouter");
+            var data = new WidgetDataStore(layout, settings, directory.FullName);
+
+            var oldRefresh = data.RefreshProviderAsync(cardId);
+            data.ForgetAccount(cardId);
+            var newRefresh = data.RefreshProviderAsync(cardId);
+            Assert.Equal(2, runtime.Calls);
+
+            previous.SetResult(ProviderSnapshot.Make(runtime.Provider, "Old Key", [], DateTimeOffset.UtcNow));
+            await oldRefresh.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Null(data.Snapshot(cardId));
+            Assert.False(File.Exists(Path.Combine(directory.FullName, $"{cardId}.json")));
+            var joined = data.RefreshProviderAsync(cardId);
+            Assert.Equal(2, runtime.Calls);
+
+            replacement.SetResult(ProviderSnapshot.Make(runtime.Provider, "New Key", [], DateTimeOffset.UtcNow));
+            await Task.WhenAll(newRefresh, joined).WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal("New Key", data.Snapshot(cardId)?.Plan);
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
+    private sealed class AccountRuntime(Task<ProviderSnapshot> previous, Task<ProviderSnapshot> replacement) : IProviderRuntime
+    {
+        public Provider Provider { get; } = new($"openrouter@{Guid.NewGuid():N}", "OpenRouter", "OpenRouter");
+        public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => [];
+        public int Calls { get; private set; }
+        public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken) => ++Calls == 1 ? previous : replacement;
+    }
+
     private sealed class Runtime(string id) : IProviderRuntime
     {
         private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);

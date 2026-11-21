@@ -89,6 +89,13 @@ public sealed class AppContainer : IDisposable
         Data.RenameAccount(renamed.CardId, Layout.Providers.First(p => p.Provider.Id == renamed.CardId).Provider.DisplayName);
     }
 
+    public async Task ReplaceAccountKeyAsync(ApiKeyAccount account, string key)
+    {
+        await _apiKeyAccounts.ReplaceKeyAsync(account, key, _cts.Token);
+        Data.ForgetAccount(account.CardId);
+        _ = Data.RefreshProviderAsync(account.CardId, _cts.Token);
+    }
+
     public void RemoveAccount(ApiKeyAccount account)
     {
         if (!ApiKeyAccountStore.Remove(account.Id)) return;

@@ -29,13 +29,32 @@ public sealed class ApiKeyAccountStore(string? path = null)
         lock (_gate)
         {
             var entries = Load();
-            if (entries.Any(entry => entry.Account.ProviderId == providerId && entry.Key == key))
-                throw new InvalidOperationException("This API key is already connected.");
+            EnsureUniqueKey(entries, providerId, key);
             var account = new ApiKeyAccount(Guid.NewGuid(), providerId, label);
             entries.Add(new Entry(account, key));
             Save(entries);
             return account;
         }
+    }
+
+    internal void ReplaceKey(ApiKeyAccount account, string key)
+    {
+        lock (_gate)
+        {
+            var entries = Load();
+            var index = entries.FindIndex(entry =>
+                entry.Account.Id == account.Id && entry.Account.ProviderId == account.ProviderId);
+            if (index < 0) throw new InvalidOperationException("This account is no longer connected.");
+            EnsureUniqueKey(entries, account.ProviderId, key, account.Id);
+            entries[index] = entries[index] with { Key = key };
+            Save(entries);
+        }
+    }
+
+    private static void EnsureUniqueKey(IEnumerable<Entry> entries, string providerId, string key, Guid? except = null)
+    {
+        if (entries.Any(entry => entry.Account.Id != except && entry.Account.ProviderId == providerId && entry.Key == key))
+            throw new InvalidOperationException("This API key is already connected.");
     }
 
     public bool Remove(Guid id)
