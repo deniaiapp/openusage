@@ -54,6 +54,30 @@ public class ClaudeUpstreamTests
         Assert.Equal(limit, resource["limit"]?.GetValue<double>());
     }
 
+    [Theory]
+    [InlineData(999, "KWD 0.001 left", MeterStateKind.Level)]
+    [InlineData(1000, "KWD 0 left", MeterStateKind.Spent)]
+    public void ExtraUsageUsesDisplayedCurrencyPrecisionToDecideWhenTheLimitIsSpent(
+        int usedCredits, string headline, MeterStateKind state)
+    {
+        var body = new JsonObject
+        {
+            ["extra_usage"] = new JsonObject
+            {
+                ["is_enabled"] = true, ["used_credits"] = usedCredits, ["monthly_limit"] = 1000,
+                ["currency"] = "KWD", ["decimal_places"] = 3
+            }
+        };
+        var (_, lines, _) = ClaudeUsageMapper.Map(body, new ClaudeOAuth());
+        using var http = new AppHttp();
+        var descriptor = new ClaudeProvider(http).WidgetDescriptors.Single(d => d.Id == "claude.extra");
+        var data = WidgetData.Resolve(descriptor, Assert.Single(lines), WidgetDisplayMode.Remaining,
+            ResetDisplayMode.Relative, alwaysShowPacing: false);
+
+        Assert.Equal(headline, data.Headline);
+        Assert.Equal(state, data.GetMeterState(Now).Kind);
+    }
+
     private sealed record CachedClaudeFixture(Provider Provider, IReadOnlyList<WidgetDescriptor> WidgetDescriptors,
         IReadOnlyList<MetricLine> Lines) : IProviderRuntime
     {

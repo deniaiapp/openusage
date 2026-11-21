@@ -8,6 +8,8 @@ public static class MetricFormatter
     public enum Style { Tray, Row, Full }
 
     private static readonly CultureInfo Locale = CultureInfo.GetCultureInfo("en-US");
+    internal const int NonUsdFractionDigits = 6;
+    private static readonly string NonUsdFormat = "#,0." + new string('#', NonUsdFractionDigits);
 
     public static string Number(double value, MetricKind kind, Style style, string? currencyCode = null)
     {
@@ -18,7 +20,7 @@ public static class MetricFormatter
             case MetricKind.Dollars:
                 if (currencyCode is not (null or "USD"))
                     return $"{currencyCode} " + (Math.Abs(value) >= 1000 && style != Style.Full
-                        ? Compact(value) : value.ToString("#,0.######", Locale));
+                        ? Compact(value) : value.ToString(NonUsdFormat, Locale));
                 if (Math.Abs(value) >= 1000 && style != Style.Full)
                     return "$" + Compact(value);
                 return style switch

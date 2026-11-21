@@ -252,6 +252,7 @@ public sealed record WidgetData
     {
         MetricKind.Percent => Math.Round(value),
         MetricKind.Count => Math.Round(value * 10) / 10,
+        MetricKind.Dollars when CurrencyCode is not (null or "USD") => Math.Round(value, MetricFormatter.NonUsdFractionDigits),
         _ => Math.Round(value * 100) / 100
     };
 
