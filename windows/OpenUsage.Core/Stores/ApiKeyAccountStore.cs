@@ -12,8 +12,13 @@ public sealed record ApiKeyAccount(Guid Id, string ProviderId, string Label)
 public sealed class ApiKeyAccountStore(string? path = null)
 {
     private readonly object _gate = new();
-    private bool _reportedUnreadableRows;
+    private bool _hasUnreadableAccounts;
     private string PathOnDisk => path ?? Path.Combine(AppPaths.OpenUsageDir, "api-key-accounts.bin");
+
+    public bool HasUnreadableAccounts
+    {
+        get { lock (_gate) return _hasUnreadableAccounts; }
+    }
 
     public IReadOnlyList<ApiKeyAccount> List()
     {
@@ -99,8 +104,11 @@ public sealed class ApiKeyAccountStore(string? path = null)
     {
         byte[] protectedBytes;
         try { protectedBytes = File.ReadAllBytes(PathOnDisk); }
-        catch (FileNotFoundException) { return []; }
-        catch (DirectoryNotFoundException) { return []; }
+        catch (IOException ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            _hasUnreadableAccounts = false;
+            return [];
+        }
 
         var clear = ProtectedData.Unprotect(protectedBytes, null, DataProtectionScope.CurrentUser);
         try
@@ -128,9 +136,9 @@ public sealed class ApiKeyAccountStore(string? path = null)
                     hasUnreadableRows = true;
                 }
             }
-            if (hasUnreadableRows && !_reportedUnreadableRows)
+            if (hasUnreadableRows && !_hasUnreadableAccounts)
                 AppLog.Warn("accounts", "Some saved API key accounts could not be read and were kept unchanged.");
-            _reportedUnreadableRows = hasUnreadableRows;
+            _hasUnreadableAccounts = hasUnreadableRows;
             return rows;
         }
         finally { CryptographicOperations.ZeroMemory(clear); }

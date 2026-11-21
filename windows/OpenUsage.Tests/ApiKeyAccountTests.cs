@@ -37,6 +37,7 @@ public sealed class ApiKeyAccountTests : IDisposable
 
         var store = new ApiKeyAccountStore(AccountFile);
         Assert.Equal(new[] { firstId, lastId }, store.List().Select(account => account.Id));
+        Assert.True(store.HasUnreadableAccounts);
         var newAccount = store.Add("openrouter", "New", "fixture-new");
         Assert.True(store.Rename(lastId, "Renamed"));
         store.ReplaceKey(store.List()[1], "fixture-replacement");
@@ -44,11 +45,16 @@ public sealed class ApiKeyAccountTests : IDisposable
 
         var reopened = new ApiKeyAccountStore(AccountFile);
         Assert.Equal(new[] { lastId, newAccount.Id }, reopened.List().Select(account => account.Id));
+        Assert.True(reopened.HasUnreadableAccounts);
         Assert.Equal("Renamed", reopened.List()[0].Label);
         Assert.Equal("fixture-replacement", reopened.Key(lastId));
         using var contents = JsonDocument.Parse(ProtectedData.Unprotect(File.ReadAllBytes(AccountFile), null,
             DataProtectionScope.CurrentUser));
         Assert.Equal(unreadable, contents.RootElement[0].GetRawText());
+
+        File.Delete(AccountFile);
+        Assert.Empty(reopened.List());
+        Assert.False(reopened.HasUnreadableAccounts);
     }
 
     [WindowsFact]

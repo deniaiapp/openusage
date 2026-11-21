@@ -12,7 +12,7 @@ Ollama Cloud also supports **Additional Accounts**. Get a key from [Ollama setti
 
 Choose **Replace API Key** next to an additional account to change its key without changing its name or dashboard settings. If the new key doesn't pass validation, OpenUsage keeps the old key.
 
-If a saved API-key account is from a format this version cannot read, it does not appear in Customize. It stays saved and encrypted even when you add, rename, remove, or replace the key for another account.
+If this version cannot read a saved API-key account, Customize shows a notice instead of listing that account. It stays saved and encrypted even when you edit other accounts.
 
 In **Customize**, use the up and down arrows to move a provider and its accounts together on the dashboard. The order is saved; **Undo Reorder** restores the previous order during the current session.
 
