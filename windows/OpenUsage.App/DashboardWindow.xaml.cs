@@ -11,6 +11,7 @@ using OpenUsage.App.Views;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
 using Brush = System.Windows.Media.Brush;
@@ -524,13 +525,13 @@ public partial class DashboardWindow : Window
             };
             box.LostFocus += (_, _) => keys.SaveKey(string.IsNullOrWhiteSpace(box.Text) ? null : box.Text.Trim());
             ContentHost.Children.Add(box);
+        }
 
-            if (OpenUsage.Core.Services.ApiKeyAccounts.Supports(runtime.Provider.Id))
-            {
-                ContentHost.Children.Add(SectionTitle("Additional Accounts"));
-                _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
-                ContentHost.Children.Add(_accountEditor);
-            }
+        if (ApiKeyAccounts.Supports(runtime.Provider.Id))
+        {
+            ContentHost.Children.Add(SectionTitle("Additional Accounts"));
+            _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
+            ContentHost.Children.Add(_accountEditor);
         }
 
         ContentHost.Children.Add(SectionTitle("Always Visible"));
