@@ -81,6 +81,7 @@ How everything works, in [docs/](docs/README.md):
 - [Updates](docs/updates.md)
 - [Proxy](docs/proxy.md)
 - [Privacy](docs/privacy.md), including optional daily provider account counts
+- [Muse Code on Windows](docs/windows.md#muse-code-on-windows): connect in Customize to show Session and Weekly limits
 
 ## Windows
 
