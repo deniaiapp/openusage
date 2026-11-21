@@ -48,7 +48,7 @@ See the [Windows README](../windows/README.md) for how to build it and which pro
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
 
 For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when available, including zero.
-If the separate reset list disagrees, only expiries supplied by the usage response are shown.
+The CLI lists expiries from the usage response if the separate reset list disagrees.
 
 ## Priority Limits
 
