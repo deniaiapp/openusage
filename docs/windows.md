@@ -16,7 +16,7 @@ In **Customize**, use the up and down arrows to move a provider and its accounts
 
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
 
-Enable **Usage Notifications** in Settings to get a Windows notification before a limit runs out at its current pace, or before a multi-day limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit. Click one to open the dashboard.
+Enable **Usage Notifications** in Settings to get a Windows notification before a limit runs out at its current pace, or before a multi-day limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit. Click the banner while it is visible to open the dashboard. If it has moved to Notification Center, use the OpenUsage tray icon instead.
 
 OpenRouter only uses API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY`, enter the key in **Customize → OpenRouter**. Already saved keys keep working.
 
