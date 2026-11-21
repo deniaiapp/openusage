@@ -467,6 +467,13 @@ public partial class DashboardWindow : Window
             Grid.SetColumn(value, 1);
             unbounded.Children.Add(value);
             panel.Children.Add(unbounded);
+            foreach (var expiry in data.ResetExpiryLabels(now))
+                panel.Children.Add(new TextBlock
+                {
+                    Text = expiry,
+                    Style = (Style)FindResource("MutedText"),
+                    Margin = new Thickness(0, 2, 0, 0)
+                });
         }
 
         var context = new ContextMenu();

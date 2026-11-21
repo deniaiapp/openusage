@@ -75,8 +75,15 @@ public sealed class ApiKeyAccountTests : IDisposable
         var first = Assert.IsType<MetricLine.ValuesLine>(await balance.ReadAsync("fixture-key", default));
         Assert.Equal(2, Assert.Single(first.Items).Number);
         Assert.Equal(now.AddMinutes(10), first.ExpiriesAt!.First());
+        var provider = new ZaiProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+        var data = WidgetData.Resolve(provider.WidgetDescriptors.Last(), first,
+            WidgetDisplayMode.Remaining, ResetDisplayMode.Relative, false);
+        var labels = data.ResetExpiryLabels(now).ToArray();
+        Assert.Equal(2, labels.Length);
+        Assert.Equal("Expires in 10m", labels[0]);
 
         now = now.AddMinutes(10);
+        Assert.Equal("Expires in 16h 50m", Assert.Single(data.ResetExpiryLabels(now)));
         var held = Assert.IsType<MetricLine.ValuesLine>(await balance.ReadAsync("fixture-key", default));
         Assert.Equal(1, Assert.Single(held.Items).Number);
         Assert.Equal(1, requests);
