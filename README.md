@@ -91,6 +91,8 @@ cd windows
 dotnet run --project OpenUsage.App
 ```
 
+On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
+
 ## License
 
 [MIT](LICENSE)

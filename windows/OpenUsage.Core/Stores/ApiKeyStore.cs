@@ -9,8 +9,16 @@ public sealed class ApiKeyStore
 {
     private readonly Dictionary<string, string> _keys = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _gate = new();
+    private readonly string? _filePath;
+    private string FilePath => _filePath ?? AppPaths.KeysFile;
 
-    public ApiKeyStore() => Load();
+    public ApiKeyStore() : this(null) { }
+
+    internal ApiKeyStore(string? filePath)
+    {
+        _filePath = filePath;
+        Load();
+    }
 
     public string? Get(string providerId)
     {
@@ -31,8 +39,9 @@ public sealed class ApiKeyStore
     {
         try
         {
-            if (!File.Exists(AppPaths.KeysFile)) return;
-            var protectedBytes = File.ReadAllBytes(AppPaths.KeysFile);
+            var path = FilePath;
+            if (!File.Exists(path)) return;
+            var protectedBytes = File.ReadAllBytes(path);
             var json = Encoding.UTF8.GetString(ProtectedData.Unprotect(protectedBytes, null, DataProtectionScope.CurrentUser));
             var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
             if (parsed is null) return;
@@ -49,6 +58,6 @@ public sealed class ApiKeyStore
     {
         var json = JsonSerializer.Serialize(_keys);
         var protectedBytes = ProtectedData.Protect(Encoding.UTF8.GetBytes(json), null, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(AppPaths.KeysFile, protectedBytes);
+        File.WriteAllBytes(FilePath, protectedBytes);
     }
 }
