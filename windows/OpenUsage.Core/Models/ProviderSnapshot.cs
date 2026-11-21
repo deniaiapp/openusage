@@ -1,3 +1,5 @@
+using OpenUsage.Core.Support;
+
 namespace OpenUsage.Core.Models;
 
 public sealed record ProviderSnapshot(
@@ -9,6 +11,8 @@ public sealed record ProviderSnapshot(
     string? Warning = null,
     string? ErrorCategory = null)
 {
+    internal const string OfflineCategory = "offline";
+
     public MetricLine? Line(string label) => Lines.FirstOrDefault(l => l.Label == label);
 
     public bool IsError => Lines.Any(l => l.IsError);
@@ -22,7 +26,9 @@ public sealed record ProviderSnapshot(
         new(provider.Id, provider.DisplayName, lines, refreshedAt, plan, warning);
 
     public static ProviderSnapshot Error(Provider provider, Exception error) =>
-        Error(provider, error.Message);
+        ProviderErrors.IsOffline(error)
+            ? Error(provider, ProviderErrors.ConnectionFailed, OfflineCategory)
+            : Error(provider, error.Message);
 
     public static ProviderSnapshot Error(Provider provider, string message, string? category = null) =>
         new(

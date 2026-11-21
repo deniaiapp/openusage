@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
 
@@ -128,6 +129,14 @@ public static class ProviderErrors
     public static string ConnectionFailed => "Couldn't reach the provider. Check your connection.";
     public static string InvalidResponse => "Usage data unavailable. Try again later.";
     public static string RequestFailed(int status) => $"Request failed (HTTP {status}).";
+
+    internal static bool IsOffline(Exception error)
+    {
+        for (Exception? cause = error; cause is not null; cause = cause.InnerException)
+            if (cause is SocketException { SocketErrorCode: SocketError.NetworkDown or SocketError.NetworkUnreachable })
+                return true;
+        return false;
+    }
 }
 
 public static class AuthRetry
