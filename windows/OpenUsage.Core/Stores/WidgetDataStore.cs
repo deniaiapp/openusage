@@ -14,18 +14,21 @@ public sealed class WidgetDataStore
     private readonly ConcurrentDictionary<string, ProviderSnapshot> _snapshots = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _errors = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, Lazy<Task>> _providerRefreshes = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, RefreshBackoff> _backoffs = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private readonly string? _cacheDir;
+    private readonly TimeProvider _clock;
     private DateTimeOffset _lastRefresh;
     private DateTimeOffset _nextRefresh;
     private bool _refreshing;
 
     /// <param name="cacheDir">Snapshot cache folder; defaults to the app's cache. Tests point it elsewhere.</param>
-    public WidgetDataStore(LayoutStore layout, AppSettings settings, string? cacheDir = null)
+    public WidgetDataStore(LayoutStore layout, AppSettings settings, string? cacheDir = null, TimeProvider? clock = null)
     {
         _layout = layout;
         _settings = settings;
         _cacheDir = cacheDir;
+        _clock = clock ?? TimeProvider.System;
         _nextRefresh = DateTimeOffset.Now;
         LoadCache();
     }
@@ -49,6 +52,7 @@ public sealed class WidgetDataStore
             _providerRefreshes.TryRemove(cardId, out _);
             _snapshots.TryRemove(cardId, out _);
             _errors.TryRemove(cardId, out _);
+            _backoffs.Remove(cardId);
             try { File.Delete(Path.Combine(CacheDir, $"{cardId}.json")); }
             catch (IOException ex) { AppLog.Warn("cache", $"could not remove account snapshot: {ex.Message}"); }
             catch (UnauthorizedAccessException ex) { AppLog.Warn("cache", $"could not remove account snapshot: {ex.Message}"); }
@@ -98,7 +102,7 @@ public sealed class WidgetDataStore
         Raise();
         try
         {
-            await Task.WhenAll(_layout.VisibleProviders.Select(provider => RefreshAsync(provider, cancellationToken)));
+            await Task.WhenAll(_layout.VisibleProviders.Select(provider => RefreshAsync(provider, force, cancellationToken)));
             _lastRefresh = DateTimeOffset.Now;
             _nextRefresh = _lastRefresh.AddSeconds(Math.Max(30, _settings.RefreshIntervalSeconds));
         }
@@ -113,12 +117,27 @@ public sealed class WidgetDataStore
     {
         var provider = _layout.Providers.FirstOrDefault(p => p.Provider.Id == providerId);
         if (provider is null) return;
-        await RefreshAsync(provider, cancellationToken);
+        await RefreshAsync(provider, force: true, cancellationToken);
         Raise();
     }
 
-    private Task RefreshAsync(IProviderRuntime provider, CancellationToken cancellationToken) =>
-        _providerRefreshes.GetOrAdd(provider.Provider.Id, _ => CreateRefresh(provider, cancellationToken)).Value;
+    private Task RefreshAsync(IProviderRuntime provider, bool force, CancellationToken cancellationToken)
+    {
+        var id = provider.Provider.Id;
+        Lazy<Task> refresh;
+        lock (_gate)
+        {
+            if (_providerRefreshes.TryGetValue(id, out var active))
+                refresh = active;
+            else
+            {
+                if (!force && _backoffs.TryGetValue(id, out var backoff) && _clock.GetUtcNow() < backoff.RetryAt)
+                    return Task.CompletedTask;
+                refresh = _providerRefreshes.GetOrAdd(id, _ => CreateRefresh(provider, cancellationToken));
+            }
+        }
+        return refresh.Value;
+    }
 
     private Lazy<Task> CreateRefresh(IProviderRuntime provider, CancellationToken cancellationToken)
     {
@@ -136,7 +155,7 @@ public sealed class WidgetDataStore
             var snapshot = await provider.RefreshAsync(cancellationToken);
             lock (_gate)
             {
-                if (IsCurrent()) ApplySnapshot(providerId, snapshot);
+                if (IsCurrent() && !cancellationToken.IsCancellationRequested) ApplySnapshot(providerId, snapshot);
             }
         }
         catch (Exception ex)
@@ -144,7 +163,7 @@ public sealed class WidgetDataStore
             AppLog.Error(providerId, "refresh failed", ex);
             lock (_gate)
             {
-                if (IsCurrent()) RememberFailure(providerId, ex.Message);
+                if (IsCurrent() && !cancellationToken.IsCancellationRequested) RememberFailure(providerId, ex.Message);
             }
         }
         finally
@@ -169,6 +188,7 @@ public sealed class WidgetDataStore
             snapshot = snapshot with { DisplayName = account.Provider.DisplayName };
         }
         _errors.TryRemove(providerId, out _);
+        _backoffs.Remove(providerId);
         _snapshots[providerId] = snapshot;
         SaveCache(snapshot);
     }
@@ -177,6 +197,7 @@ public sealed class WidgetDataStore
     {
         if (providerId.Contains('@') && !_layout.Providers.Any(p => p.Provider.Id == providerId)) return;
         _errors[providerId] = message;
+        _backoffs[providerId] = _backoffs.GetValueOrDefault(providerId).AfterFailure(_clock.GetUtcNow());
         AppLog.Warn(providerId, $"refresh failed; keeping last-good snapshot: {message}");
     }
 
@@ -240,6 +261,16 @@ public sealed class WidgetDataStore
         public DateTimeOffset RefreshedAt { get; set; }
         public List<CachedLine> Lines { get; set; } = [];
         public Dictionary<string, LimitResource>? Limits { get; set; }
+    }
+
+    private readonly record struct RefreshBackoff(int Failures, DateTimeOffset RetryAt)
+    {
+        public RefreshBackoff AfterFailure(DateTimeOffset now)
+        {
+            var failures = Math.Min(Failures + 1, 5);
+            var minutes = Math.Min(5 * (1 << (failures - 1)), 60);
+            return new(failures, now.AddMinutes(minutes));
+        }
     }
 
     private sealed class CachedLine

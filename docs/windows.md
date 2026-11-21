@@ -26,5 +26,7 @@ Provider details that match macOS:
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
 
+If a provider's refresh fails, OpenUsage keeps its last successful data and waits before automatically trying that provider again. Other providers still update normally. You can refresh manually without waiting.
+
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
