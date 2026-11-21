@@ -69,7 +69,7 @@ public sealed class TrayController : IDisposable
         var tooltip = pins.Count == 0
             ? "OpenUsage"
             : string.Join(Environment.NewLine,
-                pins.Select(p => $"{p.Descriptor.Title}: {p.Data.MenuBarValue}").Take(8));
+                pins.Select(p => $"{p.Data.Title}: {p.Data.MenuBarValue}").Take(8));
         _notify.Text = tooltip.Length > 63 ? tooltip[..60] + "…" : tooltip;
         var worst = pins.Select(p => p.Data.GetMeterState(DateTimeOffset.Now).Severity)
             .Where(s => s is not null)

@@ -330,7 +330,7 @@ public partial class DashboardWindow : Window
         labelLine.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         labelLine.Children.Add(new TextBlock
         {
-            Text = descriptor.Title,
+            Text = data.Title,
             FontWeight = FontWeights.SemiBold,
             FontSize = _container.Settings.Density == DensitySetting.Compact ? 11 : 12
         });
@@ -462,16 +462,11 @@ public partial class DashboardWindow : Window
         }
         else
         {
-            var row = new Grid();
-            row.ColumnDefinitions.Add(new ColumnDefinition());
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(new TextBlock { Text = descriptor.Title, FontWeight = FontWeights.SemiBold, FontSize = 12 });
-            row.Children.Clear();
             panel.Children.Clear();
             var unbounded = new Grid { Margin = new Thickness(0) };
             unbounded.ColumnDefinitions.Add(new ColumnDefinition());
             unbounded.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            unbounded.Children.Add(new TextBlock { Text = descriptor.Title, FontWeight = FontWeights.SemiBold, FontSize = 12 });
+            unbounded.Children.Add(new TextBlock { Text = data.Title, FontWeight = FontWeights.SemiBold, FontSize = 12 });
             var value = new TextBlock { Text = data.HasData ? data.UnboundedDetail : WidgetData.NoDataSubtitle, FontSize = 12 };
             Grid.SetColumn(value, 1);
             unbounded.Children.Add(value);
@@ -627,7 +622,7 @@ public partial class DashboardWindow : Window
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.Children.Add(new TextBlock { Text = descriptor.Title, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new TextBlock { Text = _container.Data.Resolve(descriptor).Title, VerticalAlignment = VerticalAlignment.Center });
         var onDemand = new Button
         {
             Content = _container.Layout.IsOnDemand(descriptor.Id) ? "On Demand" : "Always",
