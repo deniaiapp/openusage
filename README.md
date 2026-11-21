@@ -97,6 +97,8 @@ In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
+Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
+
 ## License
 
 [MIT](LICENSE)
