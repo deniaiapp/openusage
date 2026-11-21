@@ -33,17 +33,29 @@ internal sealed class CopilotDeviceLogin(AppHttp http, Func<TimeSpan, Cancellati
         using var deadline = new CancellationTokenSource(expiry);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, deadline.Token);
         showCode(userCode);
+        ProviderRequestException? lastPollFailure = null;
         try
         {
             while (delay < expiry - Stopwatch.GetElapsedTime(started))
             {
                 await _wait(delay, linked.Token);
-                var token = await PostAsync(AccessTokenUrl, new()
+                JsonObject token;
+                try
                 {
-                    ["client_id"] = ClientId,
-                    ["device_code"] = deviceCode,
-                    ["grant_type"] = Grant
-                }, linked.Token);
+                    token = await PostAsync(AccessTokenUrl, new()
+                    {
+                        ["client_id"] = ClientId,
+                        ["device_code"] = deviceCode,
+                        ["grant_type"] = Grant
+                    }, linked.Token);
+                    lastPollFailure = null;
+                }
+                catch (ProviderRequestException ex) when (!linked.IsCancellationRequested && IsTransientPollFailure(ex))
+                {
+                    AppLog.Warn("copilot", "GitHub device sign-in poll lost its connection; retrying.");
+                    lastPollFailure = ex;
+                    continue;
+                }
                 if (JsonUtil.String(token["access_token"]) is { Length: > 0 } value &&
                     !value.Any(char.IsWhiteSpace) && !value.Any(char.IsControl))
                     return value;
@@ -60,11 +72,20 @@ internal sealed class CopilotDeviceLogin(AppHttp http, Func<TimeSpan, Cancellati
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested && !ct.IsCancellationRequested)
         {
-            throw Expired();
+            throw lastPollFailure ?? Expired();
         }
         ct.ThrowIfCancellationRequested();
-        throw Expired();
+        throw lastPollFailure ?? Expired();
     }
+
+    private static bool IsTransientPollFailure(ProviderRequestException failure) =>
+        failure.InnerException is OperationCanceledException
+            or HttpRequestException
+            {
+                StatusCode: null,
+                HttpRequestError: HttpRequestError.NameResolutionError or HttpRequestError.ConnectionError
+                    or HttpRequestError.ResponseEnded
+            };
 
     private static ProviderRequestException Expired() =>
         new("The GitHub sign-in code expired. Start sign-in again.");
