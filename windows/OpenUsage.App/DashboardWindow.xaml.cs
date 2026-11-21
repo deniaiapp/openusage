@@ -40,6 +40,7 @@ public partial class DashboardWindow : Window
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
     private CopilotLoginView? _copilotLoginEditor;
+    private GrokLoginView? _grokLoginEditor;
     public event Action<string?>? HotkeyChanged;
 
     public DashboardWindow(AppContainer container)
@@ -62,7 +63,7 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_copilotLoginEditor?.ResumeIfPending() == true)
+        if (_copilotLoginEditor?.ResumeIfPending() == true || _grokLoginEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
         else
         {
@@ -176,9 +177,10 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null || _grokLoginEditor is not null)) return;
         _accountEditor = null;
         _copilotLoginEditor = null;
+        _grokLoginEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -575,6 +577,12 @@ public partial class DashboardWindow : Window
             ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
             _copilotLoginEditor = new CopilotLoginView(_container, copilot, (Style)FindResource("GhostButton"));
             ContentHost.Children.Add(_copilotLoginEditor);
+        }
+        if (runtime is OpenUsage.Core.Providers.Grok.GrokProvider grok)
+        {
+            ContentHost.Children.Add(SectionTitle("Grok Sign-In"));
+            _grokLoginEditor = new GrokLoginView(_container, grok, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_grokLoginEditor);
         }
         if (runtime is IApiKeyManaging keys)
         {

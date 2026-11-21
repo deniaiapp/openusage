@@ -1,5 +1,6 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Copilot;
+using OpenUsage.Core.Providers.Grok;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -85,6 +86,14 @@ public sealed class AppContainer : IDisposable
         var account = await _apiKeyAccounts.ConnectAsync(providerId, label, key, _cts.Token);
         RegisterAccount(account);
         _ = Data.RefreshProviderAsync(account.CardId, _cts.Token);
+    }
+
+    public async Task ConnectGrokAsync(Action<string, Uri> showCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var grok = Providers.OfType<GrokProvider>().Single();
+        var snapshot = await grok.ConnectAsync(showCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
     }
 
     public void RenameAccount(ApiKeyAccount account, string label)

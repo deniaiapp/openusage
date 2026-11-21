@@ -28,7 +28,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Codex | `%USERPROFILE%\.codex\auth.json`, `%USERPROFILE%\.config\codex\auth.json`, Credential Manager (`cli\|<home hash>.Codex Auth`, the per-home key Codex itself writes) |
 | Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com), or existing editor and GitHub CLI credentials |
-| Grok | `%USERPROFILE%\.grok\auth.json` |
+| Grok | **Customize → Grok → Sign In with Grok**, or an existing Grok CLI sign-in |
 | OpenCode | `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
 | Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a short-lived cache under `%APPDATA%\OpenUsage\antigravity` |
 | Ollama | API key in Customize, or `%USERPROFILE%\.ollama\id_ed25519` (opt-in; never auto-enabled). Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |

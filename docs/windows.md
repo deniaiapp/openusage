@@ -36,6 +36,8 @@ For Copilot on GitHub.com, open **Customize → Copilot → Sign In with GitHub*
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
 
+For Grok, choose **Customize → Grok → Sign In with Grok**, then open xAI to confirm the device code. **Sign In Again** replaces the encrypted OpenUsage connection only after usage is verified. Existing Grok CLI sign-ins still work if you haven't connected Grok in OpenUsage.
+
 Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown; Cursor's provider-reported history is unchanged.
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
