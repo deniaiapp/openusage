@@ -37,6 +37,9 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
+If a manual and scheduled refresh overlap for one provider, OpenUsage shares the same request
+instead of renewing that sign-in twice.
+
 OpenUsage only refreshes expired Claude and Codex tokens that came from a file, and it keeps the rest of that file intact. Tokens from Credential Manager are left for the CLI to refresh — run `claude` or `codex` once if the card says the session expired.
 
 When an update adds a new default metric, it's turned on once for existing layouts too. If you turn it off, it stays off.

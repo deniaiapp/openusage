@@ -13,6 +13,7 @@ public sealed class WidgetDataStore
     private readonly AppSettings _settings;
     private readonly ConcurrentDictionary<string, ProviderSnapshot> _snapshots = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, string> _errors = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<Task>> _providerRefreshes = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private readonly string? _cacheDir;
     private DateTimeOffset _lastRefresh;
@@ -96,19 +97,7 @@ public sealed class WidgetDataStore
         Raise();
         try
         {
-            var tasks = _layout.VisibleProviders.Select(async provider =>
-            {
-                try
-                {
-                    ApplySnapshot(provider.Provider.Id, await provider.RefreshAsync(cancellationToken));
-                }
-                catch (Exception ex)
-                {
-                    AppLog.Error(provider.Provider.Id, "refresh failed", ex);
-                    RememberFailure(provider.Provider.Id, ex.Message);
-                }
-            });
-            await Task.WhenAll(tasks);
+            await Task.WhenAll(_layout.VisibleProviders.Select(provider => RefreshAsync(provider, cancellationToken)));
             _lastRefresh = DateTimeOffset.Now;
             _nextRefresh = _lastRefresh.AddSeconds(Math.Max(30, _settings.RefreshIntervalSeconds));
         }
@@ -123,6 +112,16 @@ public sealed class WidgetDataStore
     {
         var provider = _layout.Providers.FirstOrDefault(p => p.Provider.Id == providerId);
         if (provider is null) return;
+        await RefreshAsync(provider, cancellationToken);
+        Raise();
+    }
+
+    private Task RefreshAsync(IProviderRuntime provider, CancellationToken cancellationToken) =>
+        _providerRefreshes.GetOrAdd(provider.Provider.Id, id =>
+            new Lazy<Task>(() => RefreshCoreAsync(id, provider, cancellationToken))).Value;
+
+    private async Task RefreshCoreAsync(string providerId, IProviderRuntime provider, CancellationToken cancellationToken)
+    {
         try
         {
             ApplySnapshot(providerId, await provider.RefreshAsync(cancellationToken));
@@ -132,7 +131,10 @@ public sealed class WidgetDataStore
             AppLog.Error(providerId, "refresh failed", ex);
             RememberFailure(providerId, ex.Message);
         }
-        Raise();
+        finally
+        {
+            _providerRefreshes.TryRemove(providerId, out _);
+        }
     }
 
     private void ApplySnapshot(string providerId, ProviderSnapshot snapshot)
