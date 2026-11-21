@@ -43,6 +43,8 @@ instead of renewing that sign-in twice.
 If a refresh fails, OpenUsage keeps that account's last successful data and waits before automatically trying again.
 Other accounts update normally. You can still retry manually.
 
+Cursor keeps using the last known billing plan for the current sign-in if the plan lookup fails.
+
 OpenUsage only refreshes expired Claude and Codex tokens that came from a file, and it keeps the rest of that file intact. Tokens from Credential Manager are left for the CLI to refresh — run `claude` or `codex` once if the card says the session expired.
 
 When an update adds a new default metric, it's turned on once for existing layouts too. If you turn it off, it stays off.

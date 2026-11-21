@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -273,6 +274,9 @@ public sealed class CursorProvider : IProviderRuntime
     private readonly CursorUsageHistoryStore _historyStore;
     private readonly TimeSpan _spendHistoryBudget;
     private readonly Func<ModelPricing> _pricing;
+    private BillingPlan? _lastBillingPlan;
+
+    private sealed record BillingPlan(string CredentialHash, string? Name, bool IsMerged);
 
     public CursorProvider(
         AppHttp http,
@@ -325,7 +329,7 @@ public sealed class CursorProvider : IProviderRuntime
         }
     }
 
-    private async Task<ProviderSnapshot> ProbeAsync(CursorAuthState state, CancellationToken ct)
+    internal async Task<ProviderSnapshot> ProbeAsync(CursorAuthState state, CancellationToken ct)
     {
         var access = state.AccessToken?.Trim();
         if (string.IsNullOrEmpty(access) || NeedsRefresh(access))
@@ -347,12 +351,11 @@ public sealed class CursorProvider : IProviderRuntime
             throw new InvalidOperationException(ProviderErrors.RequestFailed(usageResponse.StatusCode));
         var usage = usageResponse.Json ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
 
-        var plan = await ReadOptionalAsync("plan", () => ConnectPost(PlanUrl, access, ct), ct);
-        var planName = JsonUtil.String(JsonUtil.Object(plan?["planInfo"])?["planName"]
-            ?? plan?["planName"] ?? plan?["membershipType"]);
+        var plan = await ReadBillingPlanAsync(access, ct);
+        var planName = plan?.Name;
         JsonObject? grok = null;
         (string? Plan, List<MetricLine> Lines) mapped;
-        if (JsonUtil.Bool(plan?["isMerged"]) == true)
+        if (plan?.IsMerged == true)
         {
             var balance = await ReadOptionalAsync("credit balance", () => ConnectPost(UnifiedCreditsUrl, access, ct), ct);
             var status = await ReadDashboardAsync("usage status", UsageStatusUrl, access, ct);
@@ -372,6 +375,27 @@ public sealed class CursorProvider : IProviderRuntime
         await AppendSpendLinesAsync(lines, access, ct);
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
+    }
+
+    private async Task<BillingPlan?> ReadBillingPlanAsync(string access, CancellationToken ct)
+    {
+        var credential = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(access)));
+        var previous = _lastBillingPlan is { } cached && cached.CredentialHash == credential ? cached : null;
+        var response = await ReadOptionalAsync("plan", () => ConnectPost(PlanUrl, access, ct), ct);
+        var name = new[]
+        {
+            JsonUtil.String(JsonUtil.Object(response?["planInfo"])?["planName"]),
+            JsonUtil.String(response?["planName"]),
+            JsonUtil.String(response?["membershipType"])
+        }.FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate));
+        var merged = JsonUtil.Bool(response?["isMerged"]);
+        if (merged is null && string.IsNullOrWhiteSpace(name))
+        {
+            if (response is not null) AppLog.Warn("cursor", "plan response did not identify the billing plan");
+            return previous;
+        }
+        ct.ThrowIfCancellationRequested();
+        return _lastBillingPlan = new(credential, name ?? previous?.Name, merged ?? previous?.IsMerged ?? false);
     }
 
     private async Task<JsonObject?> ReadDashboardAsync(string label, Uri url, string access, CancellationToken ct)

@@ -97,6 +97,8 @@ In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
+Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
+
 ## License
 
 [MIT](LICENSE)
