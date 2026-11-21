@@ -21,7 +21,7 @@ public sealed record PriorityBoard(
                        where data.HasData
                        select new PriorityMetric(runtime.Provider, descriptor, data)).ToList();
         var pinned = new List<PriorityMetric>();
-        var runningOut = new List<PriorityMetric>();
+        var runningOut = new List<(PriorityMetric Metric, (int Group, double Value) Rank)>();
         var usedUp = new List<PriorityMetric>();
         foreach (var metric in metrics)
         {
@@ -31,12 +31,21 @@ public sealed record PriorityBoard(
             else if (metric.Descriptor.Pinnable && layout.IsPinned(metric.Descriptor.Id))
                 pinned.Add(metric);
             else if (metric.Data.Limit is > 0 && (state.Severity is MeterSeverity.Warning or MeterSeverity.Critical))
-                runningOut.Add(metric);
+                runningOut.Add((metric, RunningOutRank(metric.Data, state)));
         }
         return new(pinned,
-            runningOut.OrderBy(m => 1 - m.Data.Used / m.Data.Limit!.Value).ToList(),
+            runningOut.OrderBy(entry => entry.Rank).Select(entry => entry.Metric).ToList(),
             usedUp.OrderBy(m => m.Data.ResetsAt ?? DateTimeOffset.MaxValue).ToList(),
             metrics.Count > 0,
             providers.Any(runtime => store.ProviderError(runtime.Provider.Id) is not null));
+    }
+
+    private static (int Group, double Value) RunningOutRank(WidgetData data, MeterState state)
+    {
+        var remaining = 1 - data.Used / data.Limit!.Value;
+        if (state.ProjectedFraction > 0 && double.IsFinite(state.ProjectedFraction)
+            && data.PeriodDurationMs is > 0 and var duration)
+            return (0, remaining * duration / state.ProjectedFraction);
+        return (1, remaining);
     }
 }
