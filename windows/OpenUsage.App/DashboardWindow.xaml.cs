@@ -12,6 +12,7 @@ using OpenUsage.App.Views;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Antigravity;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
@@ -42,6 +43,7 @@ public partial class DashboardWindow : Window
     private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
     private DeviceLoginView? _deviceLoginEditor;
+    private AntigravitySignInView? _antigravitySignInEditor;
 
     public DashboardWindow(AppContainer container)
     {
@@ -58,7 +60,7 @@ public partial class DashboardWindow : Window
 
     public void ToggleFromTray()
     {
-        if (!IsVisible && _deviceLoginEditor?.ResumeIfPending() == true)
+        if (!IsVisible && (_deviceLoginEditor?.ResumeIfPending() == true || _antigravitySignInEditor?.IsPending == true))
         {
             ShowAnchored();
             Activate();
@@ -164,8 +166,10 @@ public partial class DashboardWindow : Window
 
     private void Render(bool preserveEditor = false)
     {
-        if (preserveEditor && _deviceLoginEditor is not null) return;
+        if (preserveEditor && (_deviceLoginEditor is not null || _antigravitySignInEditor is not null)) return;
         _deviceLoginEditor = null;
+        _antigravitySignInEditor?.Cancel();
+        _antigravitySignInEditor = null;
         var remaining = _container.Data.NextRefresh - DateTimeOffset.Now;
         RefreshLabel.Text = _container.Data.IsRefreshing
             ? "Updating…"
@@ -579,6 +583,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is AntigravityProvider antigravity)
+        {
+            ContentHost.Children.Add(SectionTitle("Google Sign-In"));
+            _antigravitySignInEditor = new AntigravitySignInView(_container, antigravity, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_antigravitySignInEditor);
+        }
         if (runtime is OpenUsage.Core.Providers.Copilot.CopilotProvider copilot)
         {
             ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));

@@ -24,6 +24,8 @@ A fresh install starts with no providers on and opens a welcome screen. It lists
 
 Ollama's local sign-in stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
 
+In **Customize → Antigravity**, use **Sign In with Google** and finish in your browser. OpenUsage only replaces the connection once it can read that account's quota and encrypt its sign-in for your Windows user. An existing Windows Antigravity connection still works if you haven't signed in through OpenUsage. **Sign In Again** keeps the current layout and pins.
+
 ### Muse Code on Windows
 
 In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the displayed code in your browser. OpenUsage checks that the account has a Muse Code subscription before saving its sign-in with Windows user encryption. Turn Muse Code on in Customize to see **Session** and **Weekly** limits; **Session** is pinned to the tray by default. Use **Sign In Again** to replace the connection without losing your layout.
