@@ -12,14 +12,11 @@ public static class OpenRouterUsageMapper
 
     public static List<MetricLine> CreditsLines(JsonObject data)
     {
-        if (JsonUtil.Number(data["total_usage"]) is not { } totalUsage) return [];
-        var used = Math.Max(0, totalUsage);
-        var totalCredits = Math.Max(0, JsonUtil.Number(data["total_credits"]) ?? 0);
-        var lines = new List<MetricLine>();
-        if (totalCredits > 0)
-            lines.Add(MetricLine.Progress("Credits", used, totalCredits, ProgressFormat.Dollars));
-        lines.Add(MetricLine.Values("Balance", [new MetricValue(Math.Max(0, totalCredits - used), MetricKind.Dollars)]));
-        return lines;
+        if (JsonUtil.Number(data["total_usage"]) is not { } totalUsage ||
+            JsonUtil.Number(data["total_credits"]) is not { } totalCredits)
+            return [];
+        var balance = Math.Max(0, Math.Max(0, totalCredits) - Math.Max(0, totalUsage));
+        return [MetricLine.Values("Balance", [new MetricValue(balance, MetricKind.Dollars)])];
     }
 
     public static (string? Plan, List<MetricLine> Lines) KeyMetrics(JsonObject data, bool includeSpend = true)
@@ -73,7 +70,6 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
 
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
     [
-        WidgetDescriptor.BoundedDollars("openrouter.credits", Provider, "Credits", 100, limitNoun: "purchased"),
         WidgetDescriptor.DollarBalance("openrouter.balance", Provider, "Balance", "left"),
         WidgetDescriptor.Values("openrouter.today", Provider, "Today", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.week", Provider, "This Week", isUsagePeriod: true),
