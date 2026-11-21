@@ -26,9 +26,9 @@ Provider details that match macOS:
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
 
-See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
-[command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
-
 ## Usage Notifications
 
-Enable these in Settings to get a Windows notification before a limit runs out at its current pace, or before a weekly or longer limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit. Click one to open the dashboard.
+Enable these in Settings to get a Windows notification before a limit runs out at its current pace, or before a multi-day limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit. Click one to open the dashboard.
+
+See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
+[command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
