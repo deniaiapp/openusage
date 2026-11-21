@@ -70,7 +70,7 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
 
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
     [
-        WidgetDescriptor.DollarBalance("openrouter.balance", Provider, "Balance", "left"),
+        WidgetDescriptor.DollarBalance("openrouter.balance", Provider, "Balance", "left") with { HideWhenMissing = true },
         WidgetDescriptor.Values("openrouter.today", Provider, "Today", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.week", Provider, "This Week", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.month", Provider, "This Month", isUsagePeriod: true),

@@ -20,7 +20,7 @@ Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` confi
 
 OpenRouter only uses API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY`, enter the key in **Customize → OpenRouter**. Already saved keys keep working.
 
-OpenRouter shows the remaining **Balance** from purchased credits. Only a limit set on the key appears as **Key Limit**; the old purchased-credits meter and its tray pin no longer appear.
+OpenRouter shows the remaining **Balance** from purchased credits only when it reports both the purchase and usage totals. Only a limit set on the key appears as **Key Limit**; the old purchased-credits meter and its tray pin no longer appear.
 
 A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.
 
