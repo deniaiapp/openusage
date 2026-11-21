@@ -2,10 +2,19 @@ import XCTest
 @testable import OpenUsageCLI
 
 final class CLIArgumentsTests: XCTestCase {
-    func testParsesProviderAndForce() throws {
-        let parsed = try CLIArguments.parse(["Codex", "--force"])
-        XCTAssertEqual(parsed.providerID, "codex")
-        XCTAssertTrue(parsed.force)
+    func testParsesNoProviderWhenNoneIsGiven() throws {
+        XCTAssertNil(try CLIArguments.parse([]).providerID)
+    }
+
+    func testParsesHelpAndVersionFlags() throws {
+        XCTAssertTrue(try CLIArguments.parse(["-h"]).showHelp)
+        XCTAssertTrue(try CLIArguments.parse(["--help"]).showHelp)
+        XCTAssertTrue(try CLIArguments.parse(["-v"]).showVersion)
+        XCTAssertTrue(try CLIArguments.parse(["--version"]).showVersion)
+    }
+
+    func testAcceptsZeroSevensForceFlag() throws {
+        XCTAssertEqual(try CLIArguments.parse(["--force", "Codex"]), CLIArguments(providerID: "codex", force: true))
     }
 
     func testRejectsUnknownOptionsAndMultipleProviders() {
