@@ -14,6 +14,8 @@ Choose **Replace API Key** next to an additional account to change its key witho
 
 In **Customize**, use the up and down arrows to move a provider and its accounts together on the dashboard. The order is saved; **Undo Reorder** restores the previous order during the current session.
 
+If Windows reports that there is no network path, OpenUsage retries that refresh for about a minute before showing an error. Other refresh failures keep the usual backoff.
+
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
 
 OpenRouter only uses API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY`, enter the key in **Customize → OpenRouter**. Already saved keys keep working.
@@ -21,6 +23,10 @@ OpenRouter only uses API keys saved in OpenUsage. If you previously relied on `O
 A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.
 
 Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
+
+### Muse Code on Windows
+
+In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the displayed code in your browser. OpenUsage checks that the account has a Muse Code subscription before saving its sign-in with Windows user encryption. Turn Muse Code on in Customize to see **Session** and **Weekly** limits; **Session** is pinned to the tray by default. Use **Sign In Again** to replace the connection without losing your layout.
 
 Provider details that match macOS:
 
