@@ -611,6 +611,8 @@ public partial class DashboardWindow : Window
             _container.Settings.Save();
         }));
 
+        RenderPriorityLimitSettings();
+
         ContentHost.Children.Add(SectionTitle("Refresh"));
         ContentHost.Children.Add(SettingCombo("Interval", new[] { "1 minute", "5 minutes", "15 minutes" },
             _container.Settings.RefreshIntervalSeconds switch { 60 => 0, 900 => 2, _ => 1 },
