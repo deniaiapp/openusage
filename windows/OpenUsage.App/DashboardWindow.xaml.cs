@@ -465,7 +465,7 @@ public partial class DashboardWindow : Window
             _detailProviderId = descriptor.ProviderId;
             ShowScreen(DashboardScreen.CustomizeDetail);
         }));
-        panel.ContextMenu = context;
+        if (!_container.Settings.PrivacyMode) panel.ContextMenu = context;
         return panel;
     }
 

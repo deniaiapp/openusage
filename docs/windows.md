@@ -37,6 +37,6 @@ See the [Windows README](../windows/README.md) for how to build it and which pro
 
 ## Privacy Mode
 
-Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. The tray icon and its tooltip do not show usage while the setting is on.
+Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.
 
-This is off by default and stays set after a restart. Not every capture method honors Windows' protection. Check your capture preview before sharing; the CLI and saved data are unchanged.
+This is off by default and stays set after a restart. Not every capture method honors Windows' protection. Check your capture preview before sharing; other apps, the CLI and saved data are unchanged.
