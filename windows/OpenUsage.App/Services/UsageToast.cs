@@ -22,7 +22,7 @@ internal sealed class UsageToast
         {
             if (enabled)
             {
-                _configured = ToastRegistration.Install();
+                _configured = NotificationActivation.CanReceiveShellActivation() && ToastRegistration.Install();
                 if (!_configured)
                     AppLog.Warn("notifications", "Windows toast registration is unavailable; using tray balloons.");
             }
