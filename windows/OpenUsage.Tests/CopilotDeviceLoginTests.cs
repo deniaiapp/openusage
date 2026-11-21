@@ -181,16 +181,18 @@ public sealed class CopilotDeviceLoginTests
                     "/login/device/code" => (200, DeviceResponse),
                     "/login/oauth/access_token" => (200, TokenResponse),
                     _ when request.RequestUri.Host == "api.noseat.ghe.com" => (404, "{}"),
-                    _ => (200, """{"copilot_plan":"business"}""")
+                    _ => (200, """{"copilot_plan":"business","quota_snapshots":{"premium_interactions":{"entitlement":100,"percent_remaining":75}}}""")
                 };
             });
             var provider = new CopilotProvider(http, new ApiKeyStore(path), new CopilotDeviceLogin(http, NoWait));
+            Assert.Equal("https://github.com/settings/copilot", Assert.Single(provider.Provider.VisibleLinks).Url);
             var snapshot = await provider.ConnectAsync("octocorp", (code, url) =>
             {
                 Assert.Equal("ABCD-EFGH", code);
                 Assert.Equal("https://octocorp.ghe.com/login/device", url.AbsoluteUri);
             }, CancellationToken.None);
             Assert.Equal("Business", snapshot.Plan);
+            Assert.Equal("https://octocorp.ghe.com/settings/copilot", Assert.Single(provider.Provider.VisibleLinks).Url);
 
             var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
                 provider.ConnectAsync("noseat.ghe.com", (_, _) => { }, CancellationToken.None));
@@ -198,6 +200,7 @@ public sealed class CopilotDeviceLoginTests
 
             var reopened = new CopilotProvider(http, new ApiKeyStore(path));
             Assert.Equal("octocorp.ghe.com", reopened.ConnectedHost);
+            Assert.Equal("https://octocorp.ghe.com/settings/copilot", Assert.Single(reopened.Provider.VisibleLinks).Url);
             Assert.False((await reopened.RefreshAsync()).IsError);
             Assert.Equal(new[]
             {

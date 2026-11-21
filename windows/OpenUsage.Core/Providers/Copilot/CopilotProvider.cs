@@ -160,6 +160,9 @@ public sealed class CopilotProvider : IProviderRuntime
 {
     public static readonly Uri UsageUrl = new("https://api.github.com/copilot_internal/user");
     private const string CredentialKey = "copilot.oauth";
+    private static readonly Provider PublicProvider = new(
+        "copilot", "Copilot", "copilot",
+        [new ProviderLink("Dashboard", "https://github.com/settings/copilot")]);
     private readonly CopilotAuthStore _auth = new();
     private readonly AppHttp _http;
     private readonly ApiKeyStore? _keys;
@@ -194,9 +197,10 @@ public sealed class CopilotProvider : IProviderRuntime
         return snapshot;
     }
 
-    public Provider Provider { get; } = new(
-        "copilot", "Copilot", "copilot",
-        [new ProviderLink("Dashboard", "https://github.com/settings/copilot")]);
+    public Provider Provider =>
+        ReadDomain(_keys?.Get(CredentialKey)) is { } domain && domain != CopilotDomain.Public
+            ? PublicProvider with { Links = [new ProviderLink("Dashboard", domain.WebUrl("/settings/copilot").AbsoluteUri)] }
+            : PublicProvider;
 
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
     [
