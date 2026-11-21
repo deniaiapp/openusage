@@ -120,6 +120,7 @@ public static class AntigravityUsageMapper
         var pooled = new Dictionary<string, (double Fraction, DateTimeOffset? Reset)>(StringComparer.Ordinal);
         foreach (var group in groups.OfType<JsonObject>())
         {
+            if (JsonUtil.String(group["displayName"]) == "Gemini 4 Argon") continue;
             if (JsonUtil.Array(group["buckets"]) is not { } buckets) continue;
             foreach (var bucket in buckets.OfType<JsonObject>())
             {
@@ -138,7 +139,7 @@ public static class AntigravityUsageMapper
 
     public static MetricLine Line(string label, double remainingFraction, DateTimeOffset? reset, long periodMs)
     {
-        var used = Math.Round((1 - Math.Clamp(remainingFraction, 0, 1)) * 100);
+        var used = (1 - Math.Clamp(remainingFraction, 0, 1)) * 100;
         return MetricLine.Progress(label, used, 100, ProgressFormat.Percent, reset, periodMs);
     }
 
@@ -164,8 +165,13 @@ public sealed class AntigravityProvider : IProviderRuntime
 
     private readonly AntigravityAuthStore _auth = new();
     private readonly AppHttp _http;
+    private readonly AntigravityUsageClient _usage;
 
-    public AntigravityProvider(AppHttp http) => _http = http;
+    public AntigravityProvider(AppHttp http)
+    {
+        _http = http;
+        _usage = new AntigravityUsageClient(http);
+    }
 
     public Provider Provider { get; } = new(
         "antigravity", "Antigravity", "antigravity",
@@ -204,20 +210,9 @@ public sealed class AntigravityProvider : IProviderRuntime
                 _auth.SaveCache(access, refresh, DateTimeOffset.UtcNow.AddSeconds(rotated.Value.ExpiresIn));
             }
 
-            var summary = await CloudCode("/v1internal:retrieveUserQuotaSummary", access!, cancellationToken);
-            List<MetricLine> lines = [];
-            string? plan = null;
-            if (summary is { } body)
-            {
-                lines = AntigravityUsageMapper.ParseQuotaSummary(body) ?? [];
-                plan = AntigravityUsageMapper.PlanName(body);
-            }
+            var (lines, plan) = await _usage.QuotaAsync(access!, cancellationToken);
             if (lines.Count == 0)
-            {
-                var models = await CloudCode("/v1internal:retrieveUserQuota", access!, cancellationToken);
-                if (models is not null)
-                    plan ??= AntigravityUsageMapper.PlanName(models);
-            }
+                plan ??= await _usage.FallbackPlanAsync(access!, cancellationToken);
             await SpendTileMapper.AppendScanAsync(
                 lines,
                 () => AntigravityDbUsageScanner.Scan(),
@@ -249,31 +244,5 @@ public sealed class AntigravityProvider : IProviderRuntime
         var access = JsonUtil.String(response.Json?["access_token"]);
         if (string.IsNullOrEmpty(access)) return null;
         return (access, JsonUtil.String(response.Json?["refresh_token"]), JsonUtil.Number(response.Json?["expires_in"]) ?? 3600);
-    }
-
-    private async Task<JsonObject?> CloudCode(string path, string token, CancellationToken ct)
-    {
-        foreach (var baseUrl in CloudCodeUrls)
-        {
-            try
-            {
-                var response = await _http.SendAsync(new AppHttpRequest(
-                    "POST",
-                    new Uri(baseUrl + path),
-                    new Dictionary<string, string>
-                    {
-                        ["Accept"] = "application/json",
-                        ["Content-Type"] = "application/json",
-                        ["Authorization"] = $"Bearer {token}",
-                        ["User-Agent"] = "antigravity"
-                    },
-                    Encoding.UTF8.GetBytes("{}"),
-                    15), ct);
-                if (response.StatusCode is 401 or 403) return null;
-                if (response.IsSuccess) return response.Json;
-            }
-            catch (Exception ex) { AppLog.Warn("antigravity", $"{path} via {baseUrl} failed: {ex.Message}"); }
-        }
-        return null;
     }
 }
