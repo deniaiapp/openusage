@@ -26,6 +26,7 @@ Provider details that match macOS:
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** reads OpenCode 2's database (usage and Go key) and falls back to `auth.json` on OpenCode 1.
+- **OpenRouter:** Management keys show spend across the keys they can list, on both the main card and additional accounts. Workspace keys can show workspace spend even when they can't read the account balance.
 - **Z.ai:** A rejected API key prompts you to replace it in Customize.
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
