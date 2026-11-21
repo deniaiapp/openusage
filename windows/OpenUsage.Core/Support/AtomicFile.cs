@@ -2,12 +2,18 @@ namespace OpenUsage.Core.Support;
 
 internal static class AtomicFile
 {
-    public static void WriteAllText(string path, string contents)
+    public static void WriteAllText(string path, string contents) =>
+        Replace(path, temporary => File.WriteAllText(temporary, contents));
+
+    public static void WriteAllBytes(string path, byte[] contents) =>
+        Replace(path, temporary => File.WriteAllBytes(temporary, contents));
+
+    private static void Replace(string path, Action<string> write)
     {
         var temporary = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
-            File.WriteAllText(temporary, contents);
+            write(temporary);
             File.Move(temporary, path, overwrite: true);
         }
         finally
