@@ -76,7 +76,7 @@ public class ProviderCompatibilityTests
         Assert.Equal(expected, CursorUsageMapper.NeedsRequestFallback(JsonUtil.ParseObject(usage)!, "Pro"));
 
     [Theory]
-    [InlineData("""{"gpt-4":{"numRequests":120,"maxRequestUsage":500},"startOfMonth":"2026-10-01T00:00:00Z"}""", 120)]
+    [InlineData("""{"gpt-4":{"numRequests":120,"maxRequestUsage":500}}""", 120)]
     [InlineData("""{"gpt-4":{"numRequestsTotal":27,"maxRequestUsage":500}}""", 27)]
     [InlineData("""{"gpt-4":{"numRequests":0,"numRequestsTotal":27,"maxRequestUsage":500}}""", 0)]
     public void CursorMapsProviderReportedRequestLimits(string body, double used)
@@ -90,9 +90,21 @@ public class ProviderCompatibilityTests
             Assert.Equal(500, meter.Limit);
             Assert.Equal(ProgressFormat.Count("requests"), meter.Format);
             Assert.Equal(MetricPeriod.MonthMs, meter.PeriodDurationMs);
-            Assert.Equal(body.Contains("startOfMonth") ? new DateTimeOffset(2026, 10, 31, 0, 0, 0, TimeSpan.Zero) : (DateTimeOffset?)null,
-                meter.ResetsAt);
+            Assert.Null(meter.ResetsAt);
         });
+    }
+
+    [Theory]
+    [InlineData("2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z", 31)]
+    [InlineData("2026-01-31T00:00:00Z", "2026-02-28T00:00:00Z", 28)]
+    public void CursorRequestResetUsesTheNextCalendarMonth(string start, string expected, int days)
+    {
+        var requestUsage = JsonUtil.ParseObject($$"""
+            {"gpt-4":{"numRequests":120,"maxRequestUsage":500},"startOfMonth":"{{start}}"}
+            """);
+        var total = Assert.IsType<MetricLine.ProgressLine>(CursorRequestUsageMapper.Map(requestUsage)![0]);
+        Assert.Equal(Iso8601.Parse(expected), total.ResetsAt);
+        Assert.Equal((long)TimeSpan.FromDays(days).TotalMilliseconds, total.PeriodDurationMs);
     }
 
     [Theory]
@@ -102,7 +114,7 @@ public class ProviderCompatibilityTests
         Assert.Null(CursorRequestUsageMapper.Map(JsonUtil.ParseObject(body)));
 
     [Theory]
-    [InlineData("""{"planUsage":{}}""", true)]
+    [InlineData("""{"planUsage":{},"billingCycleStart":"2026-10-01T00:00:00Z","billingCycleEnd":"2026-10-29T00:00:00Z"}""", true)]
     [InlineData("""{"planUsage":{"totalPercentUsed":42}}""", false)]
     public async Task CursorReadsTheRequestCapWithTheCurrentDashboardSession(string usage, bool needsFallback)
     {
@@ -122,7 +134,7 @@ public class ProviderCompatibilityTests
                 Assert.Equal(HttpMethod.Get, request.Method);
                 Assert.Equal($"WorkosCursorSessionToken=test+user%3A%3A{token}",
                     Assert.Single(request.Headers.GetValues("Cookie")));
-                return (HttpStatusCode.OK, """{"gpt-4":{"numRequests":120,"maxRequestUsage":500}}""");
+                return (HttpStatusCode.OK, """{"gpt-4":{"numRequests":120,"maxRequestUsage":500},"startOfMonth":"2026-10-01T00:00:00Z"}""");
             }
             return (HttpStatusCode.NotFound, "{}");
         }));
@@ -136,6 +148,11 @@ public class ProviderCompatibilityTests
         var total = Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Total usage"));
         Assert.Equal(needsFallback ? 120 : 42, total.Used);
         Assert.Equal(needsFallback ? 500 : 100, total.Limit);
+        if (needsFallback)
+        {
+            Assert.Equal(new DateTimeOffset(2026, 10, 29, 0, 0, 0, TimeSpan.Zero), total.ResetsAt);
+            Assert.Equal((long)TimeSpan.FromDays(28).TotalMilliseconds, total.PeriodDurationMs);
+        }
         var descriptor = Assert.Single(provider.WidgetDescriptors, d => d.Id == "cursor.usage");
         Assert.Equal(needsFallback ? "120 of 500 requests used" : "42% used",
             WidgetData.Resolve(descriptor, total, WidgetDisplayMode.Used, ResetDisplayMode.Relative, false).Headline);
