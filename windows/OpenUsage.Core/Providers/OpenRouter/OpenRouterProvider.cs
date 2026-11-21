@@ -84,9 +84,12 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(!string.IsNullOrEmpty(LoadKey()));
 
-    public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+    public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default) =>
+        RefreshWithKeyAsync(LoadKey(), cancellationToken);
+
+    internal async Task<ProviderSnapshot> RefreshWithKeyAsync(
+        string? key, CancellationToken cancellationToken, bool requireKey = false)
     {
-        var key = LoadKey();
         if (string.IsNullOrEmpty(key))
             return ProviderSnapshot.Error(Provider, "Add an OpenRouter API key in Customize.");
         try
@@ -112,8 +115,15 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
                     plan = metrics.Plan;
                     lines.AddRange(metrics.Lines);
                 }
+                else if (requireKey)
+                {
+                    var reason = AuthRetry.IsAuthFailure(keyResponse) ? "OpenRouter rejected your API key."
+                        : keyResponse.IsSuccess ? ProviderErrors.InvalidResponse
+                        : ProviderErrors.RequestFailed(keyResponse.StatusCode);
+                    return ProviderSnapshot.Error(Provider, reason);
+                }
             }
-            catch (Exception ex) { AppLog.Warn("openrouter", $"key fetch failed: {ex.Message}"); }
+            catch (Exception ex) when (!requireKey) { AppLog.Warn("openrouter", $"key fetch failed: {ex.Message}"); }
 
             MetricLine.AppendNoDataIfNeeded(lines);
             return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);

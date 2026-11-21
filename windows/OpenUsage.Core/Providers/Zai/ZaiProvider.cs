@@ -120,9 +120,11 @@ public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(!string.IsNullOrEmpty(LoadKey()));
 
-    public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+    public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default) =>
+        RefreshWithKeyAsync(LoadKey(), cancellationToken);
+
+    internal async Task<ProviderSnapshot> RefreshWithKeyAsync(string? key, CancellationToken cancellationToken)
     {
-        var key = LoadKey();
         if (string.IsNullOrEmpty(key))
             return ProviderSnapshot.Error(Provider, "Add a Z.ai API key in Customize.");
         try
