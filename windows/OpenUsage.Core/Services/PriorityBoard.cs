@@ -9,12 +9,22 @@ public sealed record PriorityBoard(
     IReadOnlyList<PriorityMetric> Pinned,
     IReadOnlyList<PriorityMetric> RunningOut,
     IReadOnlyList<PriorityMetric> UsedUp,
+    IReadOnlyList<Provider> WaitingForFirstRead,
     bool HasUsage,
     bool HasRefreshErrors)
 {
     public static PriorityBoard Make(LayoutStore layout, WidgetDataStore store, DateTimeOffset now)
     {
         var providers = layout.VisibleProviders;
+        var waiting = new List<Provider>();
+        var hasRefreshErrors = false;
+        foreach (var runtime in providers)
+        {
+            if (store.ProviderError(runtime.Provider.Id) is not null)
+                hasRefreshErrors = true;
+            else if (store.Snapshot(runtime.Provider.Id) is null)
+                waiting.Add(runtime.Provider);
+        }
         var metrics = (from runtime in providers
                        from descriptor in layout.VisibleMetrics(runtime.Provider.Id, includeOnDemand: true)
                        let data = store.Resolve(descriptor)
@@ -36,7 +46,6 @@ public sealed record PriorityBoard(
         return new(pinned,
             runningOut.OrderBy(m => 1 - m.Data.Used / m.Data.Limit!.Value).ToList(),
             usedUp.OrderBy(m => m.Data.ResetsAt ?? DateTimeOffset.MaxValue).ToList(),
-            metrics.Count > 0,
-            providers.Any(runtime => store.ProviderError(runtime.Provider.Id) is not null));
+            waiting, metrics.Count > 0, hasRefreshErrors);
     }
 }

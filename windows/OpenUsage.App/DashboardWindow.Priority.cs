@@ -20,9 +20,26 @@ public partial class DashboardWindow
         AddPrioritySection("Running Out", board.RunningOut, now);
         AddPrioritySection("Used Up", board.UsedUp, now);
 
+        if (board.WaitingForFirstRead.Count > 0)
+        {
+            ContentHost.Children.Add(SectionTitle("Waiting for Usage"));
+            foreach (var provider in board.WaitingForFirstRead)
+            {
+                var card = Card();
+                card.Margin = new Thickness(0, 0, 0, 8);
+                card.Child = new TextBlock
+                {
+                    Text = provider.DisplayName, Style = (Style)FindResource("MutedText"),
+                    TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(12, 8, 12, 8)
+                };
+                ContentHost.Children.Add(card);
+            }
+        }
+
         var summary = board.HasRefreshErrors
             ? "Some accounts couldn't refresh. Check All Usage for details."
-            : !board.HasUsage ? "No usage data yet."
+            : board.WaitingForFirstRead.Count > 0 ? null
+            : !board.HasUsage ? "No usage data reported."
             : board.RunningOut.Count == 0 && board.UsedUp.Count == 0 ? "No unpinned limits need attention." : null;
         if (summary is not null)
             ContentHost.Children.Add(new TextBlock
