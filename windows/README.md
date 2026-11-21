@@ -59,6 +59,7 @@ dotnet run --project OpenUsage.Cli -- codex
 The CLI emits `openusage.limits.v2` JSON for enabled providers. Selecting a provider such as `openrouter`
 includes all its enabled accounts; use an exact `provider@id` from the output to select one account.
 The CLI does not open the app, refresh usage, or read credentials. Data becomes stale after ten minutes.
+Use `--help` for usage or `--version` for the CLI build version; neither reads saved limits.
 The legacy `--force` flag is accepted but ignored. Exit codes are 0 for saved data, 2 for invalid
 arguments or a disabled provider or account, and 4 when there's no saved data yet.
 

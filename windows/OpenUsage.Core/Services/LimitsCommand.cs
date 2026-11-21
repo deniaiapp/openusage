@@ -7,29 +7,66 @@ namespace OpenUsage.Core.Services;
 public static class LimitsCommand
 {
     private const string Schema = "openusage.limits.v2";
+    private const string Help = """
+        Usage: openusage [provider-or-account] [options]
+
+        Print the limits OpenUsage last fetched as openusage.limits.v2 JSON.
+        The command never refreshes usage or signs in.
+
+        provider-or-account   A provider kind (codex) or an exact account ID (provider@id).
+                              Omit it to include all enabled providers and accounts.
+
+        Options:
+          -h, --help      Show this help.
+          -v, --version   Show the installed CLI build version.
+          --force         Accepted for compatibility; does not refresh.
+
+        Exit codes: 0 success, 2 invalid arguments or disabled provider, 4 no saved usage.
+        """;
     private static readonly JsonSerializerOptions WireOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public static int Run(string[] args, string dataDirectory, TextWriter output, TextWriter error, DateTimeOffset now)
+    public static int Run(string[] args, string dataDirectory, TextWriter output, TextWriter error,
+        DateTimeOffset now, string? version = null)
     {
         string? filter = null;
         var force = false;
+        var help = false;
+        var showVersion = false;
         foreach (var arg in args)
         {
-            if (arg == "--force" && !force)
+            switch (arg)
             {
-                force = true;
-                continue;
+                case "-h" or "--help":
+                    help = true;
+                    continue;
+                case "-v" or "--version":
+                    showVersion = true;
+                    continue;
+                case "--force":
+                    force = true;
+                    continue;
             }
-            if (filter is not null || !IsSupported(arg))
+            var normalized = arg.ToLowerInvariant();
+            if (filter is not null || !IsSupported(normalized))
             {
-                error.WriteLine("Usage: openusage [provider-or-account] [--force]");
+                error.WriteLine("Run 'openusage --help' for usage.");
                 return 2;
             }
-            filter = arg;
+            filter = normalized;
+        }
+        if (help)
+        {
+            output.WriteLine(Help);
+            return 0;
+        }
+        if (showVersion)
+        {
+            output.WriteLine($"openusage {version ?? "(development build)"}");
+            return 0;
         }
         if (force) error.WriteLine("--force is ignored; openusage reads the last fetched usage.");
 
