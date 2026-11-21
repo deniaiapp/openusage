@@ -81,7 +81,7 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
         WidgetDescriptor.BoundedDollars("openrouter.keyLimit", Provider, "Key Limit", 100)
     ];
 
-    public string? LoadKey() => _keys.Get("openrouter") ?? AppPaths.Env("OPENROUTER_API_KEY");
+    public string? LoadKey() => _keys.Get("openrouter");
     public void SaveKey(string? key) => _keys.Set("openrouter", key);
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>

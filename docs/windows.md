@@ -16,6 +16,8 @@ In **Customize**, use the up and down arrows to move a provider and its accounts
 
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
 
+OpenRouter only uses API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY`, enter the key in **Customize → OpenRouter**. Already saved keys keep working.
+
 A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.
 
 Ollama's local sign-in stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
