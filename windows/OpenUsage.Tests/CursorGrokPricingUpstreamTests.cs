@@ -376,7 +376,7 @@ public class CursorGrokPricingUpstreamTests
         {
             var handler = new FakeHandler(body => Page(5,
             [
-                Event(StartMs(body), "unknown", 10_000, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED", "chargedCents": 25.25"""),
+                Event(StartMs(body), "unknown", 10_000, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED", "chargedCents": "25.25" """),
                 Event(StartMs(body), "composer-1", 20_000, """, "kind": "USAGE_EVENT_KIND_INCLUDED", "chargedCents": 50"""),
                 Event(StartMs(body), "composer-1", 30_000, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED", "isChargeable": false, "chargedCents": 100"""),
                 Event(StartMs(body), "composer-1", 1, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED" """),

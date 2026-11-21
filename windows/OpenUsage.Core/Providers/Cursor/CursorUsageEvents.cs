@@ -72,8 +72,7 @@ public static class CursorUsageEvents
             return 0;
         }
 
-        return raw is JsonValue value && value.TryGetValue<double>(out var cents) &&
-            double.IsFinite(cents) && cents >= 0 ? cents : null;
+        return JsonUtil.Number(raw) is >= 0 and var cents ? cents : null;
     }
 
     private static TokenBreakdown? Tokens(JsonNode? raw)
