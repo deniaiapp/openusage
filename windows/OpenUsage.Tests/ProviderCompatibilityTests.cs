@@ -114,7 +114,7 @@ public class ProviderCompatibilityTests
         Assert.Null(CursorRequestUsageMapper.Map(JsonUtil.ParseObject(body)));
 
     [Theory]
-    [InlineData("""{"planUsage":{},"billingCycleStart":"2026-10-01T00:00:00Z","billingCycleEnd":"2026-10-29T00:00:00Z"}""", true)]
+    [InlineData("""{"planUsage":{},"billingCycleStart":1788220800000,"billingCycleEnd":1790812800000}""", true)]
     [InlineData("""{"planUsage":{"totalPercentUsed":42}}""", false)]
     public async Task CursorReadsTheRequestCapWithTheCurrentDashboardSession(string usage, bool needsFallback)
     {
@@ -150,8 +150,8 @@ public class ProviderCompatibilityTests
         Assert.Equal(needsFallback ? 500 : 100, total.Limit);
         if (needsFallback)
         {
-            Assert.Equal(new DateTimeOffset(2026, 10, 29, 0, 0, 0, TimeSpan.Zero), total.ResetsAt);
-            Assert.Equal((long)TimeSpan.FromDays(28).TotalMilliseconds, total.PeriodDurationMs);
+            Assert.Equal(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero), total.ResetsAt);
+            Assert.Equal((long)TimeSpan.FromDays(31).TotalMilliseconds, total.PeriodDurationMs);
         }
         var descriptor = Assert.Single(provider.WidgetDescriptors, d => d.Id == "cursor.usage");
         Assert.Equal(needsFallback ? "120 of 500 requests used" : "42% used",

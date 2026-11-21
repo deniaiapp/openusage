@@ -251,21 +251,14 @@ public static class CursorUsageMapper
         lines.Add(MetricLine.Values("Credits", [new MetricValue(JsonUtil.CentsToDollars(remaining), MetricKind.Dollars)]));
     }
 
-    internal static (DateTimeOffset? ResetsAt, long PeriodMs) BillingCycle(JsonObject usage)
+    private static (DateTimeOffset? ResetsAt, long PeriodMs) BillingCycle(JsonObject usage)
     {
-        var start = BillingDate(usage["billingCycleStart"]);
-        var end = BillingDate(usage["billingCycleEnd"]);
+        var start = JsonUtil.Number(usage["billingCycleStart"]);
+        var end = JsonUtil.Number(usage["billingCycleEnd"]);
         if (start is { } s && end is { } e && e > s)
-            return (e, (long)(e - s).TotalMilliseconds);
-        return (end, MetricPeriod.MonthMs);
+            return (DateTimeOffset.FromUnixTimeMilliseconds((long)e), (long)(e - s));
+        return (end is { } endMs ? DateTimeOffset.FromUnixTimeMilliseconds((long)endMs) : null, MetricPeriod.MonthMs);
     }
-
-    private static DateTimeOffset? BillingDate(JsonNode? value) =>
-        JsonUtil.Number(value) is { } ms
-        && ms >= DateTimeOffset.MinValue.ToUnixTimeMilliseconds()
-        && ms <= DateTimeOffset.MaxValue.ToUnixTimeMilliseconds()
-            ? DateTimeOffset.FromUnixTimeMilliseconds((long)ms)
-            : Iso8601.Parse(JsonUtil.String(value));
 
     internal static string? PlanLabel(string? name)
     {
@@ -376,7 +369,7 @@ public sealed class CursorProvider : IProviderRuntime
         if (CursorUsageMapper.NeedsRequestFallback(usage, planName) && session is not null &&
             CursorRequestUsageMapper.Map(await ReadDashboardAsync("request-based usage",
                 new UriBuilder(RequestUsageUrl) { Query = $"user={Uri.EscapeDataString(session.UserId)}" }.Uri,
-                session, ct), usage) is { } requestLines)
+                session, ct)) is { } requestLines)
         {
             mapped = (CursorUsageMapper.PlanLabel(planName), requestLines);
         }
