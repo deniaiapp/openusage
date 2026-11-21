@@ -34,6 +34,8 @@ public sealed class AppContainer : IDisposable
             AppLog.Error("accounts", "could not restore API key accounts", ex);
         }
         Data = new WidgetDataStore(Layout, Settings);
+        foreach (var muse in Providers.OfType<OpenUsage.Core.Providers.Muse.MuseProvider>())
+            muse.AttachSnapshots(() => Data.Snapshot(muse.Provider.Id));
     }
 
     public AppSettings Settings { get; }
@@ -126,6 +128,13 @@ public sealed class AppContainer : IDisposable
             catch (OperationCanceledException) { break; }
             await Data.RefreshAllAsync(false, ct);
         }
+    }
+
+    public async Task ConnectDeviceProviderAsync(IDeviceSignInProvider provider, Action<DevicePrompt> prompt, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        var snapshot = await provider.ConnectAsync(prompt, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
     }
 
     public void Dispose()

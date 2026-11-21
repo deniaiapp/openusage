@@ -9,6 +9,8 @@ namespace OpenUsage.Core.Stores;
 
 public sealed class WidgetDataStore
 {
+    private static readonly int[] OfflineRetrySeconds = [2, 4, 8, 16, 32];
+
     private readonly LayoutStore _layout;
     private readonly AppSettings _settings;
     private readonly ConcurrentDictionary<string, ProviderSnapshot> _snapshots = new(StringComparer.Ordinal);
@@ -167,13 +169,14 @@ public sealed class WidgetDataStore
         var providerId = provider.Provider.Id;
         bool IsCurrent() => _providerRefreshes.TryGetValue(providerId, out var active) && active == refresh;
         var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var work = Task.Run(() => provider.RefreshAsync(attempt.Token), attempt.Token);
+        var work = Task.Run(() => ReadWithOfflineRetriesAsync(provider, IsCurrent, attempt.Token), attempt.Token);
         try
         {
             var snapshot = await work.WaitAsync(_refreshTimeout, _clock, cancellationToken).ConfigureAwait(false);
             lock (_gate)
             {
-                if (IsCurrent() && !cancellationToken.IsCancellationRequested) ApplySnapshot(providerId, snapshot);
+                if (snapshot is not null && IsCurrent() && !cancellationToken.IsCancellationRequested)
+                    ApplySnapshot(providerId, snapshot);
             }
         }
         catch (TimeoutException) when (!cancellationToken.IsCancellationRequested)
@@ -198,6 +201,24 @@ public sealed class WidgetDataStore
         }
     }
 
+    private async Task<ProviderSnapshot?> ReadWithOfflineRetriesAsync(
+        IProviderRuntime provider, Func<bool> isCurrent, CancellationToken ct)
+    {
+        for (var retry = 0; isCurrent(); retry++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var snapshot = await ReadSnapshotAsync(provider, ct);
+            if (!snapshot.IsError || snapshot.ErrorCategory != ProviderSnapshot.OfflineCategory
+                || retry == OfflineRetrySeconds.Length)
+                return snapshot;
+            if (!isCurrent()) return null;
+            var delay = OfflineRetrySeconds[retry];
+            AppLog.Warn(provider.Provider.Id, $"No network path. Retrying the refresh in {delay}s.");
+            await Task.Delay(TimeSpan.FromSeconds(delay), _clock, ct);
+        }
+        return null;
+    }
+
     private async Task RetireRefreshAsync(string providerId, Lazy<Task> refresh, Task work, CancellationTokenSource attempt)
     {
         using (attempt)
@@ -212,6 +233,12 @@ public sealed class WidgetDataStore
             await work.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
         }
+    }
+
+    private static async Task<ProviderSnapshot> ReadSnapshotAsync(IProviderRuntime provider, CancellationToken ct)
+    {
+        try { return await provider.RefreshAsync(ct); }
+        catch (Exception ex) when (ProviderErrors.IsOffline(ex)) { return ProviderSnapshot.Error(provider.Provider, ex); }
     }
 
     private void ApplySnapshot(string providerId, ProviderSnapshot snapshot)
