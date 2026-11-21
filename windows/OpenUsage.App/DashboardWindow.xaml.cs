@@ -40,6 +40,7 @@ public partial class DashboardWindow : Window
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
     private CopilotLoginView? _copilotLoginEditor;
+    private ClaudeSignInView? _claudeSignInEditor;
     public event Action<string?>? HotkeyChanged;
 
     public DashboardWindow(AppContainer container)
@@ -62,7 +63,7 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_copilotLoginEditor?.ResumeIfPending() == true)
+        if (_copilotLoginEditor?.ResumeIfPending() == true || _claudeSignInEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
         else
         {
@@ -176,9 +177,10 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null || _claudeSignInEditor is not null)) return;
         _accountEditor = null;
         _copilotLoginEditor = null;
+        _claudeSignInEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -570,6 +572,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is OpenUsage.Core.Providers.Claude.ClaudeProvider claude)
+        {
+            ContentHost.Children.Add(SectionTitle("Claude Sign-In"));
+            _claudeSignInEditor = new ClaudeSignInView(_container, claude, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_claudeSignInEditor);
+        }
         if (runtime is OpenUsage.Core.Providers.Copilot.CopilotProvider copilot)
         {
             ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));

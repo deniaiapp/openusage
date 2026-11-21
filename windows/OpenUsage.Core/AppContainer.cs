@@ -1,4 +1,5 @@
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
@@ -71,6 +72,14 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public async Task ConnectClaudeAsync(Action<Uri> openBrowser, Task<string> pastedCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var claude = Providers.OfType<ClaudeProvider>().Single();
+        var snapshot = await claude.ConnectAsync(openBrowser, pastedCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
 
     public async Task ConnectCopilotAsync(Action<string> showCode, CancellationToken cancellationToken)
     {

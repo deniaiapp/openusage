@@ -1,12 +1,14 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Claude;
 
-public sealed class ClaudeProvider : IProviderRuntime
+public sealed partial class ClaudeProvider : IProviderRuntime
 {
     /// Matches Claude Code's own `claude-cli/<version> (external, cli)` format. Anthropic decides
     /// reset-grant eligibility by client surface; anything else reads `ineligible_reason: "surface"`.
@@ -33,11 +35,14 @@ public sealed class ClaudeProvider : IProviderRuntime
     public ClaudeProvider(
         AppHttp http,
         ClaudeAuthStore? auth = null,
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null,
+        ApiKeyStore? keys = null)
     {
         _http = http;
         _auth = auth ?? new ClaudeAuthStore();
         _now = now ?? (() => DateTimeOffset.Now);
+        _keys = keys;
+        _connected = LoadAppCredential(keys);
     }
 
     public Provider Provider { get; } = new(
@@ -61,15 +66,31 @@ public sealed class ClaudeProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_auth.HasUsableCredentials());
+        Task.FromResult(IsSignedIn || _auth.HasUsableCredentials());
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        await _authGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_connected is not { } connected) return await RefreshCliAsync(cancellationToken);
+            try { return await ProbeAsync(connected, cancellationToken, appOwned: true); }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                AppLog.Warn("claude", $"app sign-in refresh failed ({ex.GetType().Name})");
+                return ProviderSnapshot.Error(Provider, ex);
+            }
+        }
+        finally { _authGate.Release(); }
+    }
+
+    private async Task<ProviderSnapshot> RefreshCliAsync(CancellationToken cancellationToken)
     {
         var candidates = _auth.LoadCandidates()
             .Select(c => c.RefreshToken is { } r && _rotatedInMemory.TryGetValue(r, out var rotated) ? rotated : c)
             .ToList();
         if (candidates.Count == 0)
-            return ProviderSnapshot.Error(Provider, "Not logged in. Run `claude` to authenticate.");
+            return ProviderSnapshot.Error(Provider, "Sign in to Claude in Customize → Claude.");
 
         Exception? last = null;
         foreach (var oauth in candidates)
@@ -87,12 +108,15 @@ public sealed class ClaudeProvider : IProviderRuntime
         return ProviderSnapshot.Error(Provider, last ?? new InvalidOperationException("Claude refresh failed."));
     }
 
-    private async Task<ProviderSnapshot> ProbeAsync(ClaudeOAuth oauth, CancellationToken ct)
+    private async Task<ProviderSnapshot> ProbeAsync(ClaudeOAuth oauth, CancellationToken ct, bool appOwned = false,
+        bool validateReplacement = false, bool allowRenewal = true)
     {
-        var config = _auth.OAuthConfig();
+        var config = appOwned ? AppOAuthConfig : _auth.OAuthConfig();
+        var usageUrl = new Uri(config.UsageUrl);
         // Only file logins are refreshed: OpenUsage can't write Credential Manager items back, and
         // rotating their refresh token would sign the Claude CLI out.
-        if (oauth.Source == ClaudeCredentialSource.File && _auth.NeedsRefresh(oauth) && !string.IsNullOrEmpty(oauth.RefreshToken))
+        if (!appOwned && oauth.Source == ClaudeCredentialSource.File &&
+            _auth.NeedsRefresh(oauth) && !string.IsNullOrEmpty(oauth.RefreshToken))
         {
             await RefreshTokenAsync(oauth, config, ct);
         }
@@ -100,20 +124,41 @@ public sealed class ClaudeProvider : IProviderRuntime
         // Cached state belongs to the complete access + refresh pair: a different login starts fresh.
         var fingerprint = CredentialFingerprint(oauth);
         var cached = _lastGood?.Fingerprint == fingerprint ? _lastGood : null;
-        if (_rateLimitedUntil is { } until && _now() < until && cached is { } held)
+        if (!validateReplacement && _rateLimitedUntil is { } until && _now() < until && cached is { } held)
             return RateLimitedSnapshot(held.Plan, held.Lines);
 
-        var response = await _http.SendAsync(UsageRequest(new Uri(config.UsageUrl), oauth), ct);
+        if (appOwned && allowRenewal && !validateReplacement && oauth.ExpiresAt is { } expiry &&
+            expiry - _now().ToUnixTimeMilliseconds() <= TimeSpan.FromMinutes(5).TotalMilliseconds)
+        {
+            oauth = await RenewAppCredentialAsync(oauth, ct);
+            return await ProbeAsync(oauth, ct, appOwned: true, allowRenewal: false);
+        }
+
+        var response = await _http.SendAsync(UsageRequest(usageUrl, oauth), ct);
 
         if (response.StatusCode == 429)
         {
-            _rateLimitedUntil = _now().Add(RateLimitCooldown);
-            if (cached is { } stale) return RateLimitedSnapshot(stale.Plan, stale.Lines);
+            if (!validateReplacement)
+            {
+                _rateLimitedUntil = _now().Add(RateLimitCooldown);
+                if (cached is { } stale) return RateLimitedSnapshot(stale.Plan, stale.Lines);
+            }
             return ProviderSnapshot.Error(Provider, "Rate limited, try again later.");
         }
 
         if (response.StatusCode is 401 or 403)
+        {
+            if (appOwned)
+            {
+                if (!validateReplacement && allowRenewal)
+                {
+                    oauth = await RenewAppCredentialAsync(oauth, ct);
+                    return await ProbeAsync(oauth, ct, appOwned: true, allowRenewal: false);
+                }
+                throw new ProviderRequestException("Claude sign-in was not accepted. Sign in again in Customize → Claude.");
+            }
             throw new InvalidOperationException("Session expired. Run `claude` to log in again.");
+        }
         if (!response.IsSuccess)
             throw new InvalidOperationException(ProviderErrors.RequestFailed(response.StatusCode));
         if (response.Json is not { } body)
@@ -121,10 +166,14 @@ public sealed class ClaudeProvider : IProviderRuntime
 
         var mapped = ClaudeUsageMapper.Map(body, oauth);
         var lines = mapped.Lines.ToList();
+        var plan = validateReplacement
+            ? await ResolveLivePlanAsync(oauth, config.UsageUrl, ct, requireProfile: true) ?? mapped.Plan
+            : mapped.Plan;
         // Both run only after the usage call succeeded: the token is known-good, so a failure here costs
         // the resets row or the live plan label, never the bars.
         if (await ResetGrantsLineAsync(oauth, config.UsageUrl, ct) is { } resets) lines.Add(resets);
-        var plan = await ResolveLivePlanAsync(oauth, config.UsageUrl, ct) ?? mapped.Plan;
+        if (!validateReplacement)
+            plan = await ResolveLivePlanAsync(oauth, config.UsageUrl, ct) ?? mapped.Plan;
         _lastGood = (fingerprint, plan, lines);
         _rateLimitedUntil = null;
         return MakeSnapshot(plan, lines.ToList(), mapped.Warning);
@@ -173,10 +222,11 @@ public sealed class ClaudeProvider : IProviderRuntime
 
     /// The plan Anthropic's profile reports for this access token, looked up at most once per token
     /// (a failed lookup included, which keeps the stored plan until the token rotates).
-    private async Task<string?> ResolveLivePlanAsync(ClaudeOAuth oauth, string usageUrl, CancellationToken ct)
+    private async Task<string?> ResolveLivePlanAsync(ClaudeOAuth oauth, string usageUrl, CancellationToken ct,
+        bool requireProfile = false)
     {
         var fingerprint = Hash(oauth.AccessToken);
-        if (_livePlan is { } cached && cached.AccessFingerprint == fingerprint) return cached.Plan;
+        if (!requireProfile && _livePlan is { } cached && cached.AccessFingerprint == fingerprint) return cached.Plan;
         try
         {
             var response = await _http.SendAsync(new AppHttpRequest(
@@ -191,6 +241,9 @@ public sealed class ClaudeProvider : IProviderRuntime
                 TimeoutSeconds: 10), ct);
             if (!response.IsSuccess) throw new InvalidOperationException(ProviderErrors.RequestFailed(response.StatusCode));
             if (response.Json is not { } profile) throw new InvalidOperationException(ProviderErrors.InvalidResponse);
+            if (requireProfile && (profile["account"] is not JsonObject account ||
+                string.IsNullOrWhiteSpace(JsonUtil.String(account["uuid"]))))
+                throw new InvalidOperationException(ProviderErrors.InvalidResponse);
             var plan = ClaudeUsageMapper.FormatLivePlan(profile, oauth);
             if (plan is null) AppLog.Info("claude", "live profile carries no organization plan; showing the stored plan");
             _livePlan = (fingerprint, plan);
@@ -198,6 +251,11 @@ public sealed class ClaudeProvider : IProviderRuntime
         }
         catch (Exception ex)
         {
+            if (requireProfile)
+            {
+                ct.ThrowIfCancellationRequested();
+                throw new ProviderRequestException("Claude didn’t return your profile. Try signing in again.", ex);
+            }
             if (ct.IsCancellationRequested) return null;
             AppLog.Warn("claude", $"live plan lookup failed; showing the stored plan until the token rotates: {ex.Message}");
             _livePlan = (fingerprint, null);
@@ -263,12 +321,7 @@ public sealed class ClaudeProvider : IProviderRuntime
         if (JsonUtil.Number(body["expires_in"]) is { } expiresIn)
             oauth.ExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + expiresIn * 1000;
 
-        // A token refresh is the same login: carry the held reset-grants answer and last-good usage over.
-        var rotatedFingerprint = CredentialFingerprint(oauth);
-        if (_resetGrantsCheck is { } check && check.Fingerprint == previousFingerprint)
-            _resetGrantsCheck = check with { Fingerprint = rotatedFingerprint };
-        if (_lastGood is { } good && good.Fingerprint == previousFingerprint)
-            _lastGood = good with { Fingerprint = rotatedFingerprint };
+        CarryUsageAcrossRenewal(previousFingerprint, oauth);
 
         try
         {

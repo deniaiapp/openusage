@@ -95,7 +95,7 @@ dotnet run --project OpenUsage.App
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
-On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
+On Windows, connect Claude in Customize using your browser. Add OpenRouter API keys in Customize; the app does not read them from the environment.
 
 ## License
 
