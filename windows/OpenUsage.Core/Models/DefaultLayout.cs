@@ -4,7 +4,7 @@ public static class DefaultLayout
 {
     public static readonly string[] MetricIds =
     [
-        "antigravity.geminiPro", "antigravity.geminiWeekly", "antigravity.claude", "antigravity.claudeWeekly",
+        "antigravity.geminiPro", "antigravity.geminiWeekly", "antigravity.argonWeekly", "antigravity.claude", "antigravity.claudeWeekly",
         "antigravity.trend", "antigravity.today", "antigravity.yesterday", "antigravity.last30",
 
         "claude.session", "claude.weekly", "claude.fable",
@@ -51,7 +51,7 @@ public static class DefaultLayout
 
     public static readonly string[] ExpandedMetricIds =
     [
-        "antigravity.claude", "antigravity.claudeWeekly",
+        "antigravity.argonWeekly", "antigravity.claude", "antigravity.claudeWeekly",
         "antigravity.today", "antigravity.yesterday", "antigravity.last30",
         "claude.sonnet", "claude.rateLimitResets",
         "codex.spark", "codex.sparkWeekly",
@@ -74,6 +74,6 @@ public static class DefaultLayout
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
-        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly"])
+        .Except(["antigravity.argonWeekly", "claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly"])
         .ToArray();
 }

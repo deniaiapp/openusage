@@ -38,6 +38,8 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
+Expand Antigravity to see Argon Weekly when the account has a separate Argon quota.
+
 If a manual and scheduled refresh overlap for one provider, OpenUsage shares the same request
 instead of renewing that sign-in twice.
 

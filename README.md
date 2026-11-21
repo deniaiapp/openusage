@@ -99,6 +99,8 @@ On Windows, add OpenRouter API keys in Customize; the app does not read them fro
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
+Antigravity on Windows also shows Argon Weekly when the account has a separate Argon quota.
+
 ## License
 
 [MIT](LICENSE)
