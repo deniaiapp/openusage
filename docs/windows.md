@@ -22,6 +22,8 @@ A fresh install starts with no providers on and opens a welcome screen. It lists
 
 Ollama's local sign-in stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
 
+OpenUsage encrypts its cached Antigravity sign-in for your Windows user. On refresh, it removes the old unencrypted cache only after saving a protected copy.
+
 Provider details that match macOS:
 
 - **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
