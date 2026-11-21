@@ -88,6 +88,8 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
 
+OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App

@@ -22,7 +22,8 @@ public static class OpenRouterUsageMapper
         return lines;
     }
 
-    public static (string? Plan, List<MetricLine> Lines) KeyMetrics(JsonObject data, bool includeSpend = true)
+    public static (string? Plan, List<MetricLine> Lines) KeyMetrics(
+        JsonObject data, bool includeSpend = true, DateTimeOffset? now = null)
     {
         var lines = new List<MetricLine>();
         if (includeSpend)
@@ -32,7 +33,9 @@ public static class OpenRouterUsageMapper
         if (JsonUtil.Number(data["limit"]) is { } limit && limit > 0)
         {
             var remaining = Math.Max(0, JsonUtil.Number(data["limit_remaining"]) ?? 0);
-            lines.Add(MetricLine.Progress("Key Limit", Math.Max(0, limit - remaining), limit, ProgressFormat.Dollars));
+            var (reset, period) = KeyLimitWindow(JsonUtil.String(data["limit_reset"]), now ?? DateTimeOffset.UtcNow);
+            lines.Add(MetricLine.Progress("Key Limit", Math.Max(0, limit - remaining), limit, ProgressFormat.Dollars,
+                reset, period));
         }
         var plan = JsonUtil.Bool(data["is_free_tier"]) switch
         {
@@ -41,6 +44,25 @@ public static class OpenRouterUsageMapper
             _ => null
         };
         return (plan, lines);
+    }
+
+    private static (DateTimeOffset? Reset, long? PeriodMs) KeyLimitWindow(string? interval, DateTimeOffset now)
+    {
+        var midnight = new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero);
+        switch (interval)
+        {
+            case "daily":
+                return (midnight.AddDays(1), MetricPeriod.DayMs);
+            case "weekly":
+                var monday = midnight.AddDays(-(((int)midnight.DayOfWeek + 6) % 7));
+                return (monday.AddDays(7), MetricPeriod.WeekMs);
+            case "monthly":
+                var first = midnight.AddDays(1 - midnight.Day);
+                var next = first.AddMonths(1);
+                return (next, (next - first).Ticks / TimeSpan.TicksPerMillisecond);
+            default:
+                return (null, null);
+        }
     }
 
     internal static MetricLine SpendLine(string label, double amount) =>
