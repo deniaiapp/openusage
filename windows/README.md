@@ -24,6 +24,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 
 | Provider | Windows credential sources |
 |---|---|
+| Amp | Device-code sign-in in Customize (Windows user encryption); does not read the Amp CLI credentials |
 | Claude | `%USERPROFILE%\.claude\.credentials.json`, Windows Credential Manager (`Claude Code-credentials`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | Codex | `%USERPROFILE%\.codex\auth.json`, `%USERPROFILE%\.config\codex\auth.json`, Credential Manager (`cli\|<home hash>.Codex Auth`, the per-home key Codex itself writes) |
 | Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |

@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <Resource Include="Assets\*.svg" />
+    <Resource Include="..\..\Sources\OpenUsage\Resources\ProviderIcons\amp.svg" Link="Assets\amp.svg" />
     <Resource Include="Assets\openusage.ico" />
   </ItemGroup>
 </Project>

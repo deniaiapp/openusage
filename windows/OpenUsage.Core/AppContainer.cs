@@ -119,6 +119,13 @@ public sealed class AppContainer : IDisposable
         }
     }
 
+    public async Task ConnectDeviceProviderAsync(IDeviceSignInProvider provider, Action<DevicePrompt> prompt, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        var snapshot = await provider.ConnectAsync(prompt, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
+
     public void Dispose()
     {
         _cts.Cancel();

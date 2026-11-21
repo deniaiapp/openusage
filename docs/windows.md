@@ -18,7 +18,11 @@ A fresh install starts with no providers on and opens a welcome screen. It lists
 
 Ollama's local sign-in stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
 
-Provider details that match macOS:
+### Amp on Windows
+
+Use **Customize → Amp → Sign In with Amp** to authorize with a device code. Turn on Amp in Customize to show its usage. You do not need the Amp CLI installed. Agent Usage and Amp Free show without expanding the card; Orb Hours and Individual Credits show when expanded. Each row only appears if Amp reports it.
+
+### Provider details that match macOS
 
 - **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
 - **Codex:** Pro 100 / 200 / 500 plan names.

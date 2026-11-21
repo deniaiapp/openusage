@@ -1,4 +1,5 @@
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers.Amp;
 using OpenUsage.Core.Providers.Antigravity;
 using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Codex;
@@ -22,6 +23,7 @@ public static class ProviderCatalog
         new ClaudeProvider(http),
         new CodexProvider(http),
         new CursorProvider(http),
+        new AmpProvider(http, keys),
         new AntigravityProvider(http),
         new CopilotProvider(http),
         new DevinProvider(http),
