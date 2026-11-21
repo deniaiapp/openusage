@@ -1,5 +1,6 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Devin;
+using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -78,6 +79,14 @@ public sealed class AppContainer : IDisposable
         var snapshot = await provider.ConnectAsync(openBrowser, linked.Token);
         if (!Layout.IsProviderEnabled(provider.Provider.Id))
             Layout.SetProviderEnabled(provider.Provider.Id, true);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
+
+    public async Task ConnectCopilotAsync(Action<string> showCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var copilot = Providers.OfType<CopilotProvider>().Single();
+        var snapshot = await copilot.ConnectAsync(showCode, linked.Token);
         Data.ReplaceAccountSnapshot(snapshot);
     }
 

@@ -41,6 +41,7 @@ public partial class DashboardWindow : Window
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
     private DevinSignInView? _devinSignIn;
+    private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
 
     public DashboardWindow(AppContainer container)
@@ -63,7 +64,9 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_devinSignIn?.IsPending != true)
+        if (_copilotLoginEditor?.ResumeIfPending() == true)
+            Render(preserveEditor: true);
+        else if (_devinSignIn?.IsPending != true)
         {
             _screen = DashboardScreen.Dashboard;
             Render();
@@ -164,6 +167,9 @@ public partial class DashboardWindow : Window
                 : $"Next update in {Formatters.CompactDuration(remaining) ?? "soon"} — click to refresh";
 
         TopBar.Visibility = _screen == DashboardScreen.Dashboard ? Visibility.Collapsed : Visibility.Visible;
+        DashboardTabs.Visibility = _screen == DashboardScreen.Dashboard && _container.Layout.VisibleProviders.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         TopTitle.Text = _screen switch
         {
             DashboardScreen.Customize => "Customize",
@@ -172,10 +178,11 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _copilotLoginEditor is not null)) return;
         _accountEditor = null;
         _devinSignIn?.Cancel();
         _devinSignIn = null;
+        _copilotLoginEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -205,6 +212,12 @@ public partial class DashboardWindow : Window
         if (providers.Count == 0)
         {
             ContentHost.Children.Add(EmptyDashboard());
+            return;
+        }
+
+        if (PriorityTab.IsChecked == true)
+        {
+            RenderPriorityBoard();
             return;
         }
 
@@ -301,10 +314,10 @@ public partial class DashboardWindow : Window
         return card;
     }
 
-    private UIElement MetricRow(WidgetDescriptor descriptor)
+    private UIElement MetricRow(WidgetDescriptor descriptor, WidgetData? resolved = null, DateTimeOffset? evaluatedAt = null)
     {
-        var data = _container.Data.Resolve(descriptor);
-        var now = DateTimeOffset.Now;
+        var data = resolved ?? _container.Data.Resolve(descriptor);
+        var now = evaluatedAt ?? DateTimeOffset.Now;
         var panel = new StackPanel { Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4) };
 
         var labelLine = new Grid();
@@ -567,6 +580,12 @@ public partial class DashboardWindow : Window
             _devinSignIn = new DevinSignInView(_container, devin);
             ContentHost.Children.Add(_devinSignIn);
         }
+        if (runtime is OpenUsage.Core.Providers.Copilot.CopilotProvider copilot)
+        {
+            ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
+            _copilotLoginEditor = new CopilotLoginView(_container, copilot, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_copilotLoginEditor);
+        }
         if (runtime is IApiKeyManaging keys)
         {
             ContentHost.Children.Add(SectionTitle("API Key"));
@@ -664,6 +683,8 @@ public partial class DashboardWindow : Window
             _container.Settings.AlwaysShowPacing = value;
             _container.Settings.Save();
         }));
+
+        RenderPriorityLimitSettings();
 
         ContentHost.Children.Add(SectionTitle("Refresh"));
         ContentHost.Children.Add(SettingCombo("Interval", new[] { "1 minute", "5 minutes", "15 minutes" },

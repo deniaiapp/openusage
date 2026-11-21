@@ -88,10 +88,14 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 
 Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
 
+Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App
 ```
+
+In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 ## License
 
