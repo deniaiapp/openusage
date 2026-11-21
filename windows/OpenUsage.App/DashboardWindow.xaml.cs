@@ -16,6 +16,7 @@ using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
 using Brush = System.Windows.Media.Brush;
+using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using CheckBox = System.Windows.Controls.CheckBox;
@@ -314,7 +315,12 @@ public partial class DashboardWindow : Window
     {
         var data = resolved ?? _container.Data.Resolve(descriptor);
         var now = evaluatedAt ?? DateTimeOffset.Now;
-        var panel = new StackPanel { Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4) };
+        var panel = new StackPanel
+        {
+            Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4),
+            Background = Brushes.Transparent,
+            ContextMenu = MetricContextMenu(descriptor)
+        };
 
         var labelLine = new Grid();
         labelLine.ColumnDefinitions.Add(new ColumnDefinition());
@@ -469,19 +475,23 @@ public partial class DashboardWindow : Window
             panel.Children.Add(unbounded);
         }
 
+        return panel;
+    }
+
+    private ContextMenu MetricContextMenu(WidgetDescriptor descriptor)
+    {
         var context = new ContextMenu();
-        context.Items.Add(Item(data.HasData && _container.Layout.IsMetricEnabled(descriptor.Id) ? "Hide" : "Show",
-            () => { _container.Layout.SetMetricEnabled(descriptor.Id, !_container.Layout.IsMetricEnabled(descriptor.Id)); Render(); }));
-        context.Items.Add(Item(_container.Layout.IsPinned(descriptor.Id) ? "Unstar" : "Star for Tray",
-            () => { _container.Layout.TogglePin(descriptor.Id); Render(); }));
+        context.Items.Add(Item("Hide", () => { _container.Layout.SetMetricEnabled(descriptor.Id, false); Render(); }));
+        if (descriptor.Pinnable)
+            context.Items.Add(Item(_container.Layout.IsPinned(descriptor.Id) ? "Unstar" : "Star for Tray",
+                () => { _container.Layout.TogglePin(descriptor.Id); Render(); }));
         context.Items.Add(Item($"Refresh {descriptor.ProviderId}", () => _ = _container.Data.RefreshProviderAsync(descriptor.ProviderId)));
         context.Items.Add(Item("Customize…", () =>
         {
             _detailProviderId = descriptor.ProviderId;
             ShowScreen(DashboardScreen.CustomizeDetail);
         }));
-        panel.ContextMenu = context;
-        return panel;
+        return context;
     }
 
     private void RenderCustomize()
