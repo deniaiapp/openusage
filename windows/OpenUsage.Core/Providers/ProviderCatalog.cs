@@ -20,7 +20,7 @@ public static class ProviderCatalog
     public static IReadOnlyList<IProviderRuntime> Make(AppHttp http, ApiKeyStore keys) =>
     [
         new ClaudeProvider(http),
-        new CodexProvider(http),
+        new CodexProvider(http, keys),
         new CursorProvider(http),
         new AntigravityProvider(http),
         new CopilotProvider(http, keys),

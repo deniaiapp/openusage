@@ -1,11 +1,12 @@
 using System.Net;
 using System.Text;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Codex;
 
-public sealed class CodexProvider : IProviderRuntime
+public sealed partial class CodexProvider : IProviderRuntime
 {
     public const string ClientId = "app_EMoamEEZ73f0CkXaXp7hrann";
     public static readonly Uri RefreshUrl = new("https://auth.openai.com/oauth/token");
@@ -15,7 +16,11 @@ public sealed class CodexProvider : IProviderRuntime
     private readonly CodexAuthStore _auth = new();
     private readonly AppHttp _http;
 
-    public CodexProvider(AppHttp http) => _http = http;
+    public CodexProvider(AppHttp http, ApiKeyStore? keys = null)
+    {
+        _http = http;
+        _keys = keys;
+    }
 
     public Provider Provider { get; } = new(
         "codex", "Codex", "codex",
@@ -36,13 +41,16 @@ public sealed class CodexProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_auth.HasUsableCredentials());
+        Task.FromResult(HasAppCredential || _auth.HasUsableCredentials());
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
+        if (HasAppCredential)
+            return await RefreshAppCredentialAsync(cancellationToken);
+
         var candidates = _auth.LoadCandidates().Where(c => !string.IsNullOrEmpty(c.AccessToken)).ToList();
         if (candidates.Count == 0)
-            return ProviderSnapshot.Error(Provider, "Not logged in. Run `codex` to authenticate.");
+            return ProviderSnapshot.Error(Provider, "Not logged in. Open Customize → Codex to sign in.");
 
         Exception? last = null;
         foreach (var auth in candidates)
@@ -93,12 +101,18 @@ public sealed class CodexProvider : IProviderRuntime
             },
             new InvalidOperationException("Token expired. Run `codex` to log in again."));
 
+        return await MapUsageAsync(usage, auth, ct);
+    }
+
+    private async Task<ProviderSnapshot> MapUsageAsync(AppHttpResponse usage, CodexAuth auth, CancellationToken ct)
+    {
         AppHttpResponse? resets = null;
         try { resets = await SendAuthGet(ResetCreditsUrl, auth, ct, extra: true); }
         catch (Exception ex) { AppLog.Warn("codex", $"reset credits fetch failed: {ex.Message}"); }
 
         var mapped = CodexUsageMapper.Map(usage, resets, DateTimeOffset.Now);
         var lines = mapped.Lines.ToList();
+        ct.ThrowIfCancellationRequested();
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
     }
