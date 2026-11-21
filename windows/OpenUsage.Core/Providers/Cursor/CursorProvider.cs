@@ -102,10 +102,7 @@ public static class CursorUsageMapper
         var totalUsagePercent = totalPercentUsed ?? computedPercent;
         var cycle = BillingCycle(usage);
         var spendLimitUsage = JsonUtil.Object(usage["spendLimitUsage"]);
-        var normalizedPlan = planName?.Trim().ToLowerInvariant() ?? "";
-        var isTeam = normalizedPlan == "team"
-            || JsonUtil.String(spendLimitUsage?["limitType"])?.ToLowerInvariant() == "team"
-            || (JsonUtil.Number(spendLimitUsage?["pooledLimit"]) ?? 0) > 0;
+        var isTeam = IsTeam(planName, spendLimitUsage);
 
         if (isTeam && hasModelPools)
         {
@@ -151,6 +148,21 @@ public static class CursorUsageMapper
 
         return (PlanLabel(planName), lines);
     }
+
+    internal static bool NeedsRequestFallback(JsonObject usage, string? planName)
+    {
+        if (JsonUtil.Bool(usage["enabled"]) == false) return false;
+        if (JsonUtil.Object(usage["planUsage"]) is not { } planUsage) return true;
+        var limit = JsonUtil.Number(planUsage["limit"]);
+        if (limit is not null || HasModelPools(planUsage, limit)) return false;
+        return JsonUtil.Number(planUsage["totalPercentUsed"]) is null
+            || IsTeam(planName, JsonUtil.Object(usage["spendLimitUsage"]));
+    }
+
+    private static bool IsTeam(string? planName, JsonObject? spendLimitUsage) =>
+        string.Equals(planName?.Trim(), "team", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(JsonUtil.String(spendLimitUsage?["limitType"]), "team", StringComparison.OrdinalIgnoreCase)
+        || JsonUtil.Number(spendLimitUsage?["pooledLimit"]) > 0;
 
     private static (double Limit, double Spent) OnDemandBudget(JsonObject usage, bool isTeam)
     {
@@ -248,7 +260,7 @@ public static class CursorUsageMapper
         return (end is { } endMs ? DateTimeOffset.FromUnixTimeMilliseconds((long)endMs) : null, MetricPeriod.MonthMs);
     }
 
-    private static string? PlanLabel(string? name)
+    internal static string? PlanLabel(string? name)
     {
         if (string.IsNullOrWhiteSpace(name)) return null;
         return JsonUtil.TitleCase(name);
@@ -267,6 +279,7 @@ public sealed class CursorProvider : IProviderRuntime
     public static readonly Uri StripeUrl = new("https://cursor.com/api/auth/stripe");
     private static readonly Uri UnifiedCreditsUrl = new("https://api2.cursor.sh/aiserver.v1.DashboardService/GetComplatCreditBalance");
     private static readonly Uri UsageStatusUrl = new("https://cursor.com/api/dashboard/v2/usage-status?scope=user");
+    private static readonly Uri RequestUsageUrl = new("https://cursor.com/api/usage");
 
     private readonly CursorAuthStore _auth = new();
     private readonly AppHttp _http;
@@ -325,7 +338,7 @@ public sealed class CursorProvider : IProviderRuntime
         }
     }
 
-    private async Task<ProviderSnapshot> ProbeAsync(CursorAuthState state, CancellationToken ct)
+    internal async Task<ProviderSnapshot> ProbeAsync(CursorAuthState state, CancellationToken ct)
     {
         var access = state.AccessToken?.Trim();
         if (string.IsNullOrEmpty(access) || NeedsRefresh(access))
@@ -350,33 +363,41 @@ public sealed class CursorProvider : IProviderRuntime
         var plan = await ReadOptionalAsync("plan", () => ConnectPost(PlanUrl, access, ct), ct);
         var planName = JsonUtil.String(JsonUtil.Object(plan?["planInfo"])?["planName"]
             ?? plan?["planName"] ?? plan?["membershipType"]);
-        JsonObject? grok = null;
+        var session = CursorSession.From(access);
+        var isMerged = JsonUtil.Bool(plan?["isMerged"]) == true;
         (string? Plan, List<MetricLine> Lines) mapped;
-        if (JsonUtil.Bool(plan?["isMerged"]) == true)
+        if (CursorUsageMapper.NeedsRequestFallback(usage, planName) && session is not null &&
+            CursorRequestUsageMapper.Map(await ReadDashboardAsync("request-based usage",
+                new UriBuilder(RequestUsageUrl) { Query = $"user={Uri.EscapeDataString(session.UserId)}" }.Uri,
+                session, ct)) is { } requestLines)
+        {
+            mapped = (CursorUsageMapper.PlanLabel(planName), requestLines);
+        }
+        else if (isMerged)
         {
             var balance = await ReadOptionalAsync("credit balance", () => ConnectPost(UnifiedCreditsUrl, access, ct), ct);
-            var status = await ReadDashboardAsync("usage status", UsageStatusUrl, access, ct);
+            var status = await ReadDashboardAsync("usage status", UsageStatusUrl, session, ct);
             mapped = CursorUsageMapper.Map(usage, planName, null, 0, new CursorUnifiedBilling(balance, status));
         }
         else
         {
             var credits = await ReadOptionalAsync("credits", () => ConnectPost(CreditsUrl, access, ct), ct);
-            grok = await ReadOptionalAsync("Grok Bot usage", () => ConnectPost(GrokBotUrl, access, ct), ct);
-            var stripe = await ReadDashboardAsync("Stripe balance", StripeUrl, access, ct);
+            var stripe = await ReadDashboardAsync("Stripe balance", StripeUrl, session, ct);
             mapped = CursorUsageMapper.Map(usage, planName, credits, CursorUsageMapper.StripeBalanceCents(stripe));
         }
 
         var lines = mapped.Lines.ToList();
-        if (CursorUsageMapper.MapGrokBot(grok) is { } grokLine)
+        if (!isMerged && CursorUsageMapper.MapGrokBot(
+                await ReadOptionalAsync("Grok Bot usage", () => ConnectPost(GrokBotUrl, access, ct), ct)) is { } grokLine)
             lines.Add(grokLine);
         await AppendSpendLinesAsync(lines, access, ct);
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
     }
 
-    private async Task<JsonObject?> ReadDashboardAsync(string label, Uri url, string access, CancellationToken ct)
+    private async Task<JsonObject?> ReadDashboardAsync(string label, Uri url, CursorSession? session, CancellationToken ct)
     {
-        if (CursorSession.From(access) is not { } session)
+        if (session is null)
         {
             AppLog.Warn("cursor", $"could not prepare {label} request from the current session");
             return null;

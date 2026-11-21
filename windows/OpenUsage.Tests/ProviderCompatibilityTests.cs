@@ -1,3 +1,5 @@
+using System.Net;
+using System.Text;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Providers.Zai;
@@ -61,6 +63,88 @@ public class ProviderCompatibilityTests
             Assert.IsType<MetricLine.ValuesLine>(Assert.Single(lines, line => line.Label == "On-demand"));
         else
             Assert.DoesNotContain(lines, line => line.Label == "On-demand");
+    }
+
+    [Theory]
+    [InlineData("""{"planUsage":{"limit":1000}}""", false)]
+    [InlineData("""{"planUsage":{"totalPercentUsed":25}}""", false)]
+    [InlineData("""{"planUsage":{"autoPercentUsed":25,"apiPercentUsed":0}}""", false)]
+    [InlineData("""{"enabled":false}""", false)]
+    [InlineData("""{"planUsage":{}}""", true)]
+    [InlineData("""{}""", true)]
+    public void CursorOnlyRequestsTheFallbackWithoutAUsablePlanMeter(string usage, bool expected) =>
+        Assert.Equal(expected, CursorUsageMapper.NeedsRequestFallback(JsonUtil.ParseObject(usage)!, "Pro"));
+
+    [Theory]
+    [InlineData("""{"gpt-4":{"numRequests":120,"maxRequestUsage":500},"startOfMonth":"2026-10-01T00:00:00Z"}""", 120)]
+    [InlineData("""{"gpt-4":{"numRequestsTotal":27,"maxRequestUsage":500}}""", 27)]
+    [InlineData("""{"gpt-4":{"numRequests":0,"numRequestsTotal":27,"maxRequestUsage":500}}""", 0)]
+    public void CursorMapsProviderReportedRequestLimits(string body, double used)
+    {
+        var lines = CursorRequestUsageMapper.Map(JsonUtil.ParseObject(body))!;
+        Assert.Equal(["Total usage", "Requests"], lines.Select(line => line.Label));
+        Assert.All(lines, line =>
+        {
+            var meter = Assert.IsType<MetricLine.ProgressLine>(line);
+            Assert.Equal(used, meter.Used);
+            Assert.Equal(500, meter.Limit);
+            Assert.Equal(ProgressFormat.Count("requests"), meter.Format);
+            Assert.Equal(MetricPeriod.MonthMs, meter.PeriodDurationMs);
+            Assert.Equal(body.Contains("startOfMonth") ? new DateTimeOffset(2026, 10, 31, 0, 0, 0, TimeSpan.Zero) : (DateTimeOffset?)null,
+                meter.ResetsAt);
+        });
+    }
+
+    [Theory]
+    [InlineData("""{"gpt-4":{"numRequests":12}}""")]
+    [InlineData("""{"gpt-4":{"maxRequestUsage":0}}""")]
+    public void CursorDoesNotInventARequestCap(string body) =>
+        Assert.Null(CursorRequestUsageMapper.Map(JsonUtil.ParseObject(body)));
+
+    [Theory]
+    [InlineData("""{"planUsage":{}}""", true)]
+    [InlineData("""{"planUsage":{"totalPercentUsed":42}}""", false)]
+    public async Task CursorReadsTheRequestCapWithTheCurrentDashboardSession(string usage, bool needsFallback)
+    {
+        var expires = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
+        var token = "fixture." + Convert.ToBase64String(Encoding.UTF8.GetBytes(
+            $$"""{"sub":"auth0|test+user","exp":{{expires}}}""")).TrimEnd('=') + ".fixture";
+        var dashboardCalls = 0;
+        using var client = new HttpClient(new CursorFixtureHandler(request =>
+        {
+            if (request.RequestUri == CursorProvider.UsageUrl) return (HttpStatusCode.OK, usage);
+            if (request.RequestUri == CursorProvider.PlanUrl) return (HttpStatusCode.OK, """{"planInfo":{"planName":"Pro"}}""");
+            if (request.RequestUri!.AbsolutePath == "/api/usage")
+            {
+                dashboardCalls++;
+                Assert.Equal("cursor.com", request.RequestUri.Host);
+                Assert.Equal("?user=test%2Buser", request.RequestUri.Query);
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal($"WorkosCursorSessionToken=test+user%3A%3A{token}",
+                    Assert.Single(request.Headers.GetValues("Cookie")));
+                return (HttpStatusCode.OK, """{"gpt-4":{"numRequests":120,"maxRequestUsage":500}}""");
+            }
+            return (HttpStatusCode.NotFound, "{}");
+        }));
+        var history = new CursorUsageHistoryStore(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")));
+        var provider = new CursorProvider(new AppHttp(client), history);
+
+        var snapshot = await provider.ProbeAsync(new CursorAuthState { AccessToken = token }, CancellationToken.None);
+
+        Assert.Equal("Pro", snapshot.Plan);
+        Assert.Equal(needsFallback ? 1 : 0, dashboardCalls);
+        var total = Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Total usage"));
+        Assert.Equal(needsFallback ? 120 : 42, total.Used);
+        Assert.Equal(needsFallback ? 500 : 100, total.Limit);
+    }
+
+    private sealed class CursorFixtureHandler(Func<HttpRequestMessage, (HttpStatusCode Status, string Body)> send) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var (status, body) = send(request);
+            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body) });
+        }
     }
 
     [Theory]

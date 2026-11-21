@@ -95,6 +95,8 @@ dotnet run --project OpenUsage.App
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
+Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
+
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
 ## License
