@@ -81,9 +81,9 @@ public sealed class LocalApiServer : IDisposable
         }
     }
 
-    private object BuildPayload()
+    internal object BuildPayload()
     {
-        var providers = _layout.VisibleProviders.Select(runtime =>
+        var providers = _layout.VisibleProviders.Where(runtime => !runtime.Provider.Id.Contains('@')).Select(runtime =>
         {
             var snapshot = _data.Snapshot(runtime.Provider.Id);
             return new

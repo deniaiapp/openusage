@@ -46,7 +46,7 @@ When an update adds a new default metric, it's turned on once for existing layou
 
 ## Local HTTP API
 
-Loopback-only, same port as macOS: `http://127.0.0.1:6736/v1/limits`.
+Loopback-only, same port as macOS: `http://127.0.0.1:6736/v1/limits`. For additional accounts, use the CLI; their names and usage are not served over HTTP.
 
 ## Command line
 
