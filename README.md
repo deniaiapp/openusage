@@ -97,6 +97,8 @@ In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
+The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
+
 ## License
 
 [MIT](LICENSE)
