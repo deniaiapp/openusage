@@ -35,7 +35,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[Copilot](docs/providers.md#copilot)**: credits, extra usage, chat, completions, organization billing, GitHub Enterprise on GHE.com
 - **[Devin](docs/providers.md#devin)**: daily and weekly quota, extra usage
 - **[Grok](docs/providers.md#grok)**: weekly limit, extra usage
-- **[Muse Code](docs/providers.md#muse-code)**: session, weekly
+- **[Muse Code](docs/providers.md#muse-code)**: session, weekly; on Windows, [connect in Customize](docs/windows.md#muse-code-on-windows)
 - **[Ollama](docs/providers.md#ollama)**: session, weekly, monthly, extra usage, daily usage and tokens
 - **[OpenCode](docs/providers.md#opencode)**: session, weekly, monthly
 - **[OpenRouter](docs/providers.md#openrouter)**: balance, spend, key limit, budget
@@ -81,7 +81,6 @@ How everything works, in [docs/](docs/README.md):
 - [Updates](docs/updates.md)
 - [Proxy](docs/proxy.md)
 - [Privacy](docs/privacy.md), including optional daily provider account counts
-- [Muse Code on Windows](docs/windows.md#muse-code-on-windows): connect in Customize to show Session and Weekly limits
 
 ## Windows
 
