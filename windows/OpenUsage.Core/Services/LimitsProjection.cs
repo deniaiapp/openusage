@@ -71,7 +71,10 @@ internal static class LimitsProjection
         var result = new Dictionary<string, LimitResource>(StringComparer.Ordinal);
         foreach (var descriptor in descriptors)
         {
-            if (!Specs.TryGetValue(descriptor.Id, out var spec)) continue;
+            var scope = descriptor.Id.IndexOf('@');
+            var separator = descriptor.Id.IndexOf('.');
+            var metricId = scope < 0 || separator <= scope ? descriptor.Id : descriptor.Id[..scope] + descriptor.Id[separator..];
+            if (!Specs.TryGetValue(metricId, out var spec)) continue;
             var kind = spec.IsBalance ? "balance" : "consumption";
             switch (snapshot.Line(descriptor.MetricLabel))
             {

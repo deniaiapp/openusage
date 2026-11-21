@@ -20,7 +20,7 @@ On first launch a welcome screen lists the AI tools already signed in on this PC
 
 ## What it reads
 
-Same idea as macOS: credentials already on the machine, no extra login for most providers.
+Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For OpenRouter and Z.ai, use **Additional Accounts** in Customize to connect more than one API key.
 
 | Provider | Windows credential sources |
 |---|---|
@@ -46,7 +46,7 @@ When an update adds a new default metric, it's turned on once for existing layou
 
 ## Local HTTP API
 
-Loopback-only, same port as macOS: `http://127.0.0.1:6736/v1/limits`.
+Loopback-only, same port as macOS: `http://127.0.0.1:6736/v1/limits`. For additional accounts, use the CLI; their names and usage are not served over HTTP.
 
 ## Command line
 
@@ -57,11 +57,11 @@ dotnet run --project OpenUsage.Cli --
 dotnet run --project OpenUsage.Cli -- codex
 ```
 
-The CLI emits `openusage.limits.v2` JSON for enabled providers, using provider IDs such as `codex`
-while the Windows app still has one card per provider. It does not open the app, refresh usage, or read
-credentials. Data becomes stale after ten minutes. The legacy `--force` flag is accepted but ignored.
-Exit codes are 0 for saved data, 2 for invalid arguments or a disabled provider, and 4 when there's
-no saved data yet. The existing HTTP API is unchanged.
+The CLI emits `openusage.limits.v2` JSON for enabled providers. Selecting a provider such as `openrouter`
+includes all its enabled accounts; use an exact `provider@id` from the output to select one account.
+The CLI does not open the app, refresh usage, or read credentials. Data becomes stale after ten minutes.
+The legacy `--force` flag is accepted but ignored. Exit codes are 0 for saved data, 2 for invalid
+arguments or a disabled provider or account, and 4 when there's no saved data yet.
 
 To run the helper directly, run `.\build.ps1` and use the path printed after `CLI:`. Keep it with its
 companion files and on a separate path from the tray app.

@@ -73,19 +73,25 @@ public static class ZaiUsageMapper
     private static MetricLine PercentLine(JsonObject entry, string label, int periodMs)
     {
         var percent = JsonUtil.Number(entry["percentage"]) ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
-        return MetricLine.Progress(label, JsonUtil.ClampPercent(percent), 100, ProgressFormat.Percent,
-            Iso8601.Parse(JsonUtil.String(entry["resetAt"])) ?? Iso8601.Parse(JsonUtil.String(entry["reset_at"])),
-            periodMs);
+        return MetricLine.Progress(label, JsonUtil.ClampPercent(percent), 100, ProgressFormat.Percent, ResetAt(entry), periodMs);
     }
 
     private static MetricLine WebSearchLine(JsonObject entry)
     {
-        var used = JsonUtil.Number(entry["used"]) ?? JsonUtil.Number(entry["usage"]) ?? 0;
-        var limit = JsonUtil.Number(entry["limit"]) ?? JsonUtil.Number(entry["quota"]) ?? 0;
-        if (limit <= 0) throw new InvalidOperationException(ProviderErrors.InvalidResponse);
-        return MetricLine.Progress("Web searches", used, limit, ProgressFormat.Count("searches"),
-            periodDurationMs: MetricPeriod.MonthMs);
+        var legacyLimit = JsonUtil.Number(entry["limit"]) ?? JsonUtil.Number(entry["quota"]);
+        var limit = legacyLimit ?? JsonUtil.Number(entry["usage"]);
+        var used = JsonUtil.Number(entry["currentValue"])
+            ?? (legacyLimit is not null ? JsonUtil.Number(entry["used"]) ?? JsonUtil.Number(entry["usage"]) ?? 0 : null);
+        if (limit is null or < 0 || used is null or < 0)
+            throw new InvalidOperationException(ProviderErrors.InvalidResponse);
+        return MetricLine.Progress("Web searches", used.Value, limit.Value, ProgressFormat.Count("searches"),
+            ResetAt(entry), MetricPeriod.MonthMs);
     }
+
+    private static DateTimeOffset? ResetAt(JsonObject entry) =>
+        JsonUtil.Number(entry["nextResetTime"]) is >= 0 and <= 253402300799999d and var milliseconds
+            ? DateTimeOffset.FromUnixTimeMilliseconds((long)milliseconds)
+            : Iso8601.Parse(JsonUtil.String(entry["resetAt"])) ?? Iso8601.Parse(JsonUtil.String(entry["reset_at"]));
 }
 
 public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
@@ -120,9 +126,11 @@ public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(!string.IsNullOrEmpty(LoadKey()));
 
-    public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
+    public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default) =>
+        RefreshWithKeyAsync(LoadKey(), cancellationToken);
+
+    internal async Task<ProviderSnapshot> RefreshWithKeyAsync(string? key, CancellationToken cancellationToken)
     {
-        var key = LoadKey();
         if (string.IsNullOrEmpty(key))
             return ProviderSnapshot.Error(Provider, "Add a Z.ai API key in Customize.");
         try

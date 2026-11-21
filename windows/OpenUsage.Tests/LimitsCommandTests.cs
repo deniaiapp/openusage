@@ -95,6 +95,49 @@ public sealed class LimitsCommandTests : IDisposable
         Assert.False(provider.Value.GetProperty("stale").GetBoolean());
     }
 
+    [Fact]
+    public async Task LegacyHttpPayloadDoesNotExposeAdditionalAccounts()
+    {
+        var account = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Private label");
+        var settings = AppSettings.Load(Settings);
+        settings.EnabledProviders.UnionWith(["codex", account.CardId]);
+        var layout = new LayoutStore(settings, [new CodexRuntime(), new AccountRuntime(account, 11)]);
+        var store = new WidgetDataStore(layout, settings, Cache);
+        await store.RefreshAllAsync(false);
+        Assert.NotNull(store.Snapshot(account.CardId));
+
+        using var api = new LocalApiServer(store, layout);
+        using var payload = JsonSerializer.SerializeToDocument(api.BuildPayload());
+        var provider = Assert.Single(payload.RootElement.GetProperty("providers").EnumerateArray());
+        Assert.Equal("codex", provider.GetProperty("id").GetString());
+        Assert.DoesNotContain("Private label", payload.RootElement.GetRawText());
+    }
+
+    [Fact]
+    public async Task ProviderFilterIncludesItsAccountsAndAccountFilterIsExact()
+    {
+        var work = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Work");
+        var personal = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Personal");
+        var settings = AppSettings.Load(Settings);
+        settings.EnabledProviders.UnionWith([work.CardId, personal.CardId]);
+        settings.Save();
+        var layout = new LayoutStore(settings, [new AccountRuntime(work, 11), new AccountRuntime(personal, 17)]);
+        var store = new WidgetDataStore(layout, settings, Cache);
+        await store.RefreshAllAsync(false);
+
+        var (code, output, _) = Run(FetchedAt, "openrouter");
+        Assert.Equal(0, code);
+        using var all = JsonDocument.Parse(output);
+        var providers = all.RootElement.GetProperty("providers");
+        Assert.Equal(11, providers.GetProperty(work.CardId).GetProperty("resources").GetProperty("balance").GetProperty("available").GetDouble());
+        Assert.Equal(17, providers.GetProperty(personal.CardId).GetProperty("resources").GetProperty("balance").GetProperty("available").GetDouble());
+        var (singleCode, singleOutput, _) = Run(FetchedAt, work.CardId);
+        Assert.Equal(0, singleCode);
+        using var one = JsonDocument.Parse(singleOutput);
+        Assert.Equal(work.CardId, Assert.Single(one.RootElement.GetProperty("providers").EnumerateObject()).Name);
+        Assert.Equal(2, Run(FetchedAt, "openrouter@../account").Code);
+    }
+
     private (int Code, string Output, string Error) Run(DateTimeOffset now, params string[] args)
     {
         using var output = new StringWriter();
@@ -122,5 +165,15 @@ public sealed class LimitsCommandTests : IDisposable
                 MetricLine.Progress("Session", 42, 100, ProgressFormat.Percent, FetchedAt.AddHours(1), MetricPeriod.SessionMs),
                 MetricLine.Values("Credits", [new MetricValue(5, MetricKind.Dollars), new MetricValue(821, MetricKind.Count, "credits")])
             ], FetchedAt));
+    }
+
+    private sealed class AccountRuntime(ApiKeyAccount account, int balance) : IProviderRuntime
+    {
+        public Provider Provider { get; } = new(account.CardId, $"OpenRouter · {account.Label}", "openrouter");
+        public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
+            [WidgetDescriptor.DollarBalance(Provider.Id + ".balance", Provider, "Balance", "left")];
+        public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken) => Task.FromResult(
+            ProviderSnapshot.Make(Provider, null, [MetricLine.Values("Balance", [new MetricValue(balance, MetricKind.Dollars)])], FetchedAt));
     }
 }
