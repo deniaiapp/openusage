@@ -97,6 +97,8 @@ In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
+Grok on Windows keeps using a still-valid sign-in if an early renewal fails.
+
 ## License
 
 [MIT](LICENSE)
