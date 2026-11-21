@@ -96,6 +96,7 @@ dotnet run --project OpenUsage.App
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
+Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 
 ## License
 
