@@ -95,6 +95,8 @@ dotnet run --project OpenUsage.App
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
+Cursor's usage history shows actual on-demand charges and reported tokens, not estimated spend.
+
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
 ## License

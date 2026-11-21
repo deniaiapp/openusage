@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
-using OpenUsage.Core.Pricing;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Cursor;
@@ -272,18 +271,15 @@ public sealed class CursorProvider : IProviderRuntime
     private readonly AppHttp _http;
     private readonly CursorUsageHistoryStore _historyStore;
     private readonly TimeSpan _spendHistoryBudget;
-    private readonly Func<ModelPricing> _pricing;
 
     public CursorProvider(
         AppHttp http,
         CursorUsageHistoryStore? historyStore = null,
-        TimeSpan? spendHistoryBudget = null,
-        Func<ModelPricing>? pricing = null)
+        TimeSpan? spendHistoryBudget = null)
     {
         _http = http;
         _historyStore = historyStore ?? new CursorUsageHistoryStore();
         _spendHistoryBudget = spendHistoryBudget ?? TimeSpan.FromSeconds(20);
-        _pricing = pricing ?? (() => ModelPricing.Shared);
     }
 
     public Provider Provider { get; } = new(
@@ -415,7 +411,7 @@ public sealed class CursorProvider : IProviderRuntime
             var now = DateTimeOffset.Now;
             var fetcher = new CursorSpendHistoryFetcher(_http, _historyStore, _spendHistoryBudget);
             if (await fetcher.RefreshAsync(session, now, ct) is not { } days) return;
-            CursorSpendMapper.AppendSpendLines(CursorSpendMapper.Rows(days, _pricing()), now, lines);
+            CursorSpendMapper.AppendSpendLines(days, now, lines);
         }
         catch (Exception ex)
         {

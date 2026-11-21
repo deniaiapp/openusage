@@ -5,33 +5,25 @@ using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Cursor;
 
-public sealed record CursorUsageEvent(DateTimeOffset Date, string Model, TokenBreakdown Tokens);
+public sealed record CursorUsageEvent(DateTimeOffset Date, TokenBreakdown Tokens, double ChargedCents);
 
 public sealed record CursorUsageEventsPage(IReadOnlyList<CursorUsageEvent> Events, int TotalCount, int RejectedEventCount);
 
-public sealed record CursorUsageRow(DateTimeOffset Date, string Model, TokenBreakdown Tokens, double? ImputedCostDollars);
-
-/// <summary>One local day of Cursor usage events, summed per model.</summary>
+/// <summary>One local day of Cursor usage events.</summary>
 public sealed class CursorUsageDay
 {
-    public Dictionary<string, TokenBreakdown> Models { get; init; } = new(StringComparer.Ordinal);
+    public long TotalTokens { get; set; }
+    public double ChargedCents { get; set; }
 
     /// <summary>False while the day is still running; such days are refetched on the next refresh.</summary>
     public bool IsComplete { get; init; }
 
-    public void Add(TokenBreakdown tokens, string model)
+    public void Add(CursorUsageEvent item)
     {
-        var existing = Models.GetValueOrDefault(model);
-        Models[model] = new TokenBreakdown(
-            Sum(existing.Input, tokens.Input),
-            Sum(existing.CacheWrite5m, tokens.CacheWrite5m),
-            Sum(existing.CacheWrite1h, tokens.CacheWrite1h),
-            Sum(existing.CacheRead, tokens.CacheRead),
-            Sum(existing.Output, tokens.Output),
-            existing.IsFast || tokens.IsFast);
+        var tokens = item.Tokens;
+        TotalTokens += (long)tokens.Input + tokens.CacheWrite5m + tokens.CacheRead + tokens.Output;
+        ChargedCents += item.ChargedCents;
     }
-
-    private static int Sum(int a, int b) => (int)Math.Min((long)a + b, int.MaxValue);
 }
 
 /// <summary>
@@ -41,12 +33,16 @@ public sealed class CursorUsageDay
 /// </summary>
 public static class CursorUsageEvents
 {
+    private const string ChargeableKind = "USAGE_EVENT_KIND_USAGE_BASED";
+
     public static CursorUsageEventsPage ParsePage(byte[] body)
     {
         var root = JsonUtil.ParseObject(body)
             ?? throw new InvalidDataException("Cursor usage events response is not a JSON object.");
         if (Integer(root["totalUsageEventsCount"]) is not { } total || total < 0 || total > int.MaxValue)
             throw new InvalidDataException("Cursor usage events response has no total count.");
+        if (total == 0 && !root.ContainsKey("usageEventsDisplay"))
+            return new CursorUsageEventsPage([], 0, 0);
         if (root["usageEventsDisplay"] is not JsonArray rawEvents)
             throw new InvalidDataException("Cursor usage events response has no event list.");
 
@@ -56,16 +52,28 @@ public static class CursorUsageEvents
         {
             if (raw is not JsonObject item ||
                 Timestamp(item["timestamp"]) is not { } date ||
-                item["model"] is not JsonValue modelValue ||
-                !modelValue.TryGetValue<string>(out var model) ||
-                Tokens(item["tokenUsage"]) is not { } tokens)
+                Tokens(item["tokenUsage"]) is not { } tokens ||
+                ChargedCents(item) is not { } cents)
             {
                 rejected++;
                 continue;
             }
-            events.Add(new CursorUsageEvent(date, model.Trim(), tokens));
+            events.Add(new CursorUsageEvent(date, tokens, cents));
         }
         return new CursorUsageEventsPage(events, (int)total, rejected);
+    }
+
+    private static double? ChargedCents(JsonObject item)
+    {
+        if (JsonUtil.String(item["kind"]) != ChargeableKind ||
+            item["isChargeable"] is JsonValue flag && flag.TryGetValue<bool>(out var chargeable) && !chargeable ||
+            !item.TryGetPropertyValue("chargedCents", out var raw))
+        {
+            return 0;
+        }
+
+        return raw is JsonValue value && value.TryGetValue<double>(out var cents) &&
+            double.IsFinite(cents) && cents >= 0 ? cents : null;
     }
 
     private static TokenBreakdown? Tokens(JsonNode? raw)

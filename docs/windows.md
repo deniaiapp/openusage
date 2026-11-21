@@ -36,7 +36,9 @@ For Copilot on GitHub.com, open **Customize → Copilot → Sign In with GitHub*
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
 
-Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown; Cursor's provider-reported history is unchanged.
+Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown.
+
+Cursor history shows the on-demand charges and tokens Cursor reports, not a model-price estimate. Included and nonbillable requests contribute tokens but no charge.
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
