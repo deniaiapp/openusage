@@ -39,7 +39,7 @@ Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsa
 Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown; Cursor's provider-reported history is unchanged.
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
-[command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
+[command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed. Its output marks data stale after two configured refresh intervals.
 
 ## Priority Limits
 

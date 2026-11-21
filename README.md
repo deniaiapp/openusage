@@ -95,6 +95,8 @@ dotnet run --project OpenUsage.App
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
+The Windows CLI marks saved limits stale after two refresh intervals.
+
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
 ## License

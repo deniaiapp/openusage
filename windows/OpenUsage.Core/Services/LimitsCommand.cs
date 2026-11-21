@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Services;
@@ -70,8 +71,9 @@ public static class LimitsCommand
         }
         if (force) error.WriteLine("--force is ignored; openusage reads the last fetched usage.");
 
-        var enabled = Read<Settings>(Path.Combine(dataDirectory, "settings.json"), WireOptions, error)?.EnabledProviders
-            ?? [];
+        var settings = Read<Settings>(Path.Combine(dataDirectory, "settings.json"), WireOptions, error);
+        var enabled = settings?.EnabledProviders ?? [];
+        var freshnessSeconds = 2d * AppSettings.NormalizeRefreshInterval(settings?.RefreshIntervalSeconds);
         var selected = enabled.Where(IsSupported)
             .Where(id => filter is null || id == filter || id.StartsWith(filter + "@", StringComparison.Ordinal))
             .ToArray();
@@ -88,7 +90,7 @@ public static class LimitsCommand
             if (snapshot is not { Limits: { } limits } || snapshot.ProviderId != provider || snapshot.RefreshedAt == default)
                 continue;
             var fetchedAt = snapshot.RefreshedAt.ToUniversalTime();
-            var expiresAt = fetchedAt.AddMinutes(10);
+            var expiresAt = fetchedAt.AddSeconds(freshnessSeconds);
             providers[provider] = new(snapshot.DisplayName, snapshot.Plan, fetchedAt, expiresAt, now >= expiresAt, limits);
         }
 
@@ -122,7 +124,7 @@ public static class LimitsCommand
         }
     }
 
-    private sealed record Settings(HashSet<string>? EnabledProviders);
+    private sealed record Settings(HashSet<string>? EnabledProviders, int? RefreshIntervalSeconds);
     private sealed record Snapshot(string ProviderId, string DisplayName, string? Plan, DateTimeOffset RefreshedAt,
         Dictionary<string, LimitResource>? Limits);
     private sealed record WireProvider(string DisplayName, string? Plan, DateTimeOffset FetchedAt,
