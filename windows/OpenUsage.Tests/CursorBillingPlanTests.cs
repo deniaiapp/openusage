@@ -38,6 +38,23 @@ public sealed class CursorBillingPlanTests
     }
 
     [Fact]
+    public async Task FailedPlanReadAfterRenewalKeepsTheSameAccountsMode()
+    {
+        using var handler = new CursorHandler();
+        using var http = new AppHttp(new HttpClient(handler));
+        var provider = Provider(http);
+        Assert.Equal(7, Credits(await provider.ProbeAsync(Login("fixture-first"), default)));
+
+        var expired = Login("fixture-first", minutesUntilExpiry: -1);
+        expired.RefreshToken = "fixture-refresh";
+        handler.RenewedAccessToken = Login("fixture-first", minutesUntilExpiry: 120).AccessToken;
+        handler.Plan = (HttpStatusCode.ServiceUnavailable, "{}");
+        Assert.Equal(8, Credits(await provider.ProbeAsync(expired, default)));
+        Assert.Contains(CursorProvider.RefreshUrl.AbsolutePath, handler.Paths);
+        Assert.DoesNotContain(CursorProvider.CreditsUrl.AbsolutePath, handler.Paths);
+    }
+
+    [Fact]
     public async Task FailedPlanReadOnDifferentSignInDoesNotReusePreviousPlan()
     {
         using var handler = new CursorHandler();
@@ -58,21 +75,22 @@ public sealed class CursorBillingPlanTests
     private static double Credits(ProviderSnapshot snapshot) =>
         Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("Credits")).Items).Number;
 
-    private static CursorAuthState Login(string subject)
+    private static CursorAuthState Login(string subject, int minutesUntilExpiry = 60)
     {
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
             sub = subject,
-            exp = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds()
+            exp = DateTimeOffset.UtcNow.AddMinutes(minutesUntilExpiry).ToUnixTimeSeconds()
         });
         var base64 = Convert.ToBase64String(payload).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-        return new CursorAuthState { AccessToken = $"fixture.{base64}.signature" };
+        return new CursorAuthState { AccessToken = $"fixture.{base64}.signature", Source = "fixture" };
     }
 
     private sealed class CursorHandler : HttpMessageHandler
     {
         private int _unifiedReads;
         public ConcurrentQueue<string> Paths { get; } = new();
+        public string? RenewedAccessToken { get; set; }
         public (HttpStatusCode Status, string Body) Plan { get; set; } =
             (HttpStatusCode.OK, """{"isMerged":true,"planInfo":{"planName":"pro"}}""");
 
@@ -85,6 +103,8 @@ public sealed class CursorBillingPlanTests
                 var p when p == CursorProvider.UsageUrl.AbsolutePath =>
                     (HttpStatusCode.OK, """{"planUsage":{"limit":2000,"totalPercentUsed":15}}"""),
                 var p when p == CursorProvider.PlanUrl.AbsolutePath => Plan,
+                var p when p == CursorProvider.RefreshUrl.AbsolutePath && RenewedAccessToken is { } token =>
+                    (HttpStatusCode.OK, JsonSerializer.Serialize(new { access_token = token })),
                 var p when p.EndsWith("/GetComplatCreditBalance", StringComparison.Ordinal) =>
                     (HttpStatusCode.OK, JsonSerializer.Serialize(new { usdRemainingCents = 600 + 100 * ++_unifiedReads })),
                 var p when p == CursorProvider.CreditsUrl.AbsolutePath =>

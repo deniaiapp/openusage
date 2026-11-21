@@ -276,7 +276,8 @@ public sealed class CursorProvider : IProviderRuntime
     private readonly Func<ModelPricing> _pricing;
     private BillingPlan? _lastBillingPlan;
 
-    private sealed record BillingPlan(string CredentialHash, string? Name, bool IsMerged);
+    private sealed record BillingIdentity(string? Issuer, string? Subject, string? TokenHash);
+    private sealed record BillingPlan(BillingIdentity Identity, string? Name, bool IsMerged);
 
     public CursorProvider(
         AppHttp http,
@@ -379,8 +380,12 @@ public sealed class CursorProvider : IProviderRuntime
 
     private async Task<BillingPlan?> ReadBillingPlanAsync(string access, CancellationToken ct)
     {
-        var credential = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(access)));
-        var previous = _lastBillingPlan is { } cached && cached.CredentialHash == credential ? cached : null;
+        var claims = Jwt.Payload(access);
+        var subject = JsonUtil.String(claims?["sub"]);
+        var identity = !string.IsNullOrWhiteSpace(subject)
+            ? new BillingIdentity(JsonUtil.String(claims?["iss"]), subject, null)
+            : new BillingIdentity(null, null, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(access))));
+        var previous = _lastBillingPlan is { } cached && cached.Identity == identity ? cached : null;
         var response = await ReadOptionalAsync("plan", () => ConnectPost(PlanUrl, access, ct), ct);
         var name = new[]
         {
@@ -395,7 +400,7 @@ public sealed class CursorProvider : IProviderRuntime
             return previous;
         }
         ct.ThrowIfCancellationRequested();
-        return _lastBillingPlan = new(credential, name ?? previous?.Name, merged ?? previous?.IsMerged ?? false);
+        return _lastBillingPlan = new(identity, name ?? previous?.Name, merged ?? previous?.IsMerged ?? false);
     }
 
     private async Task<JsonObject?> ReadDashboardAsync(string label, Uri url, string access, CancellationToken ct)
