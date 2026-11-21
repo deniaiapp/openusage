@@ -35,6 +35,7 @@ internal static class LimitsProjection
         ["cursor.credits"] = DollarBalance("credits"),
         ["antigravity.geminiPro"] = new("geminiSession", "percent"),
         ["antigravity.geminiWeekly"] = new("geminiWeekly", "percent"),
+        ["antigravity.argonWeekly"] = new("argonWeekly", "percent"),
         ["antigravity.claude"] = new("nonGeminiSession", "percent"),
         ["antigravity.claudeWeekly"] = new("nonGeminiWeekly", "percent"),
         ["copilot.premium"] = new("premiumCredits", "credits", ValueKind: MetricKind.Count),

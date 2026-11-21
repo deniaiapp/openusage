@@ -1,6 +1,7 @@
 using System.Net;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Antigravity;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 using Xunit;
@@ -43,6 +44,12 @@ public sealed class AntigravityQuotaClientTests
         Assert.Equal(MetricPeriod.WeekMs, argon.PeriodDurationMs);
         Assert.Equal(DateTimeOffset.Parse("2026-11-27T03:00:00Z"), argon.ResetsAt);
         var provider = new AntigravityProvider(http);
+        var snapshot = ProviderSnapshot.Make(provider.Provider, null, lines, DateTimeOffset.UnixEpoch);
+        var limit = LimitsProjection.Project(snapshot, provider.WidgetDescriptors)["argonWeekly"];
+        Assert.Equal("percent", limit.Unit);
+        Assert.Equal(50d, limit.Used);
+        Assert.Equal(argon.ResetsAt, limit.ResetsAt);
+        Assert.Equal(MetricPeriod.WeekMs / 1000d, limit.WindowSeconds);
         var widget = WidgetData.Resolve(provider.WidgetDescriptors[0], session, WidgetDisplayMode.Remaining, ResetDisplayMode.Relative, false);
         Assert.True(widget.HasResetLabel(DateTimeOffset.Parse("2026-11-21T01:00:00Z")));
     }
