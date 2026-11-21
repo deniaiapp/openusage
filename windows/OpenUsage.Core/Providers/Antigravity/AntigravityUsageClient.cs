@@ -5,19 +5,26 @@ namespace OpenUsage.Core.Providers.Antigravity;
 
 public sealed class AntigravityUsageClient(AppHttp http)
 {
+    internal sealed class TokenRefused : Exception { }
+
     public async Task<(List<MetricLine> Lines, string? Plan)> QuotaAsync(string token, CancellationToken ct = default)
     {
         var buckets = new Dictionary<string, MetricLine>(StringComparer.Ordinal);
         string? plan = null;
+        var refused = false;
+        var accepted = false;
         foreach (var baseUrl in AntigravityProvider.CloudCodeUrls)
         {
             var response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuotaSummary", token, ct);
+            refused |= response is { StatusCode: 401 };
+            accepted |= response is { IsSuccess: true };
             if (response is not { IsSuccess: true, Json: { } body }) continue;
             plan ??= AntigravityUsageMapper.PlanName(body);
             foreach (var line in AntigravityUsageMapper.ParseQuotaSummary(body) ?? [])
                 buckets.TryAdd(line.Label, line);
             if (buckets.Count == AntigravityUsageMapper.SummaryBuckets.Length) break;
         }
+        if (refused && !accepted) throw new TokenRefused();
         return (AntigravityUsageMapper.SummaryBuckets
             .Select(bucket => buckets.GetValueOrDefault(bucket.Label)).OfType<MetricLine>().ToList(), plan);
     }
