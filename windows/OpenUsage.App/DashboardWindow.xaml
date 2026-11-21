@@ -23,6 +23,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -34,12 +35,22 @@
                            HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>
 
-            <ScrollViewer x:Name="Scroller" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+            <StackPanel x:Name="DashboardTabs" Grid.Row="1" Orientation="Horizontal"
+                        Margin="14,10,14,0" Visibility="Collapsed"
+                        AutomationProperties.Name="Dashboard View">
+                <RadioButton x:Name="PriorityTab" Content="Priority" GroupName="DashboardTabs"
+                             Foreground="{DynamicResource TextBrush}" Click="OnDashboardTabChanged"
+                             Margin="0,0,12,0"/>
+                <RadioButton Content="All Usage" GroupName="DashboardTabs" IsChecked="True"
+                             Foreground="{DynamicResource TextBrush}" Click="OnDashboardTabChanged"/>
+            </StackPanel>
+
+            <ScrollViewer x:Name="Scroller" Grid.Row="2" VerticalScrollBarVisibility="Auto"
                           Padding="14,10,14,8">
                 <StackPanel x:Name="ContentHost"/>
             </ScrollViewer>
 
-            <Border Grid.Row="2" Padding="14,8,14,12">
+            <Border Grid.Row="3" Padding="14,8,14,12">
                 <Grid>
                     <StackPanel Orientation="Vertical" HorizontalAlignment="Left" VerticalAlignment="Center">
                         <TextBlock x:Name="VersionLabel" Style="{StaticResource MutedText}"/>
