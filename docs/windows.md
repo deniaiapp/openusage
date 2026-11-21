@@ -12,6 +12,8 @@ Choose **Replace API Key** next to an additional account to change its key witho
 
 In **Customize**, use the up and down arrows to move a provider and its accounts together on the dashboard. The order is saved; **Undo Reorder** restores the previous order during the current session.
 
+If Windows reports that there is no network path, OpenUsage retries that refresh for about a minute before showing an error. Other refresh failures keep the usual backoff.
+
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
 
 A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.

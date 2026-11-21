@@ -91,6 +91,8 @@ cd windows
 dotnet run --project OpenUsage.App
 ```
 
+The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
+
 ## License
 
 [MIT](LICENSE)
