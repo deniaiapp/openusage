@@ -44,7 +44,7 @@ internal static partial class AmpUsageMapper
         void AddFree(double used)
         {
             plan ??= "Free";
-            lines.Add(MetricLine.Progress("Amp Free", used, 100, ProgressFormat.Percent, periodDurationMs: MetricPeriod.DayMs));
+            lines.Add(MetricLine.Progress("Amp Free", used, 100, ProgressFormat.Percent));
         }
     }
 

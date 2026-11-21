@@ -20,7 +20,7 @@ Ollama's local sign-in stays off until you turn it on in Customize — the local
 
 ### Amp on Windows
 
-Use **Customize → Amp → Sign In with Amp** to authorize with a device code. Turn on Amp in Customize to show its usage. You do not need the Amp CLI installed. Agent Usage and Amp Free show without expanding the card; Orb Hours and Individual Credits show when expanded. Each row only appears if Amp reports it.
+Use **Customize → Amp → Sign In with Amp** to authorize with a device code. Turn on Amp in Customize to show its usage. You do not need the Amp CLI installed. Agent Usage and Amp Free show without expanding the card; Orb Hours and Individual Credits show when expanded. Each row only appears if Amp reports it. Amp Free shows the remaining allowance without a countdown because Amp does not report an exact reset time.
 
 ### Provider details that match macOS
 

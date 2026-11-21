@@ -70,11 +70,14 @@ public sealed class AmpProviderTests
         Assert.Equal(4.8, metrics["agentUsage"].Used);
         Assert.Equal(199.5, metrics["orbHours"].Used);
         Assert.Equal(39, metrics["free"].Used);
+        Assert.Null(metrics["free"].WindowSeconds);
         Assert.Equal(57.45, metrics["credits"].Available);
         var billed = Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Orb Hours"));
         Assert.Equal(new DateTimeOffset(2026, 12, 9, 0, 0, 0, TimeSpan.Zero), billed.ResetsAt);
         Assert.Equal(30 * MetricPeriod.DayMs, billed.PeriodDurationMs);
-        Assert.Null(Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Amp Free")).ResetsAt);
+        var free = WidgetData.Resolve(provider.WidgetDescriptors.Single(metric => metric.Id == "amp.free"),
+            snapshot.Line("Amp Free"), WidgetDisplayMode.Remaining, ResetDisplayMode.Relative, false);
+        Assert.Null(free.BoundedTrailingText(Now));
     }
 
     [Theory]
