@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
 using OpenUsage.Core.Services;
@@ -18,6 +19,8 @@ public sealed class ApiKeyAccountTests : IDisposable
     public void Dispose() => Directory.Delete(_directory, recursive: true);
 
     [Theory]
+    [InlineData("ollama", 401, "{}", "rejected")]
+    [InlineData("ollama", 200, """{"included":{}}""", "unavailable")]
     [InlineData("openrouter", 401, "{}", "rejected")]
     [InlineData("openrouter", 200, "{}", "unavailable")]
     [InlineData("zai", 200, """{"success":false,"code":401}""", "rejected")]
@@ -29,8 +32,12 @@ public sealed class ApiKeyAccountTests : IDisposable
         {
             Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
             Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
-            Assert.Equal(provider == "openrouter" ? OpenRouterProvider.KeyUrl : ZaiProvider.QuotaUrl,
-                request.RequestUri);
+            Assert.Equal(provider switch
+            {
+                "ollama" => new Uri(OllamaProvider.Host + OllamaProvider.BalancePath),
+                "openrouter" => OpenRouterProvider.KeyUrl,
+                _ => ZaiProvider.QuotaUrl
+            }, request.RequestUri);
             return (status, body);
         });
         var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
@@ -40,6 +47,86 @@ public sealed class ApiKeyAccountTests : IDisposable
 
         Assert.Contains(message, error.Message);
         Assert.False(File.Exists(AccountFile));
+    }
+
+    [Fact]
+    public async Task OllamaApiKeyRefreshDoesNotUseLocalSignIn()
+    {
+        var requests = new List<(HttpMethod, string)>();
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal("https://ollama.com", request.RequestUri!.GetLeftPart(UriPartial.Authority));
+            Assert.Equal("", request.RequestUri.Query);
+            Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
+            Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+            var path = request.RequestUri.AbsolutePath;
+            requests.Add((request.Method, path));
+            return path == OllamaProvider.BalancePath
+                ? (200, """{"included":{},"purchased":{"balance_usd":5}}""")
+                : (200, """{"Plan":"pro"}""");
+        });
+        var provider = new OllamaProvider(http, () => throw new InvalidOperationException("Local key was consulted"));
+
+        var snapshot = await provider.RefreshWithApiKeyAsync("fixture-key", default);
+
+        Assert.False(snapshot.IsError);
+        Assert.Equal("Pro", snapshot.Plan);
+        Assert.Equal(5, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("Purchased Credits")).Items).Number);
+        Assert.Equal(new[] { (HttpMethod.Get, OllamaProvider.BalancePath), (HttpMethod.Post, OllamaProvider.AccountPath) }, requests);
+    }
+
+    [WindowsFact]
+    public async Task OllamaAccountsReconnectFromTheEncryptedStore()
+    {
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+            return request.RequestUri!.AbsolutePath == OllamaProvider.BalancePath
+                ? (200, """{"included":{"allowance_usd":20,"balance_usd":17}}""")
+                : (200, """{"Plan":"pro"}""");
+        });
+        var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+        var connected = await service.ConnectAsync("ollama", "Work", "fixture-key");
+
+        var loaded = new ApiKeyAccountStore(AccountFile);
+        var restored = Assert.Single(loaded.List());
+        Assert.Equal(connected, restored);
+        var runtime = new ApiKeyAccounts(http, loaded).MakeRuntime(restored, new OllamaProvider(http));
+        var snapshot = await runtime.RefreshAsync();
+        Assert.Equal(restored.CardId, snapshot.ProviderId);
+        Assert.Equal("Ollama · Work", snapshot.DisplayName);
+        Assert.Equal(3, Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Monthly")).Used);
+    }
+
+    [Fact]
+    public async Task OpenRouterDoesNotUseAnEnvironmentKey()
+    {
+        const string variable = "OPENROUTER_API_KEY";
+        var previous = Environment.GetEnvironmentVariable(variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(variable, "fixture-environment-key");
+            using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+            var provider = new OpenRouterProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+            Assert.Null(provider.LoadKey());
+            Assert.False(await provider.HasLocalCredentialsAsync());
+            Assert.True((await provider.RefreshAsync()).IsError);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, previous);
+        }
+    }
+
+    [WindowsFact]
+    public async Task OpenRouterStillUsesTheSavedKeyAfterRestart()
+    {
+        var path = Path.Combine(_directory, "keys.bin");
+        new ApiKeyStore(path).Set("openrouter", "fixture-saved-key");
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new OpenRouterProvider(http, new ApiKeyStore(path));
+        Assert.Equal("fixture-saved-key", provider.LoadKey());
+        Assert.True(await provider.HasLocalCredentialsAsync());
     }
 
     [Fact]
@@ -124,6 +211,39 @@ public sealed class ApiKeyAccountTests : IDisposable
         restored.RegisterAccount(factory.MakeRuntime(work, openRouter), work.ProviderId);
         restored.RegisterAccount(factory.MakeRuntime(personal, openRouter), personal.ProviderId);
         Assert.Equal(new[] { "zai", work.CardId, personal.CardId }, restored.VisibleProviders.Select(p => p.Provider.Id));
+    }
+
+    [Fact]
+    public void MovingProviderGroupsPersistsAndUndoDoesNotRevertVisibility()
+    {
+        using var http = new AppHttp();
+        var keys = new ApiKeyStore();
+        var openRouter = new OpenRouterProvider(http, keys);
+        var zai = new ZaiProvider(http, keys);
+        var work = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Work");
+        var account = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile)).MakeRuntime(work, openRouter);
+        var settingsPath = Path.Combine(_directory, "settings.json");
+        var settings = AppSettings.Load(settingsPath);
+        settings.EnabledProviders.Add("zai");
+        var layout = new LayoutStore(settings, [openRouter, zai]);
+        layout.RegisterAccount(account, work.ProviderId);
+
+        Assert.Equal(["zai", "openrouter"], layout.ProviderGroups().Select(group => group.Key));
+        Assert.False(layout.MoveProviderGroup("zai", -1));
+        Assert.False(layout.CanUndoProviderOrder);
+        Assert.True(layout.MoveProviderGroup("openrouter", -1));
+        Assert.Equal([work.CardId, "zai"], layout.VisibleProviders.Select(p => p.Provider.Id));
+
+        var restored = new LayoutStore(AppSettings.Load(settingsPath), [openRouter, zai]);
+        restored.RegisterAccount(account, work.ProviderId);
+        Assert.Equal([work.CardId, "zai"], restored.VisibleProviders.Select(p => p.Provider.Id));
+        Assert.False(restored.CanUndoProviderOrder);
+
+        layout.SetProviderEnabled(work.CardId, false);
+        Assert.True(layout.UndoProviderOrder());
+        Assert.Equal(["zai", "openrouter"], layout.ProviderGroups().Select(group => group.Key));
+        Assert.False(layout.IsProviderEnabled(work.CardId));
+        Assert.False(layout.UndoProviderOrder());
     }
 
     [Fact]

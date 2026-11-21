@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -11,6 +12,7 @@ using OpenUsage.App.Views;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
 using Brush = System.Windows.Media.Brush;
@@ -37,6 +39,7 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
 
     public DashboardWindow(AppContainer container)
@@ -59,8 +62,13 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        _screen = DashboardScreen.Dashboard;
-        Render();
+        if (_copilotLoginEditor?.ResumeIfPending() == true)
+            Render(preserveEditor: true);
+        else
+        {
+            _screen = DashboardScreen.Dashboard;
+            Render();
+        }
         ShowAnchored();
         Activate();
     }
@@ -157,6 +165,9 @@ public partial class DashboardWindow : Window
                 : $"Next update in {Formatters.CompactDuration(remaining) ?? "soon"} — click to refresh";
 
         TopBar.Visibility = _screen == DashboardScreen.Dashboard ? Visibility.Collapsed : Visibility.Visible;
+        DashboardTabs.Visibility = _screen == DashboardScreen.Dashboard && _container.Layout.VisibleProviders.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         TopTitle.Text = _screen switch
         {
             DashboardScreen.Customize => "Customize",
@@ -165,8 +176,9 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && _accountEditor is not null) return;
+        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null)) return;
         _accountEditor = null;
+        _copilotLoginEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -196,6 +208,12 @@ public partial class DashboardWindow : Window
         if (providers.Count == 0)
         {
             ContentHost.Children.Add(EmptyDashboard());
+            return;
+        }
+
+        if (PriorityTab.IsChecked == true)
+        {
+            RenderPriorityBoard();
             return;
         }
 
@@ -292,10 +310,10 @@ public partial class DashboardWindow : Window
         return card;
     }
 
-    private UIElement MetricRow(WidgetDescriptor descriptor)
+    private UIElement MetricRow(WidgetDescriptor descriptor, WidgetData? resolved = null, DateTimeOffset? evaluatedAt = null)
     {
-        var data = _container.Data.Resolve(descriptor);
-        var now = DateTimeOffset.Now;
+        var data = resolved ?? _container.Data.Resolve(descriptor);
+        var now = evaluatedAt ?? DateTimeOffset.Now;
         var panel = new StackPanel { Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4) };
 
         var labelLine = new Grid();
@@ -468,7 +486,20 @@ public partial class DashboardWindow : Window
 
     private void RenderCustomize()
     {
-        foreach (var runtime in _container.Layout.Providers)
+        var layout = _container.Layout;
+        var undo = new Button
+        {
+            Content = "Undo Reorder", IsEnabled = layout.CanUndoProviderOrder,
+            Style = (Style)FindResource("GhostButton"), HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        undo.Click += (_, _) => { if (layout.UndoProviderOrder()) Render(); };
+        ContentHost.Children.Add(undo);
+
+        var groups = layout.ProviderGroups();
+        var rows = groups.SelectMany((group, groupIndex) => group.Select((runtime, index) =>
+            (Runtime: runtime, GroupIndex: groupIndex, GroupId: group.Key, First: index == 0)));
+        foreach (var (runtime, groupIndex, groupId, first) in rows)
         {
             var provider = runtime.Provider;
             var row = Card();
@@ -502,7 +533,33 @@ public partial class DashboardWindow : Window
                 _detailProviderId = provider.Id;
                 ShowScreen(DashboardScreen.CustomizeDetail);
             };
-            row.Child = button;
+            if (first)
+            {
+                var orderedRow = new DockPanel();
+                var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+                var providerName = runtime.Provider.DisplayName;
+                Button MoveButton(string arrow, string direction, int offset, bool canMove)
+                {
+                    var move = new Button
+                    {
+                        Content = arrow, IsEnabled = canMove, Style = (Style)FindResource("GhostButton"),
+                        Padding = new Thickness(7, 4, 7, 4)
+                    };
+                    AutomationProperties.SetName(move, $"Move {providerName} group {direction}");
+                    move.Click += (_, _) => { if (layout.MoveProviderGroup(groupId, offset)) Render(); };
+                    return move;
+                }
+                actions.Children.Add(MoveButton("↑", "up", -1, groupIndex > 0));
+                actions.Children.Add(MoveButton("↓", "down", 1, groupIndex < groups.Length - 1));
+                DockPanel.SetDock(actions, Dock.Right);
+                orderedRow.Children.Add(actions);
+                orderedRow.Children.Add(button);
+                row.Child = orderedRow;
+            }
+            else
+            {
+                row.Child = button;
+            }
             row.Margin = new Thickness(0, 0, 0, 8);
             row.Opacity = _container.Layout.IsProviderEnabled(provider.Id) ? 1 : 0.55;
             ContentHost.Children.Add(row);
@@ -513,6 +570,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is OpenUsage.Core.Providers.Copilot.CopilotProvider copilot)
+        {
+            ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
+            _copilotLoginEditor = new CopilotLoginView(_container, copilot, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_copilotLoginEditor);
+        }
         if (runtime is IApiKeyManaging keys)
         {
             ContentHost.Children.Add(SectionTitle("API Key"));
@@ -524,13 +587,13 @@ public partial class DashboardWindow : Window
             };
             box.LostFocus += (_, _) => keys.SaveKey(string.IsNullOrWhiteSpace(box.Text) ? null : box.Text.Trim());
             ContentHost.Children.Add(box);
+        }
 
-            if (OpenUsage.Core.Services.ApiKeyAccounts.Supports(runtime.Provider.Id))
-            {
-                ContentHost.Children.Add(SectionTitle("Additional Accounts"));
-                _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
-                ContentHost.Children.Add(_accountEditor);
-            }
+        if (ApiKeyAccounts.Supports(runtime.Provider.Id))
+        {
+            ContentHost.Children.Add(SectionTitle("Additional Accounts"));
+            _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
+            ContentHost.Children.Add(_accountEditor);
         }
 
         ContentHost.Children.Add(SectionTitle("Always Visible"));
@@ -610,6 +673,8 @@ public partial class DashboardWindow : Window
             _container.Settings.AlwaysShowPacing = value;
             _container.Settings.Save();
         }));
+
+        RenderPriorityLimitSettings();
 
         ContentHost.Children.Add(SectionTitle("Refresh"));
         ContentHost.Children.Add(SettingCombo("Interval", new[] { "1 minute", "5 minutes", "15 minutes" },

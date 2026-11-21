@@ -20,18 +20,18 @@ On first launch a welcome screen lists the AI tools already signed in on this PC
 
 ## What it reads
 
-Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For OpenRouter and Z.ai, use **Additional Accounts** in Customize to connect more than one API key.
+Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For Ollama, OpenRouter, and Z.ai, use **Additional Accounts** in Customize to connect API keys.
 
 | Provider | Windows credential sources |
 |---|---|
 | Claude | `%USERPROFILE%\.claude\.credentials.json`, Windows Credential Manager (`Claude Code-credentials`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | Codex | `%USERPROFILE%\.codex\auth.json`, `%USERPROFILE%\.config\codex\auth.json`, Credential Manager (`cli\|<home hash>.Codex Auth`, the per-home key Codex itself writes) |
 | Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |
-| Copilot | `%USERPROFILE%\.config\github-copilot\apps.json`, `gh` `hosts.yml`, Credential Manager (`gh:github.com`) |
+| Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com), or existing editor and GitHub CLI credentials |
 | Grok | `%USERPROFILE%\.grok\auth.json` |
 | OpenCode | `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
 | Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a short-lived cache under `%APPDATA%\OpenUsage\antigravity` |
-| Ollama | `%USERPROFILE%\.ollama\id_ed25519` (opt-in in Customize; never auto-enabled). Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
+| Ollama | API key in Customize, or `%USERPROFILE%\.ollama\id_ed25519` (opt-in; never auto-enabled). Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
 | Devin | `credentials.toml` under `.local\share\devin` / `%LOCALAPPDATA%\devin`, or the Devin/Windsurf `state.vscdb` |
 | OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
 
@@ -39,6 +39,9 @@ Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
 If a manual and scheduled refresh overlap for one provider, OpenUsage shares the same request
 instead of renewing that sign-in twice.
+
+If a refresh fails, OpenUsage keeps that account's last successful data and waits before automatically trying again.
+Other accounts update normally. You can still retry manually.
 
 OpenUsage only refreshes expired Claude and Codex tokens that came from a file, and it keeps the rest of that file intact. Tokens from Credential Manager are left for the CLI to refresh — run `claude` or `codex` once if the card says the session expired.
 
@@ -59,6 +62,7 @@ dotnet run --project OpenUsage.Cli -- codex
 The CLI emits `openusage.limits.v2` JSON for enabled providers. Selecting a provider such as `openrouter`
 includes all its enabled accounts; use an exact `provider@id` from the output to select one account.
 The CLI does not open the app, refresh usage, or read credentials. Data becomes stale after ten minutes.
+Use `--help` for usage or `--version` for the CLI build version; neither reads saved limits.
 The legacy `--force` flag is accepted but ignored. Exit codes are 0 for saved data, 2 for invalid
 arguments or a disabled provider or account, and 4 when there's no saved data yet.
 

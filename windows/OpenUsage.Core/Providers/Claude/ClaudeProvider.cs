@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using OpenUsage.Core.Models;
-using OpenUsage.Core.Providers;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Claude;
@@ -22,7 +21,6 @@ public sealed class ClaudeProvider : IProviderRuntime
     private readonly ClaudeAuthStore _auth;
     private readonly AppHttp _http;
     private readonly Func<DateTimeOffset> _now;
-    private readonly Func<LogUsageScan?> _scan;
     private (string Fingerprint, string? Plan, List<MetricLine> Lines)? _lastGood;
     private DateTimeOffset? _rateLimitedUntil;
     private (string AccessFingerprint, string? Plan)? _livePlan;
@@ -35,13 +33,11 @@ public sealed class ClaudeProvider : IProviderRuntime
     public ClaudeProvider(
         AppHttp http,
         ClaudeAuthStore? auth = null,
-        Func<DateTimeOffset>? now = null,
-        Func<LogUsageScan?>? scan = null)
+        Func<DateTimeOffset>? now = null)
     {
         _http = http;
         _auth = auth ?? new ClaudeAuthStore();
         _now = now ?? (() => DateTimeOffset.Now);
-        _scan = scan ?? (() => ClaudeLogUsageScanner.Scan());
     }
 
     public Provider Provider { get; } = new(
@@ -61,8 +57,7 @@ public sealed class ClaudeProvider : IProviderRuntime
         WidgetDescriptor.Percent("claude.sonnet", Provider, "Sonnet"),
         WidgetDescriptor.BoundedDollars("claude.extra", Provider, "Extra Usage", 100, "Extra usage spent", valueWord: "spent"),
         WidgetDescriptor.Values("claude.rateLimitResets", Provider, ClaudeUsageMapper.RateLimitResetsLabel,
-            valueWord: "available", traySuffix: "resets", showsResetExpiries: true),
-        ..SpendTileMapper.HistoryWidgets(Provider)
+            valueWord: "available", traySuffix: "resets", showsResetExpiries: true)
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
@@ -106,14 +101,14 @@ public sealed class ClaudeProvider : IProviderRuntime
         var fingerprint = CredentialFingerprint(oauth);
         var cached = _lastGood?.Fingerprint == fingerprint ? _lastGood : null;
         if (_rateLimitedUntil is { } until && _now() < until && cached is { } held)
-            return await RateLimitedSnapshotAsync(held.Plan, held.Lines, ct);
+            return RateLimitedSnapshot(held.Plan, held.Lines);
 
         var response = await _http.SendAsync(UsageRequest(new Uri(config.UsageUrl), oauth), ct);
 
         if (response.StatusCode == 429)
         {
             _rateLimitedUntil = _now().Add(RateLimitCooldown);
-            if (cached is { } stale) return await RateLimitedSnapshotAsync(stale.Plan, stale.Lines, ct);
+            if (cached is { } stale) return RateLimitedSnapshot(stale.Plan, stale.Lines);
             return ProviderSnapshot.Error(Provider, "Rate limited, try again later.");
         }
 
@@ -132,25 +127,19 @@ public sealed class ClaudeProvider : IProviderRuntime
         var plan = await ResolveLivePlanAsync(oauth, config.UsageUrl, ct) ?? mapped.Plan;
         _lastGood = (fingerprint, plan, lines);
         _rateLimitedUntil = null;
-        return await WithSpendAsync(plan, lines.ToList(), mapped.Warning, ct);
+        return MakeSnapshot(plan, lines.ToList(), mapped.Warning);
     }
 
-    private Task<ProviderSnapshot> RateLimitedSnapshotAsync(string? plan, List<MetricLine> lines, CancellationToken ct)
+    private ProviderSnapshot RateLimitedSnapshot(string? plan, List<MetricLine> lines)
     {
         var now = _now();
         var held = lines.Select(l => ClaudeUsageMapper.DroppingElapsedResetGrants(l, now)).ToList();
         held.Add(ClaudeUsageMapper.RateLimitedNote);
-        return WithSpendAsync(plan, held, ClaudeUsageMapper.RateLimitedWarning, ct);
+        return MakeSnapshot(plan, held, ClaudeUsageMapper.RateLimitedWarning);
     }
 
-    private async Task<ProviderSnapshot> WithSpendAsync(string? plan, List<MetricLine> lines, string? warning, CancellationToken ct)
+    private ProviderSnapshot MakeSnapshot(string? plan, List<MetricLine> lines, string? warning)
     {
-        await SpendTileMapper.AppendScanAsync(
-            lines,
-            _scan,
-            "From your Claude usage history (estimated)",
-            "claude",
-            ct);
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now, warning);
     }

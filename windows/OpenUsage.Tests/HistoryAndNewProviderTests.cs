@@ -6,6 +6,7 @@ using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Antigravity;
 using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Codex;
+using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Providers.Grok;
 using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Support;
@@ -15,6 +16,27 @@ namespace OpenUsage.Tests;
 
 public class HistoryAndNewProviderTests
 {
+    [Fact]
+    public void LocalLogMetricsAreNotOfferedButProviderHistoryRemains()
+    {
+        using var http = new AppHttp();
+        IProviderRuntime[] providers = [new ClaudeProvider(http), new CodexProvider(http), new GrokProvider(http)];
+        foreach (var runtime in providers)
+        {
+            var id = runtime.Provider.Id;
+            Assert.Contains(runtime.WidgetDescriptors, descriptor => descriptor.Id == $"{id}.weekly");
+            foreach (var metric in new[] { "trend", "today", "yesterday", "last30" })
+            {
+                var metricId = $"{id}.{metric}";
+                Assert.DoesNotContain(runtime.WidgetDescriptors, descriptor => descriptor.Id == metricId);
+                Assert.DoesNotContain(metricId, DefaultLayout.MetricIds);
+                Assert.DoesNotContain(metricId, DefaultLayout.ExpandedMetricIds);
+            }
+        }
+
+        Assert.Contains(new CursorProvider(http).WidgetDescriptors, descriptor => descriptor.Id == "cursor.trend");
+    }
+
     [Fact]
     public void SpendTiles_EmitTodayYesterdayAndTrend()
     {
@@ -30,55 +52,6 @@ public class HistoryAndNewProviderTests
         Assert.Contains(lines, l => l is MetricLine.ValuesLine v && v.Label == "Yesterday");
         Assert.Contains(lines, l => l is MetricLine.ValuesLine v && v.Label == "Last 30 Days");
         Assert.Contains(lines, l => l is MetricLine.ChartLine c && c.Label == "Usage Trend" && c.Points.Count == 31);
-    }
-
-    [Fact]
-    public void ClaudeScanner_ParsesUsageLine()
-    {
-        var line = """
-            {"timestamp":"2026-09-13T12:00:00.000Z","sessionId":"s1","requestId":"r1","version":"1.0.24","message":{"id":"m1","model":"claude-sonnet-4-20250514","usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":10,"speed":"standard"}},"costUSD":0.01}
-            """;
-        var entries = ClaudeLogUsageScanner.ParseLine(line).ToList();
-        Assert.Single(entries);
-        Assert.Equal("claude-sonnet-4-20250514", entries[0].Model);
-        Assert.Equal(100, entries[0].Tokens.Input);
-        Assert.Equal(20, entries[0].Tokens.Output);
-        Assert.Equal(0.01, entries[0].CostUsd);
-    }
-
-    [Fact]
-    public void CodexScanner_ParsesTokenCountAfterTurnContext()
-    {
-        var path = Path.GetTempFileName();
-        File.WriteAllText(path, """
-            {"type":"turn_context","payload":{"model":"gpt-5"}}
-            {"type":"event_msg","timestamp":"2026-09-13T12:00:00Z","payload":{"type":"token_count","info":{"last_token_usage":{"input_tokens":50,"output_tokens":10,"cached_input_tokens":5,"total_tokens":65}}}}
-            """);
-        try
-        {
-            var events = CodexLogUsageScanner.ParseFile(path).ToList();
-            Assert.Single(events);
-            Assert.Equal("gpt-5", events[0].Model);
-            Assert.Equal(50, events[0].Input);
-            Assert.Equal(5, events[0].Cached);
-            Assert.Equal(10, events[0].Output);
-        }
-        finally { File.Delete(path); }
-    }
-
-    [Fact]
-    public void GrokScanner_ParsesCompletedTurn()
-    {
-        var line = """
-            {"params":{"update":{"sessionUpdate":"turn_completed","usage":{"modelUsage":{"grok-4":{"inputTokens":80,"outputTokens":20,"cachedReadTokens":10}}}},"_meta":{"eventId":"e1","agentTimestampMs":1757764800000}}}
-            """;
-        var entries = GrokLogUsageScanner.ParseCompletedTurn(line).ToList();
-        Assert.Single(entries);
-        Assert.Equal("grok-4", entries[0].Model);
-        Assert.Equal(70, entries[0].Tokens.Input);
-        Assert.Equal(10, entries[0].Tokens.CacheRead);
-        Assert.Equal(20, entries[0].Tokens.Output);
-        Assert.Equal("e1", entries[0].EventId);
     }
 
     [Fact]

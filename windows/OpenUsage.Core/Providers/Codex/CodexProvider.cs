@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using OpenUsage.Core.Models;
-using OpenUsage.Core.Providers;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Codex;
@@ -13,21 +12,10 @@ public sealed class CodexProvider : IProviderRuntime
     public static readonly Uri UsageUrl = new("https://chatgpt.com/backend-api/wham/usage");
     public static readonly Uri ResetCreditsUrl = new("https://chatgpt.com/backend-api/wham/rate-limit-reset-credits");
 
-    /// <summary>How long a live refresh waits for local token history before publishing quota (#1338).</summary>
-    public static readonly TimeSpan DefaultHistoryWait = TimeSpan.FromSeconds(5);
-
     private readonly CodexAuthStore _auth = new();
     private readonly AppHttp _http;
-    private readonly CodexHistoryRefresh _history = new();
-    private readonly TimeSpan _historyWait;
-    private readonly Func<LogUsageScan?> _scanHistory;
 
-    public CodexProvider(AppHttp http, TimeSpan? historyWait = null, Func<LogUsageScan?>? scanHistory = null)
-    {
-        _http = http;
-        _historyWait = historyWait ?? DefaultHistoryWait;
-        _scanHistory = scanHistory ?? (() => CodexLogUsageScanner.Scan());
-    }
+    public CodexProvider(AppHttp http) => _http = http;
 
     public Provider Provider { get; } = new(
         "codex", "Codex", "codex",
@@ -44,8 +32,7 @@ public sealed class CodexProvider : IProviderRuntime
         WidgetDescriptor.Percent("codex.sparkWeekly", Provider, "Spark Weekly"),
         WidgetDescriptor.Values("codex.credits", Provider, "Credits"),
         WidgetDescriptor.Values("codex.rateLimitResets", Provider, "Rate Limit Resets",
-            valueWord: "available", traySuffix: "resets", showsResetExpiries: true),
-        ..SpendTileMapper.HistoryWidgets(Provider)
+            valueWord: "available", traySuffix: "resets", showsResetExpiries: true)
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
@@ -112,21 +99,8 @@ public sealed class CodexProvider : IProviderRuntime
 
         var mapped = CodexUsageMapper.Map(usage, resets, DateTimeOffset.Now);
         var lines = mapped.Lines.ToList();
-        var warning = await AppendHistoryAsync(lines, ct);
-        return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now, warning);
-    }
-
-    /// <summary>
-    /// Appends local spend without letting a slow scan hold back live quota. Returns the card's
-    /// warning while a scan is still running; pending history never adds a premature No Data badge.
-    /// </summary>
-    public async Task<string?> AppendHistoryAsync(List<MetricLine> lines, CancellationToken ct)
-    {
-        var history = await _history.ValueAsync(_historyWait, _scanHistory, ct);
-        // A retained scan may be shown on a later day; project Today/Yesterday at collection time.
-        SpendTileMapper.AppendAll(history.Scan, lines, DateTimeOffset.Now, "From your Codex usage history (estimated)");
-        if (history.HasHistory) MetricLine.AppendNoDataIfNeeded(lines);
-        return history.Pending ? CodexHistoryRefresh.PendingWarning : null;
+        MetricLine.AppendNoDataIfNeeded(lines);
+        return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
     }
 
     /// <summary>
