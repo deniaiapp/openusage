@@ -71,6 +71,22 @@ public sealed class LimitsCommandTests : IDisposable
         Assert.Empty(doc.RootElement.GetProperty("providers").EnumerateObject());
     }
 
+    [Theory]
+    [InlineData("--help", "Usage: openusage")]
+    [InlineData("-h", "Usage: openusage")]
+    [InlineData("--version", "openusage fixture-build")]
+    [InlineData("-v", "openusage fixture-build")]
+    public void HelpAndVersionReturnWithoutReadingSettings(string flag, string expected)
+    {
+        File.WriteAllText(Settings, "not JSON");
+
+        var (code, output, error) = Run(FetchedAt, flag);
+        Assert.Equal(0, code);
+        Assert.StartsWith(expected, output);
+        Assert.Empty(error);
+        Assert.Equal(2, Run(FetchedAt, flag, "--unknown").Code);
+    }
+
     [Fact]
     public void CommandReadsOnlyTheLimitsProjectionAndSkipsOldOrDamagedSnapshots()
     {
@@ -107,13 +123,13 @@ public sealed class LimitsCommandTests : IDisposable
         var store = new WidgetDataStore(layout, settings, Cache);
         await store.RefreshAllAsync(false);
 
-        var (code, output, _) = Run(FetchedAt, "openrouter");
+        var (code, output, _) = Run(FetchedAt, "OpenRouter");
         Assert.Equal(0, code);
         using var all = JsonDocument.Parse(output);
         var providers = all.RootElement.GetProperty("providers");
         Assert.Equal(11, providers.GetProperty(work.CardId).GetProperty("resources").GetProperty("balance").GetProperty("available").GetDouble());
         Assert.Equal(17, providers.GetProperty(personal.CardId).GetProperty("resources").GetProperty("balance").GetProperty("available").GetDouble());
-        var (singleCode, singleOutput, _) = Run(FetchedAt, work.CardId);
+        var (singleCode, singleOutput, _) = Run(FetchedAt, work.CardId.ToUpperInvariant());
         Assert.Equal(0, singleCode);
         using var one = JsonDocument.Parse(singleOutput);
         Assert.Equal(work.CardId, Assert.Single(one.RootElement.GetProperty("providers").EnumerateObject()).Name);
@@ -124,7 +140,7 @@ public sealed class LimitsCommandTests : IDisposable
     {
         using var output = new StringWriter();
         using var error = new StringWriter();
-        var code = LimitsCommand.Run(args, _directory, output, error, now);
+        var code = LimitsCommand.Run(args, _directory, output, error, now, "fixture-build");
         return (code, output.ToString(), error.ToString());
     }
 
