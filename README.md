@@ -81,6 +81,7 @@ How everything works, in [docs/](docs/README.md):
 - [Updates](docs/updates.md)
 - [Proxy](docs/proxy.md)
 - [Privacy](docs/privacy.md), including optional daily provider account counts
+- [OpenUsage on Windows](docs/windows.md), including optional usage notifications
 
 ## Windows
 
@@ -90,8 +91,6 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 cd windows
 dotnet run --project OpenUsage.App
 ```
-
-Enable **Usage Notifications** in Windows settings to get alerts about limits you may exhaust or leave unused.
 
 ## License
 
