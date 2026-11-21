@@ -41,6 +41,7 @@ public partial class DashboardWindow : Window
     private ApiKeyAccountsView? _accountEditor;
     private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
+    private DeviceLoginView? _deviceLoginEditor;
 
     public DashboardWindow(AppContainer container)
     {
@@ -57,6 +58,12 @@ public partial class DashboardWindow : Window
 
     public void ToggleFromTray()
     {
+        if (!IsVisible && _deviceLoginEditor?.ResumeIfPending() == true)
+        {
+            ShowAnchored();
+            Activate();
+            return;
+        }
         if (IsVisible)
         {
             Hide();
@@ -157,6 +164,8 @@ public partial class DashboardWindow : Window
 
     private void Render(bool preserveEditor = false)
     {
+        if (preserveEditor && _deviceLoginEditor is not null) return;
+        _deviceLoginEditor = null;
         var remaining = _container.Data.NextRefresh - DateTimeOffset.Now;
         RefreshLabel.Text = _container.Data.IsRefreshing
             ? "Updating…"
@@ -601,6 +610,13 @@ public partial class DashboardWindow : Window
             ContentHost.Children.Add(SectionTitle("Additional Accounts"));
             _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
             ContentHost.Children.Add(_accountEditor);
+        }
+
+        if (runtime is IDeviceSignInProvider deviceProvider)
+        {
+            ContentHost.Children.Add(SectionTitle($"{deviceProvider.SignInAuthority} Sign-In"));
+            _deviceLoginEditor = new DeviceLoginView(_container, deviceProvider, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_deviceLoginEditor);
         }
 
         ContentHost.Children.Add(SectionTitle("Always Visible"));

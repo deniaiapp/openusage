@@ -21,5 +21,6 @@
   <ItemGroup>
     <Resource Include="Assets\*.svg" />
     <Resource Include="Assets\openusage.ico" />
+    <Resource Include="..\..\Sources\OpenUsage\Resources\ProviderIcons\muse.svg" Link="Assets\muse.svg" />
   </ItemGroup>
 </Project>
