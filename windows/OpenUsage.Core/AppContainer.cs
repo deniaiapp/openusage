@@ -1,5 +1,6 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Copilot;
+using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -85,6 +86,14 @@ public sealed class AppContainer : IDisposable
         var account = await _apiKeyAccounts.ConnectAsync(providerId, label, key, _cts.Token);
         RegisterAccount(account);
         _ = Data.RefreshProviderAsync(account.CardId, _cts.Token);
+    }
+
+    public async Task ConnectCursorAsync(Action<Uri> openBrowser, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var cursor = Providers.OfType<CursorProvider>().Single();
+        var snapshot = await cursor.ConnectAsync(openBrowser, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
     }
 
     public void RenameAccount(ApiKeyAccount account, string label)

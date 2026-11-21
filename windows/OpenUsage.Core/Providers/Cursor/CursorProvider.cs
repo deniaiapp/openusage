@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Pricing;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Cursor;
@@ -257,7 +258,7 @@ public static class CursorUsageMapper
 
 public sealed record CursorUnifiedBilling(JsonObject? CreditBalance, JsonObject? UsageStatus);
 
-public sealed class CursorProvider : IProviderRuntime
+public sealed partial class CursorProvider : IProviderRuntime
 {
     public static readonly Uri UsageUrl = new("https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage");
     public static readonly Uri GrokBotUrl = new("https://api2.cursor.sh/aiserver.v1.DashboardService/GetSandUsageStatus");
@@ -278,12 +279,14 @@ public sealed class CursorProvider : IProviderRuntime
         AppHttp http,
         CursorUsageHistoryStore? historyStore = null,
         TimeSpan? spendHistoryBudget = null,
-        Func<ModelPricing>? pricing = null)
+        Func<ModelPricing>? pricing = null,
+        ApiKeyStore? keys = null)
     {
         _http = http;
         _historyStore = historyStore ?? new CursorUsageHistoryStore();
         _spendHistoryBudget = spendHistoryBudget ?? TimeSpan.FromSeconds(20);
         _pricing = pricing ?? (() => ModelPricing.Shared);
+        _keys = keys;
     }
 
     public Provider Provider { get; } = new(
@@ -308,15 +311,17 @@ public sealed class CursorProvider : IProviderRuntime
     public const string CursorUsageHistoryNote = "From your Cursor usage history.";
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_auth.Load() is not null);
+        Task.FromResult(HasAppCredential || _auth.Load() is not null);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var state = _auth.Load();
-        if (state is null)
-            return ProviderSnapshot.Error(Provider, "Not logged in. Sign in via Cursor app or run `agent login`.");
         try
         {
+            if (_keys?.Get(BrowserCredentialKey) is { } saved)
+                return await RefreshBrowserAccountAsync(saved, cancellationToken);
+            var state = _auth.Load();
+            if (state is null)
+                return ProviderSnapshot.Error(Provider, "Sign in to Cursor in Customize.");
             return await ProbeAsync(state, cancellationToken);
         }
         catch (Exception ex)
@@ -325,24 +330,30 @@ public sealed class CursorProvider : IProviderRuntime
         }
     }
 
-    private async Task<ProviderSnapshot> ProbeAsync(CursorAuthState state, CancellationToken ct)
+    private async Task<ProviderSnapshot> ProbeAsync(CursorAuthState state, CancellationToken ct,
+        Action<CursorAuthState>? saveRenewal = null, bool includeHistory = true)
     {
         var access = state.AccessToken?.Trim();
         if (string.IsNullOrEmpty(access) || NeedsRefresh(access))
         {
             if (string.IsNullOrEmpty(state.RefreshToken))
-                throw new InvalidOperationException("Session expired. Sign in via Cursor app or run `agent login`.");
-            access = await RefreshTokenAsync(state, ct);
+                throw SignInExpired(state);
+            try { access = await RefreshTokenAsync(state, saveRenewal, ct); }
+            catch (ProviderRequestException ex) when (state.Source == BrowserCredentialSource &&
+                !ct.IsCancellationRequested && access is not null && Jwt.Expiration(access) > DateTimeOffset.UtcNow)
+            {
+                AppLog.Warn("cursor", $"early token renewal failed; keeping the current token: {ex.Message}");
+            }
         }
 
         var usageResponse = await ConnectPost(UsageUrl, access, ct);
         if (usageResponse.StatusCode is 401 or 403 && !string.IsNullOrEmpty(state.RefreshToken))
         {
-            access = await RefreshTokenAsync(state, ct);
+            access = await RefreshTokenAsync(state, saveRenewal, ct);
             usageResponse = await ConnectPost(UsageUrl, access, ct);
         }
         if (usageResponse.StatusCode is 401 or 403)
-            throw new InvalidOperationException("Session expired. Sign in via Cursor app or run `agent login`.");
+            throw SignInExpired(state);
         if (!usageResponse.IsSuccess)
             throw new InvalidOperationException(ProviderErrors.RequestFailed(usageResponse.StatusCode));
         var usage = usageResponse.Json ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
@@ -369,7 +380,7 @@ public sealed class CursorProvider : IProviderRuntime
         var lines = mapped.Lines.ToList();
         if (CursorUsageMapper.MapGrokBot(grok) is { } grokLine)
             lines.Add(grokLine);
-        await AppendSpendLinesAsync(lines, access, ct);
+        if (includeHistory) await AppendSpendLinesAsync(lines, access, ct);
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
     }
@@ -429,7 +440,7 @@ public sealed class CursorProvider : IProviderRuntime
         return exp is null || exp.Value - DateTimeOffset.UtcNow <= TimeSpan.FromMinutes(5);
     }
 
-    private async Task<string> RefreshTokenAsync(CursorAuthState state, CancellationToken ct)
+    private async Task<string> RefreshTokenAsync(CursorAuthState state, Action<CursorAuthState>? saveRenewal, CancellationToken ct)
     {
         var payload = JsonSerializer.Serialize(new
         {
@@ -441,11 +452,24 @@ public sealed class CursorProvider : IProviderRuntime
             "POST", RefreshUrl,
             new Dictionary<string, string> { ["Content-Type"] = "application/json" },
             Encoding.UTF8.GetBytes(payload), 15), ct);
-        if (!response.IsSuccess)
-            throw new InvalidOperationException("Token expired. Sign in via Cursor app or run `agent login`.");
-        var access = JsonUtil.String(response.Json?["access_token"]);
-        if (string.IsNullOrEmpty(access))
-            throw new InvalidOperationException("Token expired. Sign in via Cursor app or run `agent login`.");
+        var json = response.Json;
+        if (state.Source == BrowserCredentialSource)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (JsonUtil.Bool(json?["shouldLogout"]) == true ||
+                response.StatusCode is 400 or 401 or 403 && JsonUtil.String(json?["error"]) == "invalid_grant")
+                throw SignInExpired(state);
+            if (!response.IsSuccess)
+                throw new ProviderRequestException($"Cursor token renewal failed (HTTP {response.StatusCode}). Try again later.");
+            if (CursorBrowserLogin.Token(json?["access_token"]) is not { } renewed)
+                throw new ProviderRequestException("Cursor returned an invalid sign-in response. Try again later.");
+            state.AccessToken = renewed;
+            state.RefreshToken = CursorBrowserLogin.Token(json?["refresh_token"]) ?? renewed;
+            saveRenewal?.Invoke(state);
+            return renewed;
+        }
+        if (!response.IsSuccess || JsonUtil.String(json?["access_token"]) is not { } access)
+            throw SignInExpired(state);
         try { _auth.SaveAccessToken(access, state); }
         catch (Exception ex) { AppLog.Warn("cursor", $"could not persist rotated token: {ex.Message}"); }
         state.AccessToken = access;

@@ -21,7 +21,7 @@ public static class ProviderCatalog
     [
         new ClaudeProvider(http),
         new CodexProvider(http),
-        new CursorProvider(http),
+        new CursorProvider(http, keys: keys),
         new AntigravityProvider(http),
         new CopilotProvider(http, keys),
         new DevinProvider(http),

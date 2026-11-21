@@ -96,6 +96,7 @@ dotnet run --project OpenUsage.App
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
+Connect Cursor from **Customize → Cursor → Sign In with Cursor**.
 
 ## License
 

@@ -26,7 +26,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 |---|---|
 | Claude | `%USERPROFILE%\.claude\.credentials.json`, Windows Credential Manager (`Claude Code-credentials`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | Codex | `%USERPROFILE%\.codex\auth.json`, `%USERPROFILE%\.config\codex\auth.json`, Credential Manager (`cli\|<home hash>.Codex Auth`, the per-home key Codex itself writes) |
-| Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |
+| Cursor | **Customize → Cursor → Sign In with Cursor**, or existing Cursor sign-ins in `%APPDATA%\Cursor\User\globalStorage\state.vscdb` or Credential Manager (`cursor-access-token`) |
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com), or existing editor and GitHub CLI credentials |
 | Grok | `%USERPROFILE%\.grok\auth.json` |
 | OpenCode | `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |

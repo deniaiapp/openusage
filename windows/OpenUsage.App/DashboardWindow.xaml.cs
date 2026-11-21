@@ -40,6 +40,7 @@ public partial class DashboardWindow : Window
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
     private CopilotLoginView? _copilotLoginEditor;
+    private CursorLoginView? _cursorLoginEditor;
     public event Action<string?>? HotkeyChanged;
 
     public DashboardWindow(AppContainer container)
@@ -62,7 +63,7 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_copilotLoginEditor?.ResumeIfPending() == true)
+        if (_copilotLoginEditor?.ResumeIfPending() == true || _cursorLoginEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
         else
         {
@@ -176,9 +177,10 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null || _cursorLoginEditor is not null)) return;
         _accountEditor = null;
         _copilotLoginEditor = null;
+        _cursorLoginEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -575,6 +577,12 @@ public partial class DashboardWindow : Window
             ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
             _copilotLoginEditor = new CopilotLoginView(_container, copilot, (Style)FindResource("GhostButton"));
             ContentHost.Children.Add(_copilotLoginEditor);
+        }
+        if (runtime is OpenUsage.Core.Providers.Cursor.CursorProvider cursor)
+        {
+            ContentHost.Children.Add(SectionTitle("Cursor Sign-In"));
+            _cursorLoginEditor = new CursorLoginView(_container, cursor, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_cursorLoginEditor);
         }
         if (runtime is IApiKeyManaging keys)
         {
