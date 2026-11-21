@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Stores;
@@ -135,7 +136,8 @@ public sealed class WidgetDataStore
         {
             foreach (var file in Directory.EnumerateFiles(CacheDir, "*.json"))
             {
-                var json = JsonSerializer.Deserialize<CachedSnapshot>(File.ReadAllText(file));
+                using var source = AtomicFile.OpenRead(file);
+                var json = JsonSerializer.Deserialize<CachedSnapshot>(source);
                 if (json is null) continue;
                 var lines = json.Lines.Select(CachedLine.ToMetric).OfType<MetricLine>().ToList();
                 _snapshots[json.ProviderId] = new ProviderSnapshot(
@@ -165,7 +167,9 @@ public sealed class WidgetDataStore
                 Lines = snapshot.Lines.Select(CachedLine.FromMetric).ToList()
             };
             var path = Path.Combine(CacheDir, $"{snapshot.ProviderId}.json");
-            File.WriteAllText(path, JsonSerializer.Serialize(cached, new JsonSerializerOptions { WriteIndented = true }));
+            var descriptors = _layout.Providers.FirstOrDefault(p => p.Provider.Id == snapshot.ProviderId)?.WidgetDescriptors;
+            cached.Limits = LimitsProjection.Project(snapshot, descriptors ?? []);
+            AtomicFile.WriteAllText(path, JsonSerializer.Serialize(cached, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (Exception ex)
         {
@@ -181,6 +185,7 @@ public sealed class WidgetDataStore
         public string? Warning { get; set; }
         public DateTimeOffset RefreshedAt { get; set; }
         public List<CachedLine> Lines { get; set; } = [];
+        public Dictionary<string, LimitResource>? Limits { get; set; }
     }
 
     private sealed class CachedLine

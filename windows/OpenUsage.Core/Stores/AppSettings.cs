@@ -39,7 +39,8 @@ public sealed class AppSettings
         {
             if (File.Exists(file))
             {
-                var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(file), JsonOptions());
+                using var source = AtomicFile.OpenRead(file);
+                var loaded = JsonSerializer.Deserialize<AppSettings>(source, JsonOptions());
                 if (loaded is not null)
                 {
                     loaded.FilePath = path;
@@ -77,7 +78,7 @@ public sealed class AppSettings
     {
         try
         {
-            File.WriteAllText(FilePath ?? AppPaths.SettingsFile, JsonSerializer.Serialize(this, JsonOptions()));
+            AtomicFile.WriteAllText(FilePath ?? AppPaths.SettingsFile, JsonSerializer.Serialize(this, JsonOptions()));
         }
         catch (Exception ex)
         {

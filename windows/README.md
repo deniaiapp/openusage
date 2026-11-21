@@ -45,6 +45,24 @@ When an update adds a new default metric, it's turned on once for existing layou
 
 Loopback-only, same port as macOS: `http://127.0.0.1:6736/v1/limits`.
 
+## Command line
+
+After refreshing a provider with this build of the tray app, read its saved limits:
+
+```powershell
+dotnet run --project OpenUsage.Cli --
+dotnet run --project OpenUsage.Cli -- codex
+```
+
+The CLI emits `openusage.limits.v2` JSON for enabled providers, using provider IDs such as `codex`
+while the Windows app still has one card per provider. It does not open the app, refresh usage, or read
+credentials. Data becomes stale after ten minutes. The legacy `--force` flag is accepted but ignored.
+Exit codes are 0 for saved data, 2 for invalid arguments or a disabled provider, and 4 when there's
+no saved data yet. The existing HTTP API is unchanged.
+
+To run the helper directly, run `.\build.ps1` and use the path printed after `CLI:`. Keep it with its
+companion files and on a separate path from the tray app.
+
 ## Not in this port yet
 
 macOS-only pieces left out on purpose:
