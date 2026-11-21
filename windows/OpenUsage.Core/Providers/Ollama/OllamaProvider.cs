@@ -237,15 +237,30 @@ public sealed class OllamaProvider : IProviderRuntime
         if (key is null)
             return ProviderSnapshot.Error(Provider, "No Ollama key found. Install Ollama and run `ollama signin` to track cloud usage.");
 
+        return await RefreshUsingAsync(
+            (method, path, ct) => SendSigned(method, path, key, ct),
+            "Not signed in to Ollama Cloud. Run `ollama signin` to see usage.",
+            cancellationToken);
+    }
+
+    internal Task<ProviderSnapshot> RefreshWithApiKeyAsync(string key, CancellationToken ct) =>
+        RefreshUsingAsync((method, path, token) => _http.SendAsync(ApiKeyRequest(method, path, key), token),
+            "Ollama rejected this API key. Replace it in Customize.", ct);
+
+    private async Task<ProviderSnapshot> RefreshUsingAsync(
+        Func<string, string, CancellationToken, Task<AppHttpResponse>> send,
+        string authError,
+        CancellationToken ct)
+    {
         AppHttpResponse balance;
-        try { balance = await Send("GET", BalancePath, key, cancellationToken); }
+        try { balance = await send("GET", BalancePath, ct); }
         catch (Exception ex)
         {
             AppLog.Warn("ollama", $"balance request failed: {ex.Message}");
             return ProviderSnapshot.Error(Provider, ProviderErrors.ConnectionFailed);
         }
         if (balance.StatusCode is 401 or 403)
-            return ProviderSnapshot.Error(Provider, "Not signed in to Ollama Cloud. Run `ollama signin` to see usage.");
+            return ProviderSnapshot.Error(Provider, authError);
         if (!balance.IsSuccess)
             return ProviderSnapshot.Error(Provider, ProviderErrors.RequestFailed(balance.StatusCode));
 
@@ -255,7 +270,7 @@ public sealed class OllamaProvider : IProviderRuntime
         string? warning = null;
         try
         {
-            var account = await Send("POST", AccountPath, key, cancellationToken);
+            var account = await send("POST", AccountPath, ct);
             if (account.IsSuccess)
             {
                 accountBody = account.Text;
@@ -305,7 +320,14 @@ public sealed class OllamaProvider : IProviderRuntime
         }
     }
 
-    private Task<AppHttpResponse> Send(string method, string path, OllamaSigningKey key, CancellationToken ct)
+    internal static AppHttpRequest ApiKeyRequest(string method, string path, string key) =>
+        new(method, new Uri(Host + path), new Dictionary<string, string>
+        {
+            ["Authorization"] = $"Bearer {key}",
+            ["Accept"] = "application/json"
+        }, TimeoutSeconds: 15);
+
+    private Task<AppHttpResponse> SendSigned(string method, string path, OllamaSigningKey key, CancellationToken ct)
     {
         // The signature covers the exact URI that goes on the wire, so the header and URL share one string.
         var requestUri = $"{path}?ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
