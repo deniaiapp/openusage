@@ -334,7 +334,7 @@ public sealed partial class CursorProvider : IProviderRuntime
         Action<CursorAuthState>? saveRenewal = null, bool includeHistory = true)
     {
         var access = state.AccessToken?.Trim();
-        if (string.IsNullOrEmpty(access) || NeedsRefresh(access))
+        if (string.IsNullOrEmpty(access) || NeedsRefresh(access, state.Source == BrowserCredentialSource))
         {
             if (string.IsNullOrEmpty(state.RefreshToken))
                 throw SignInExpired(state);
@@ -434,10 +434,11 @@ public sealed partial class CursorProvider : IProviderRuntime
         }
     }
 
-    private static bool NeedsRefresh(string accessToken)
+    private static bool NeedsRefresh(string accessToken, bool appCredential)
     {
         var exp = Jwt.Expiration(accessToken);
-        return exp is null || exp.Value - DateTimeOffset.UtcNow <= TimeSpan.FromMinutes(5);
+        var lead = appCredential ? BrowserRenewalLead : TimeSpan.FromMinutes(5);
+        return exp is null || exp.Value - DateTimeOffset.UtcNow <= lead;
     }
 
     private async Task<string> RefreshTokenAsync(CursorAuthState state, Action<CursorAuthState>? saveRenewal, CancellationToken ct)

@@ -9,6 +9,7 @@ public sealed partial class CursorProvider
 {
     internal const string BrowserCredentialSource = "openusage";
     private const string BrowserCredentialKey = "cursor.browser-sign-in";
+    private static readonly TimeSpan BrowserRenewalLead = TimeSpan.FromDays(7);
     private readonly object _browserCredentialGate = new();
     private readonly ApiKeyStore? _keys;
 

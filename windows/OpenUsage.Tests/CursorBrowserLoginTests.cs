@@ -92,13 +92,13 @@ public sealed class CursorBrowserLoginTests
     }
 
     [WindowsFact]
-    public async Task RotatedAccessTokenBecomesTheNextRefreshToken()
+    public async Task BrowserTokenRenewsWellBeforeExpiryAndBecomesTheNextRefreshToken()
     {
         var directory = Directory.CreateTempSubdirectory();
         try
         {
             var path = Path.Combine(directory.FullName, "keys.bin");
-            var existing = Account("first", DateTimeOffset.UtcNow.AddMinutes(-1));
+            var existing = Account("first", DateTimeOffset.UtcNow.AddDays(2));
             var renewed = Account("renewed", DateTimeOffset.UtcNow.AddDays(30));
             var attempts = 0;
             var rejectUsageOnce = false;
