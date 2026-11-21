@@ -95,6 +95,8 @@ dotnet run --project OpenUsage.App
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
+On Windows, Copilot and Antigravity distinguish provider throttling from sign-in failures and empty usage.
+
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
 ## License
