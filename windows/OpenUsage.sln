@@ -6,6 +6,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenUsage.App", "OpenUsage.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenUsage.Tests", "OpenUsage.Tests\OpenUsage.Tests.csproj", "{A1B2C3D4-E5F6-7890-ABCD-333333333333}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenUsage.Cli", "OpenUsage.Cli\OpenUsage.Cli.csproj", "{EE4CBC9C-6C75-41C1-B82C-F854279A926B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{A1B2C3D4-E5F6-7890-ABCD-333333333333}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-333333333333}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1B2C3D4-E5F6-7890-ABCD-333333333333}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE4CBC9C-6C75-41C1-B82C-F854279A926B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE4CBC9C-6C75-41C1-B82C-F854279A926B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE4CBC9C-6C75-41C1-B82C-F854279A926B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE4CBC9C-6C75-41C1-B82C-F854279A926B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
