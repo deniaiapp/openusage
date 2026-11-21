@@ -52,7 +52,7 @@ public static class ZaiUsageMapper
         return lines;
     }
 
-    private static (bool Session, int PeriodMs)? ClassifyTokenWindow(JsonObject entry)
+    private static (bool Session, long PeriodMs)? ClassifyTokenWindow(JsonObject entry)
     {
         var unit = JsonUtil.Number(entry["unit"]) ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
         var number = JsonUtil.Number(entry["number"]) ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
@@ -66,14 +66,20 @@ public static class ZaiUsageMapper
             _ => (double?)null
         };
         if (unitMs is null) return null;
-        var periodMs = (int)(unitMs.Value * number);
-        return periodMs < 24 * 60 * 60 * 1000 ? (true, periodMs) : (false, periodMs);
+        var duration = unitMs.Value * number;
+        if (!(duration >= 1 && duration < TimeSpan.MaxValue.TotalMilliseconds))
+            throw new InvalidOperationException(ProviderErrors.InvalidResponse);
+        var periodMs = (long)duration;
+        return (periodMs < MetricPeriod.DayMs, periodMs);
     }
 
-    private static MetricLine PercentLine(JsonObject entry, string label, int periodMs)
+    private static MetricLine PercentLine(JsonObject entry, string label, long periodMs)
     {
         var percent = JsonUtil.Number(entry["percentage"]) ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
-        return MetricLine.Progress(label, JsonUtil.ClampPercent(percent), 100, ProgressFormat.Percent, ResetAt(entry), periodMs);
+        var reset = ResetAt(entry);
+        if (reset is { } end && periodMs > Math.Min(end.Ticks, end.UtcTicks) / TimeSpan.TicksPerMillisecond)
+            throw new InvalidOperationException(ProviderErrors.InvalidResponse);
+        return MetricLine.Progress(label, JsonUtil.ClampPercent(percent), 100, ProgressFormat.Percent, reset, periodMs);
     }
 
     private static MetricLine WebSearchLine(JsonObject entry)
