@@ -79,7 +79,9 @@ public sealed class LayoutStore
             var order = _settings.ProviderOrder.ToList();
             foreach (var other in providers.Where(p => p.Provider.Id != id))
                 if (!order.Contains(other.Provider.Id)) order.Add(other.Provider.Id);
-            var last = order.FindLastIndex(candidate => IsProviderGroup(candidate) && IsProviderEnabled(candidate));
+            var last = order.FindLastIndex(candidate => candidate == providerId
+                ? IsProviderEnabled(candidate)
+                : IsProviderGroup(candidate));
             order.Insert(last < 0 ? order.Count : last + 1, id);
             _settings.ProviderOrder = order;
             SeedAccountLayout(runtime, providerId);

@@ -127,6 +127,26 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [Fact]
+    public void HiddenAdditionalAccountKeepsItsPlaceWhenAnotherAccountIsAdded()
+    {
+        using var http = new AppHttp();
+        var openRouter = new OpenRouterProvider(http, new ApiKeyStore());
+        var factory = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+        var work = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Work");
+        var personal = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Personal");
+        var settings = AppSettings.Load(Path.Combine(_directory, "settings.json"));
+        var layout = new LayoutStore(settings, [openRouter]);
+        layout.SetProviderEnabled("openrouter", true);
+
+        layout.RegisterAccount(factory.MakeRuntime(work, openRouter), work.ProviderId);
+        layout.SetProviderEnabled(work.CardId, false);
+        layout.RegisterAccount(factory.MakeRuntime(personal, openRouter), personal.ProviderId);
+        Assert.Equal(new[] { "openrouter", personal.CardId }, layout.VisibleProviders.Select(p => p.Provider.Id));
+        layout.SetProviderEnabled(work.CardId, true);
+        Assert.Equal(new[] { "openrouter", work.CardId, personal.CardId }, layout.VisibleProviders.Select(p => p.Provider.Id));
+    }
+
+    [Fact]
     public async Task UnsupportedProvidersAndInvalidInputNeverMakeARequest()
     {
         using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected request"));
