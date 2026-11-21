@@ -88,6 +88,47 @@ public sealed class ProviderRefreshTests
     }
 
     [Fact]
+    public async Task StalledProviderKeepsLastGoodAndDoesNotHoldUpAnotherRefresh()
+    {
+        using var release = new ManualResetEventSlim();
+        var directory = Directory.CreateTempSubdirectory("openusage-refresh-timeout-");
+        try
+        {
+            var slow = new StallingRuntime(release);
+            var other = new BackoffRuntime("codex");
+            var settings = AppSettings.Load(Path.Combine(directory.FullName, "settings.json"));
+            settings.EnabledProviders.UnionWith(["claude", "codex"]);
+            var data = new WidgetDataStore(new LayoutStore(settings, [slow, other]), settings, directory.FullName,
+                refreshTimeout: TimeSpan.FromSeconds(1));
+
+            await data.RefreshAllAsync(false);
+            var lastGood = Assert.IsType<ProviderSnapshot>(data.Snapshot("claude"));
+            var sweep = data.RefreshAllAsync(true);
+            await slow.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await sweep.WaitAsync(TimeSpan.FromSeconds(5));
+            await slow.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.False(data.IsRefreshing);
+            Assert.Equal(2, other.Calls);
+            Assert.Equal("Provider refresh timed out. Try again later.", data.ProviderError("claude"));
+            Assert.Same(lastGood, data.Snapshot("claude"));
+
+            await data.RefreshAllAsync(true).WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(3, other.Calls);
+            Assert.Equal(2, slow.Calls);
+
+            release.Set();
+            await slow.Exited.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Same(lastGood, data.Snapshot("claude"));
+        }
+        finally
+        {
+            release.Set();
+            directory.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task InvalidatedAccountRefreshCannotPublishOrEvictItsReplacement()
     {
         var directory = Directory.CreateTempSubdirectory("openusage-refresh-");
@@ -103,8 +144,10 @@ public sealed class ProviderRefreshTests
             var data = new WidgetDataStore(layout, settings, directory.FullName);
 
             var oldRefresh = data.RefreshProviderAsync(cardId);
+            await runtime.FirstStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
             data.ForgetAccount(cardId);
             var newRefresh = data.RefreshProviderAsync(cardId);
+            await runtime.SecondStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
             Assert.Equal(2, runtime.Calls);
 
             previous.SetResult(ProviderSnapshot.Make(runtime.Provider, "Old Key", [], DateTimeOffset.UtcNow));
@@ -149,9 +192,44 @@ public sealed class ProviderRefreshTests
     {
         public Provider Provider { get; } = new($"openrouter@{Guid.NewGuid():N}", "OpenRouter", "OpenRouter");
         public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => [];
+        public TaskCompletionSource FirstStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource SecondStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int Calls { get; private set; }
         public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken) => Task.FromResult(true);
-        public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken) => ++Calls == 1 ? previous : replacement;
+        public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken)
+        {
+            if (++Calls == 1)
+            {
+                FirstStarted.TrySetResult();
+                return previous;
+            }
+            SecondStarted.TrySetResult();
+            return replacement;
+        }
+    }
+
+    private sealed class StallingRuntime(ManualResetEventSlim release) : IProviderRuntime
+    {
+        private int _calls;
+        public Provider Provider { get; } = new("claude", "Claude", "claude");
+        public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => [];
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Cancelled { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Exited { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int Calls => Volatile.Read(ref _calls);
+        public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _calls) == 1)
+                return Task.FromResult(ProviderSnapshot.Make(Provider, "Current", [], DateTimeOffset.UtcNow));
+
+            using var registration = cancellationToken.Register(() => Cancelled.TrySetResult());
+            Started.TrySetResult();
+            release.Wait(TimeSpan.FromSeconds(10));
+            Exited.TrySetResult();
+            return Task.FromResult(ProviderSnapshot.Make(Provider, "Late", [], DateTimeOffset.UtcNow));
+        }
     }
 
     private sealed class Runtime(string id) : IProviderRuntime
