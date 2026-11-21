@@ -35,7 +35,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[Copilot](docs/providers.md#copilot)**: credits, extra usage, chat, completions, organization billing, GitHub Enterprise on GHE.com
 - **[Devin](docs/providers.md#devin)**: daily and weekly quota, extra usage
 - **[Grok](docs/providers.md#grok)**: weekly limit, extra usage
-- **[Muse Code](docs/providers.md#muse-code)**: session, weekly
+- **[Muse Code](docs/providers.md#muse-code)**: session, weekly; on Windows, [connect in Customize](docs/windows.md#muse-code-on-windows)
 - **[Ollama](docs/providers.md#ollama)**: session, weekly, monthly, extra usage, daily usage and tokens
 - **[OpenCode](docs/providers.md#opencode)**: session, weekly, monthly
 - **[OpenRouter](docs/providers.md#openrouter)**: balance, spend, key limit, budget
@@ -98,6 +98,8 @@ In **Settings → Priority Limits**, choose when low limits turn orange or red.
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
+
+The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
 ## License
 
