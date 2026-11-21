@@ -7,16 +7,15 @@ namespace OpenUsage.Core.Stores;
 
 public sealed class ApiKeyStore
 {
-    private readonly Dictionary<string, string> _keys = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, string> _keys = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _gate = new();
-    private readonly string? _filePath;
-    private string FilePath => _filePath ?? AppPaths.KeysFile;
+    private readonly string _path;
 
-    public ApiKeyStore() : this(null) { }
+    public ApiKeyStore() : this(AppPaths.KeysFile) { }
 
-    internal ApiKeyStore(string? filePath)
+    internal ApiKeyStore(string path)
     {
-        _filePath = filePath;
+        _path = path;
         Load();
     }
 
@@ -29,9 +28,11 @@ public sealed class ApiKeyStore
     {
         lock (_gate)
         {
-            if (string.IsNullOrWhiteSpace(key)) _keys.Remove(providerId);
-            else _keys[providerId] = key.Trim();
-            Save();
+            var next = new Dictionary<string, string>(_keys, StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(key)) next.Remove(providerId);
+            else next[providerId] = key.Trim();
+            Save(next);
+            _keys = next;
         }
     }
 
@@ -39,9 +40,8 @@ public sealed class ApiKeyStore
     {
         try
         {
-            var path = FilePath;
-            if (!File.Exists(path)) return;
-            var protectedBytes = File.ReadAllBytes(path);
+            if (!File.Exists(_path)) return;
+            var protectedBytes = File.ReadAllBytes(_path);
             var json = Encoding.UTF8.GetString(ProtectedData.Unprotect(protectedBytes, null, DataProtectionScope.CurrentUser));
             var parsed = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
             if (parsed is null) return;
@@ -54,10 +54,10 @@ public sealed class ApiKeyStore
         }
     }
 
-    private void Save()
+    private void Save(Dictionary<string, string> keys)
     {
-        var json = JsonSerializer.Serialize(_keys);
+        var json = JsonSerializer.Serialize(keys);
         var protectedBytes = ProtectedData.Protect(Encoding.UTF8.GetBytes(json), null, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(FilePath, protectedBytes);
+        AtomicFile.WriteAllBytes(_path, protectedBytes);
     }
 }

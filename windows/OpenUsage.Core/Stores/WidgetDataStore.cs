@@ -45,6 +45,16 @@ public sealed class WidgetDataStore
     public string? ProviderError(string providerId) =>
         _errors.TryGetValue(providerId, out var message) ? message : null;
 
+    internal void ReplaceAccountSnapshot(ProviderSnapshot snapshot)
+    {
+        lock (_gate)
+        {
+            _providerRefreshes.TryRemove(snapshot.ProviderId, out _);
+            ApplySnapshot(snapshot.ProviderId, snapshot);
+        }
+        Raise();
+    }
+
     internal void ForgetAccount(string cardId)
     {
         lock (_gate)
@@ -77,8 +87,11 @@ public sealed class WidgetDataStore
     public WidgetData Resolve(WidgetDescriptor descriptor)
     {
         var line = Snapshot(descriptor.ProviderId)?.Line(descriptor.MetricLabel);
-        return WidgetData.Resolve(descriptor, line, _settings.MeterStyle, _settings.ResetDisplay, _settings.AlwaysShowPacing);
+        return WidgetData.Resolve(descriptor, line, _settings.MeterStyle, _settings.ResetDisplay,
+            _settings.AlwaysShowPacing, _settings.PriorityLimits);
     }
+
+    public void NotifyPresentationChanged() => Raise();
 
     public IReadOnlyList<(WidgetDescriptor Descriptor, WidgetData Data)> PinnedTiles()
     {
