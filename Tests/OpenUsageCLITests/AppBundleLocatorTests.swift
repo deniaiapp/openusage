@@ -22,21 +22,18 @@ final class AppBundleLocatorTests: XCTestCase {
         try FileManager.default.createSymbolicLink(at: symlink, withDestinationURL: helper)
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let located = AppBundleLocator.locate(
-            executableURL: symlink,
-            environment: [:]
-        )
+        let located = AppBundleLocator.locate(executableURL: symlink)
 
         XCTAssertEqual(located.bundleIdentifier, "com.example.openusage")
         XCTAssertEqual(located.version, "1.2.3")
     }
 
-    func testEnvironmentCanSelectDefaultsSuiteForDevelopment() {
+    func testBareExecutableFallsBackToTheReleaseBundle() {
         let located = AppBundleLocator.locate(
-            executableURL: URL(fileURLWithPath: "/tmp/openusage"),
-            environment: ["OPENUSAGE_DEFAULTS_SUITE": "com.example.dev"]
+            executableURL: FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString)/openusage")
         )
 
-        XCTAssertEqual(located.bundleIdentifier, "com.example.dev")
+        XCTAssertEqual(located.bundleIdentifier, "com.robinebers.openusage")
+        XCTAssertNil(located.version)
     }
 }
