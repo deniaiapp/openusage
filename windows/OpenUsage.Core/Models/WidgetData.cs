@@ -18,6 +18,7 @@ public sealed record WidgetData
     public WidgetDisplayMode DisplayMode { get; set; } = WidgetDisplayMode.Used;
     public ResetDisplayMode ResetDisplayMode { get; set; } = ResetDisplayMode.Relative;
     public bool AlwaysShowPacing { get; set; }
+    public PriorityLimits PriorityLimits { get; init; } = PriorityLimits.Default;
     public DateTimeOffset? ResetsAt { get; init; }
     public IReadOnlyList<DateTimeOffset> ExpiriesAt { get; init; } = [];
     public bool ShowsResetExpiries { get; init; }
@@ -188,35 +189,39 @@ public sealed record WidgetData
         if (!HasData || Limit is not { } limit || limit <= 0)
             return HasData ? MeterState.Level(MeterSeverity.Normal) : MeterState.NoData;
         if (RoundedAtDisplayPrecision(limit - Used) <= 0) return MeterState.Spent;
-        if (IsFreshSessionWindow(now)) return AbsoluteLevelState(Used, limit);
+        var severity = PriorityLimits.Severity((limit - Used) / limit);
+        if (IsFreshSessionWindow(now)) return MeterState.Level(severity);
 
-        if (HasData && Limit is { } ctxLimit && ctxLimit > 0 && ResetsAt is { } resetsAt && PeriodDurationMs is { } periodMs and > 0)
+        if (ResetsAt is { } resetsAt && PeriodDurationMs is { } periodMs and > 0)
         {
             var period = TimeSpan.FromMilliseconds(periodMs);
-            var result = Pace.Evaluate(Used, ctxLimit, resetsAt, period, now);
+            var result = Pace.Evaluate(Used, limit, resetsAt, period, now);
             if (result is { } pace)
             {
                 switch (pace.Status)
                 {
                     case Pace.Status.Ahead:
-                        return MeterState.Healthy(pace.ProjectedUsage / ctxLimit);
+                        return MeterState.Healthy(pace.ProjectedUsage / limit) with { Severity = severity };
                     case Pace.Status.OnTrack:
-                        if (Used / ctxLimit < 0.05) return AbsoluteLevelState(Used, limit);
-                        var projected = pace.ProjectedUsage / ctxLimit;
+                        if (Used / limit < 0.05) return MeterState.Level(severity);
+                        var projected = pace.ProjectedUsage / limit;
                         var spare = (int)Math.Round((1 - projected) * 100);
                         if (spare < 1) return MeterState.RunningOut(null, projected);
-                        return MeterState.CloseToLimit($"~{spare}% spare", projected);
+                        return MeterState.CloseToLimit($"~{spare}% spare", projected) with
+                        {
+                            Severity = severity == MeterSeverity.Critical ? severity : MeterSeverity.Warning
+                        };
                     case Pace.Status.Behind:
-                        if (Used / ctxLimit < 0.05) return AbsoluteLevelState(Used, limit);
-                        var etaSeconds = Pace.SecondsToRunOut(Used, ctxLimit, resetsAt, period, now);
+                        if (Used / limit < 0.05) return MeterState.Level(severity);
+                        var etaSeconds = Pace.SecondsToRunOut(Used, limit, resetsAt, period, now);
                         string? eta = null;
                         if (etaSeconds is { } seconds)
                             eta = Formatters.DeadlineLabel("Limit", now.Add(seconds), ResetDisplayMode, now);
-                        return MeterState.RunningOut(eta, pace.ProjectedUsage / ctxLimit);
+                        return MeterState.RunningOut(eta, pace.ProjectedUsage / limit);
                 }
             }
         }
-        return AbsoluteLevelState(Used, limit);
+        return MeterState.Level(severity);
     }
 
     public double? PaceTick(MeterState state, DateTimeOffset now)
@@ -241,14 +246,6 @@ public sealed record WidgetData
         return DisplayMode == WidgetDisplayMode.Remaining ? 1 - elapsedFraction : elapsedFraction;
     }
 
-    private static MeterState AbsoluteLevelState(double used, double limit)
-    {
-        var percentUsed = Math.Round(Math.Clamp(used / limit, 0, 1) * 100);
-        if (percentUsed >= 90) return MeterState.Level(MeterSeverity.Critical);
-        if (percentUsed >= 80) return MeterState.Level(MeterSeverity.Warning);
-        return MeterState.Level(MeterSeverity.Normal);
-    }
-
     private double RoundedAtDisplayPrecision(double value) => Kind switch
     {
         MetricKind.Percent => Math.Round(value),
@@ -261,13 +258,15 @@ public sealed record WidgetData
         MetricLine? line,
         WidgetDisplayMode displayMode,
         ResetDisplayMode resetDisplayMode,
-        bool alwaysShowPacing)
+        bool alwaysShowPacing,
+        PriorityLimits? priorityLimits = null)
     {
         var sample = descriptor.Sample with
         {
             DisplayMode = displayMode,
             ResetDisplayMode = resetDisplayMode,
             AlwaysShowPacing = alwaysShowPacing,
+            PriorityLimits = priorityLimits ?? PriorityLimits.Default,
             HasData = false
         };
         if (line is null) return sample;
