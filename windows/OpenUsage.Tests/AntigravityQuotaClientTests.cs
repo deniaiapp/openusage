@@ -84,10 +84,10 @@ public sealed class AntigravityQuotaClientTests
             using var http = new AppHttp();
             var provider = new AntigravityProvider(http);
             var layout = new LayoutStore(AppSettings.Load(Path.Combine(directory.FullName, "settings.json")), [provider]);
-            var titles = layout.VisibleMetrics(provider.Provider.Id, true).Select(d => d.Title).ToList();
-            var weekly = titles.IndexOf("Weekly");
-            Assert.True(weekly >= 0);
-            Assert.Equal("Argon Weekly", titles[weekly + 1]);
+            Assert.Equal(["Session", "Weekly", "Usage Trend"],
+                layout.VisibleMetrics(provider.Provider.Id, includeOnDemand: false).Select(d => d.Title));
+            Assert.Equal(["Session", "Weekly", "Argon Weekly", "Claude", "Claude Weekly", "Usage Trend"],
+                layout.VisibleMetrics(provider.Provider.Id, includeOnDemand: true).Take(6).Select(d => d.Title));
             Assert.True(layout.IsOnDemand(AntigravityMetric.ArgonWeeklyId));
             Assert.False(layout.IsPinned(AntigravityMetric.ArgonWeeklyId));
         }

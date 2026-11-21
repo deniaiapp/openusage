@@ -24,7 +24,7 @@ A fresh install starts with no providers on and opens a welcome screen. It lists
 
 Ollama's local sign-in stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
 
-When Antigravity reports a separate Argon quota, expand its card to see **Argon Weekly** after **Weekly**. The CLI reports it as `argonWeekly`.
+Expanded provider cards keep the configured metric order instead of grouping On Demand rows beneath Always Visible rows. When Antigravity reports a separate Argon quota, expand its card to see **Argon Weekly** immediately after **Weekly**. The CLI reports it as `argonWeekly`.
 
 ### Muse Code on Windows
 
