@@ -165,6 +165,9 @@ public partial class DashboardWindow : Window
                 : $"Next update in {Formatters.CompactDuration(remaining) ?? "soon"} — click to refresh";
 
         TopBar.Visibility = _screen == DashboardScreen.Dashboard ? Visibility.Collapsed : Visibility.Visible;
+        DashboardTabs.Visibility = _screen == DashboardScreen.Dashboard && _container.Layout.VisibleProviders.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         TopTitle.Text = _screen switch
         {
             DashboardScreen.Customize => "Customize",
@@ -205,6 +208,12 @@ public partial class DashboardWindow : Window
         if (providers.Count == 0)
         {
             ContentHost.Children.Add(EmptyDashboard());
+            return;
+        }
+
+        if (PriorityTab.IsChecked == true)
+        {
+            RenderPriorityBoard();
             return;
         }
 
@@ -301,10 +310,10 @@ public partial class DashboardWindow : Window
         return card;
     }
 
-    private UIElement MetricRow(WidgetDescriptor descriptor)
+    private UIElement MetricRow(WidgetDescriptor descriptor, WidgetData? resolved = null, DateTimeOffset? evaluatedAt = null)
     {
-        var data = _container.Data.Resolve(descriptor);
-        var now = DateTimeOffset.Now;
+        var data = resolved ?? _container.Data.Resolve(descriptor);
+        var now = evaluatedAt ?? DateTimeOffset.Now;
         var panel = new StackPanel { Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4) };
 
         var labelLine = new Grid();
