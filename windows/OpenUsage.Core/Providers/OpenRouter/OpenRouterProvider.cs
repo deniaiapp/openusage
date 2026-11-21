@@ -7,6 +7,9 @@ namespace OpenUsage.Core.Providers.OpenRouter;
 
 public static class OpenRouterUsageMapper
 {
+    internal static readonly (string Field, string Label)[] SpendPeriods =
+        [("usage_daily", "Today"), ("usage_weekly", "This Week"), ("usage_monthly", "This Month")];
+
     public static List<MetricLine> CreditsLines(JsonObject data)
     {
         if (JsonUtil.Number(data["total_usage"]) is not { } totalUsage) return [];
@@ -19,12 +22,13 @@ public static class OpenRouterUsageMapper
         return lines;
     }
 
-    public static (string? Plan, List<MetricLine> Lines) KeyMetrics(JsonObject data)
+    public static (string? Plan, List<MetricLine> Lines) KeyMetrics(JsonObject data, bool includeSpend = true)
     {
         var lines = new List<MetricLine>();
-        AppendSpend(data["usage_daily"], "Today", lines);
-        AppendSpend(data["usage_weekly"], "This Week", lines);
-        AppendSpend(data["usage_monthly"], "This Month", lines);
+        if (includeSpend)
+            foreach (var (field, label) in SpendPeriods)
+                if (JsonUtil.Number(data[field]) is { } amount)
+                    lines.Add(SpendLine(label, amount));
         if (JsonUtil.Number(data["limit"]) is { } limit && limit > 0)
         {
             var remaining = Math.Max(0, JsonUtil.Number(data["limit_remaining"]) ?? 0);
@@ -39,15 +43,14 @@ public static class OpenRouterUsageMapper
         return (plan, lines);
     }
 
-    private static void AppendSpend(JsonNode? value, string label, List<MetricLine> lines)
-    {
-        if (JsonUtil.Number(value) is not { } amount) return;
-        lines.Add(MetricLine.Values(label, [new MetricValue(Math.Max(0, amount), MetricKind.Dollars)]));
-    }
+    internal static MetricLine SpendLine(string label, double amount) =>
+        MetricLine.Values(label, [new MetricValue(Math.Max(0, amount), MetricKind.Dollars)]);
 }
 
 public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
 {
+    private const int KeysPageSize = 100;
+    private const int MaxKeysPages = 50;
     public static readonly Uri CreditsUrl = new("https://openrouter.ai/api/v1/credits");
     public static readonly Uri KeyUrl = new("https://openrouter.ai/api/v1/key");
 
@@ -111,9 +114,11 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
                 var keyResponse = await GetAsync(KeyUrl, key, cancellationToken);
                 if (keyResponse.IsSuccess && JsonUtil.Object(keyResponse.Json?["data"]) is { } data)
                 {
-                    var metrics = OpenRouterUsageMapper.KeyMetrics(data);
+                    var management = requireKey && JsonUtil.Bool(data["is_management_key"]) == true;
+                    var metrics = OpenRouterUsageMapper.KeyMetrics(data, includeSpend: !management);
                     plan = metrics.Plan;
                     lines.AddRange(metrics.Lines);
+                    if (management) lines.AddRange(await ListedKeysSpendAsync(key, cancellationToken));
                 }
                 else if (requireKey)
                 {
@@ -132,6 +137,35 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
         {
             return ProviderSnapshot.Error(Provider, ex);
         }
+    }
+
+    private async Task<IEnumerable<MetricLine>> ListedKeysSpendAsync(string key, CancellationToken ct)
+    {
+        var periods = OpenRouterUsageMapper.SpendPeriods;
+        var totals = new double[periods.Length];
+        for (var page = 0; page < MaxKeysPages; page++)
+        {
+            var url = new Uri($"https://openrouter.ai/api/v1/keys?include_disabled=true&include_expired=true&offset={page * KeysPageSize}");
+            var response = await GetAsync(url, key, ct);
+            if (!response.IsSuccess)
+                throw new ProviderRequestException(ProviderErrors.RequestFailed(response.StatusCode));
+            if (JsonUtil.Array(response.Json?["data"]) is not { } keys)
+                throw new ProviderRequestException(ProviderErrors.InvalidResponse);
+            foreach (var keyData in keys)
+            {
+                if (keyData is not JsonObject entry)
+                    throw new ProviderRequestException(ProviderErrors.InvalidResponse);
+                for (var i = 0; i < periods.Length; i++)
+                {
+                    if (JsonUtil.Number(entry[periods[i].Field]) is not { } amount)
+                        throw new ProviderRequestException(ProviderErrors.InvalidResponse);
+                    totals[i] += Math.Max(0, amount);
+                }
+            }
+            if (keys.Count < KeysPageSize)
+                return periods.Select((period, i) => OpenRouterUsageMapper.SpendLine(period.Label, totals[i]));
+        }
+        throw new ProviderRequestException(ProviderErrors.InvalidResponse);
     }
 
     private Task<AppHttpResponse> GetAsync(Uri url, string apiKey, CancellationToken ct) =>

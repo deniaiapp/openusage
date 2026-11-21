@@ -43,6 +43,34 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [Fact]
+    public async Task OpenRouterManagementAccountTotalsAllListedKeys()
+    {
+        var firstPage = Enumerable.Repeat(new { usage_daily = 1, usage_weekly = 2, usage_monthly = 3 }, 100);
+        var secondPage = new[] { new { usage_daily = 4, usage_weekly = 5, usage_monthly = 6 } };
+        var queries = new List<string>();
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal("fixture-management-key", request.Headers.Authorization?.Parameter);
+            if (request.RequestUri == OpenRouterProvider.CreditsUrl) return (403, "{}");
+            if (request.RequestUri == OpenRouterProvider.KeyUrl)
+                return (200, """{"data":{"is_management_key":true,"usage_daily":0,"usage_weekly":0,"usage_monthly":0}}""");
+
+            Assert.Equal("/api/v1/keys", request.RequestUri!.AbsolutePath);
+            var query = request.RequestUri.Query;
+            queries.Add(query);
+            var keys = query.EndsWith("=0", StringComparison.Ordinal) ? firstPage : secondPage;
+            return (200, JsonSerializer.Serialize(new { data = keys }));
+        });
+        var provider = new OpenRouterProvider(http, new ApiKeyStore());
+        var snapshot = await provider.RefreshWithKeyAsync("fixture-management-key", default, requireKey: true);
+        Assert.False(snapshot.IsError);
+        Assert.Equal(new[] { "?include_disabled=true&include_expired=true&offset=0", "?include_disabled=true&include_expired=true&offset=100" }, queries);
+        Assert.Equal(104, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("Today")).Items).Number);
+        Assert.Equal(205, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("This Week")).Items).Number);
+        Assert.Equal(306, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("This Month")).Items).Number);
+    }
+
+    [Fact]
     public void AddingAccountsKeepsEachProviderGroupTogetherAcrossRestart()
     {
         using var http = new AppHttp();
