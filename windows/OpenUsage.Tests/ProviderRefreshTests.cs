@@ -41,6 +41,53 @@ public sealed class ProviderRefreshTests
     }
 
     [Fact]
+    public async Task ScheduledBackoffIsPerProviderAndResetsOnSuccess()
+    {
+        var directory = Directory.CreateTempSubdirectory("openusage-refresh-backoff-");
+        try
+        {
+            var clock = new ManualClock();
+            var codex = new BackoffRuntime("codex");
+            var claude = new BackoffRuntime("claude");
+            var settings = AppSettings.Load(Path.Combine(directory.FullName, "settings.json"));
+            settings.EnabledProviders.UnionWith(["codex", "claude"]);
+            var store = new WidgetDataStore(new LayoutStore(settings, [codex, claude]), settings, directory.FullName, clock);
+
+            await store.RefreshAllAsync(false);
+            var lastGood = store.Snapshot("codex");
+            Assert.NotNull(lastGood);
+            codex.Fail = true;
+            await store.RefreshAllAsync(false);
+            clock.Advance(TimeSpan.FromMinutes(4));
+            await store.RefreshAllAsync(false);
+            Assert.Equal(2, codex.Calls);
+            Assert.Equal(3, claude.Calls);
+            Assert.Same(lastGood, store.Snapshot("codex"));
+
+            clock.Advance(TimeSpan.FromMinutes(1));
+            await store.RefreshAllAsync(false);
+            Assert.Equal(3, codex.Calls);
+            clock.Advance(TimeSpan.FromMinutes(5));
+            await store.RefreshAllAsync(false);
+            Assert.Equal(3, codex.Calls);
+
+            codex.Fail = false;
+            await store.RefreshAllAsync(true);
+            Assert.Equal(4, codex.Calls);
+            Assert.Null(store.ProviderError("codex"));
+            await store.RefreshAllAsync(false);
+            Assert.Equal(5, codex.Calls);
+
+            codex.Fail = true;
+            await store.RefreshProviderAsync("codex");
+            clock.Advance(TimeSpan.FromMinutes(5));
+            await store.RefreshAllAsync(false);
+            Assert.Equal(7, codex.Calls);
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
+    [Fact]
     public async Task InvalidatedAccountRefreshCannotPublishOrEvictItsReplacement()
     {
         var directory = Directory.CreateTempSubdirectory("openusage-refresh-");
@@ -72,6 +119,30 @@ public sealed class ProviderRefreshTests
             Assert.Equal("New Key", data.Snapshot(cardId)?.Plan);
         }
         finally { directory.Delete(recursive: true); }
+    }
+
+    private sealed class ManualClock : TimeProvider
+    {
+        private DateTimeOffset _now = DateTimeOffset.UnixEpoch;
+        public override DateTimeOffset GetUtcNow() => _now;
+        public void Advance(TimeSpan elapsed) => _now += elapsed;
+    }
+
+    private sealed class BackoffRuntime(string id) : IProviderRuntime
+    {
+        public Provider Provider { get; } = new(id, id, id);
+        public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => [];
+        public int Calls { get; private set; }
+        public bool Fail { get; set; }
+        public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken) => Task.FromResult(true);
+
+        public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken)
+        {
+            Calls++;
+            return Task.FromResult(Fail
+                ? ProviderSnapshot.Error(Provider, "Fixture refresh failed.")
+                : ProviderSnapshot.Make(Provider, null, [], DateTimeOffset.UtcNow));
+        }
     }
 
     private sealed class AccountRuntime(Task<ProviderSnapshot> previous, Task<ProviderSnapshot> replacement) : IProviderRuntime
