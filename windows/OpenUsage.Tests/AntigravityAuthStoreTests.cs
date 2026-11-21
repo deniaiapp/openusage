@@ -60,7 +60,8 @@ public sealed class AntigravityAuthStoreTests : IDisposable
         CreateStore().SaveCache("fixture-renewed", "fixture-new-refresh", null);
 
         Assert.Equal(Fixture, File.ReadAllText(LegacyPath));
-        Assert.Equal(LegacyPath, Assert.Single(Directory.EnumerateFiles(Path.GetDirectoryName(LegacyPath)!)));
+        var onlyFile = Assert.Single(Directory.EnumerateFiles(Path.GetDirectoryName(LegacyPath)!));
+        Assert.Equal(Path.GetFileName(LegacyPath), Path.GetFileName(onlyFile));
     }
 
     private AntigravityAuthStore CreateStore() => new(_directory, _ => null);
