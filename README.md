@@ -86,6 +86,8 @@ How everything works, in [docs/](docs/README.md):
 
 A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). It is not a substitute for the macOS app; see [OpenUsage on Windows](docs/windows.md).
 
+On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
+
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
 
 ```powershell
@@ -94,8 +96,6 @@ dotnet run --project OpenUsage.App
 ```
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
-
-On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
