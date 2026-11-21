@@ -54,11 +54,11 @@ dotnet run --project OpenUsage.Cli --
 dotnet run --project OpenUsage.Cli -- codex
 ```
 
-The CLI emits `openusage.limits.v2` JSON for enabled providers, using provider IDs such as `codex`
-while the Windows app still has one card per provider. It does not open the app, refresh usage, or read
-credentials. Data becomes stale after ten minutes. The legacy `--force` flag is accepted but ignored.
-Exit codes are 0 for saved data, 2 for invalid arguments or a disabled provider, and 4 when there's
-no saved data yet. The existing HTTP API is unchanged.
+The CLI emits `openusage.limits.v2` JSON for enabled providers. Selecting a provider such as `openrouter`
+includes all its enabled accounts; use an exact `provider@id` from the output to select one account.
+The CLI does not open the app, refresh usage, or read credentials. Data becomes stale after ten minutes.
+The legacy `--force` flag is accepted but ignored. Exit codes are 0 for saved data, 2 for invalid
+arguments or a disabled provider or account, and 4 when there's no saved data yet.
 
 To run the helper directly, run `.\build.ps1` and use the path printed after `CLI:`. Keep it with its
 companion files and on a separate path from the tray app.

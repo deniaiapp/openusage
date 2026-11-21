@@ -8,13 +8,13 @@ public sealed class LayoutStore
     public const int MaxPinsPerProvider = 2;
 
     private readonly AppSettings _settings;
-    private readonly Dictionary<string, WidgetDescriptor> _descriptors;
+    private volatile Registry _registry;
+    private Dictionary<string, WidgetDescriptor> _descriptors => _registry.Descriptors;
 
     public LayoutStore(AppSettings settings, IEnumerable<IProviderRuntime> providers)
     {
         _settings = settings;
-        Providers = providers.ToList();
-        _descriptors = Providers.SelectMany(p => p.WidgetDescriptors).ToDictionary(d => d.Id, StringComparer.Ordinal);
+        _registry = Registry.From(providers.ToArray());
         if (_settings.EnabledMetrics.Count == 0)
             _settings.EnabledMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal);
         if (_settings.PinnedMetrics.Count == 0)
@@ -57,18 +57,67 @@ public sealed class LayoutStore
         return _settings.PinnedMetrics.Add(metricId);
     }
 
-    public IReadOnlyList<IProviderRuntime> Providers { get; }
+    public IReadOnlyList<IProviderRuntime> Providers => _registry.Providers;
+
+    internal void RegisterAccount(IProviderRuntime runtime, string providerId)
+    {
+        var id = runtime.Provider.Id;
+        var providers = Providers.ToList();
+        var index = providers.FindIndex(p => p.Provider.Id == id);
+        if (index >= 0) providers[index] = runtime;
+        else providers.Add(runtime);
+
+        if (!_settings.ProviderOrder.Contains(id))
+        {
+            var order = _settings.ProviderOrder.ToList();
+            foreach (var other in providers.Where(p => p.Provider.Id != id))
+                if (!order.Contains(other.Provider.Id)) order.Add(other.Provider.Id);
+            order.Add(id);
+            _settings.ProviderOrder = order;
+            SeedAccountLayout(runtime, providerId);
+            SetProviderEnabled(id, true);
+        }
+        _registry = Registry.From(providers);
+    }
+
+    private void SeedAccountLayout(IProviderRuntime runtime, string providerId)
+    {
+        foreach (var descriptor in runtime.WidgetDescriptors)
+        {
+            var templateId = providerId + descriptor.Id[runtime.Provider.Id.Length..];
+            if (!DefaultLayout.MetricIds.Contains(templateId)) continue;
+            _settings.EnabledMetrics.Add(descriptor.Id);
+            if (DefaultLayout.ExpandedMetricIds.Contains(templateId))
+                _settings.ExpandedMetrics.Add(descriptor.Id);
+        }
+    }
+
+    internal void RemoveAccount(string id)
+    {
+        var descriptors = Providers.FirstOrDefault(p => p.Provider.Id == id)?.WidgetDescriptors ?? [];
+        _registry = Registry.From(Providers.Where(p => p.Provider.Id != id).ToArray());
+        _settings.ProviderOrder = _settings.ProviderOrder.Where(provider => provider != id).ToList();
+        _settings.OpenCards.Remove(id);
+        foreach (var descriptor in descriptors)
+        {
+            _settings.EnabledMetrics.Remove(descriptor.Id);
+            _settings.ExpandedMetrics.Remove(descriptor.Id);
+            _settings.PinnedMetrics.Remove(descriptor.Id);
+        }
+        SetProviderEnabled(id, false);
+    }
 
     public IReadOnlyList<IProviderRuntime> VisibleProviders
     {
         get
         {
             var enabled = Providers.Where(p => IsProviderEnabled(p.Provider.Id)).ToList();
-            if (_settings.ProviderOrder.Count == 0) return enabled;
+            var order = _settings.ProviderOrder;
+            if (order.Count == 0) return enabled;
             return enabled
                 .OrderBy(p =>
                 {
-                    var index = _settings.ProviderOrder.IndexOf(p.Provider.Id);
+                    var index = order.IndexOf(p.Provider.Id);
                     return index < 0 ? int.MaxValue : index;
                 })
                 .ToList();
@@ -79,8 +128,10 @@ public sealed class LayoutStore
 
     public void SetProviderEnabled(string providerId, bool enabled)
     {
-        if (enabled) _settings.EnabledProviders.Add(providerId);
-        else _settings.EnabledProviders.Remove(providerId);
+        var providers = new HashSet<string>(_settings.EnabledProviders, StringComparer.Ordinal);
+        if (enabled) providers.Add(providerId);
+        else providers.Remove(providerId);
+        _settings.EnabledProviders = providers;
         _settings.Save();
     }
 
@@ -153,13 +204,25 @@ public sealed class LayoutStore
 
     public void ResetToDefault()
     {
+        var accountLayouts = Providers.Where(p => p.Provider.Id.Contains('@')).ToArray();
         _settings.EnabledProviders = new HashSet<string>(DefaultLayout.StarterProviders, StringComparer.Ordinal);
         _settings.EnabledMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal);
         _settings.ExpandedMetrics = new HashSet<string>(DefaultLayout.ExpandedMetricIds, StringComparer.Ordinal);
         _settings.PinnedMetrics = new HashSet<string>(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal);
         _settings.SeededDefaultMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal);
-        _settings.ProviderOrder.Clear();
+        _settings.ProviderOrder = accountLayouts.Length == 0 ? [] : Providers.Select(p => p.Provider.Id).ToList();
+        foreach (var runtime in accountLayouts)
+        {
+            _settings.EnabledProviders.Add(runtime.Provider.Id);
+            SeedAccountLayout(runtime, runtime.Provider.Id.Split('@')[0]);
+        }
         _settings.OpenCards.Clear();
         _settings.Save();
+    }
+
+    private sealed record Registry(IReadOnlyList<IProviderRuntime> Providers, Dictionary<string, WidgetDescriptor> Descriptors)
+    {
+        public static Registry From(IReadOnlyList<IProviderRuntime> providers) =>
+            new(providers, providers.SelectMany(p => p.WidgetDescriptors).ToDictionary(d => d.Id, StringComparer.Ordinal));
     }
 }

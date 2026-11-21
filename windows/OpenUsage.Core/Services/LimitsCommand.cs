@@ -24,9 +24,9 @@ public static class LimitsCommand
                 force = true;
                 continue;
             }
-            if (filter is not null || !LimitsProjection.HasProvider(arg))
+            if (filter is not null || !IsSupported(arg))
             {
-                error.WriteLine("Usage: openusage [provider] [--force]");
+                error.WriteLine("Usage: openusage [provider-or-account] [--force]");
                 return 2;
             }
             filter = arg;
@@ -35,14 +35,17 @@ public static class LimitsCommand
 
         var enabled = Read<Settings>(Path.Combine(dataDirectory, "settings.json"), WireOptions, error)?.EnabledProviders
             ?? [];
-        if (filter is not null && !enabled.Contains(filter))
+        var selected = enabled.Where(IsSupported)
+            .Where(id => filter is null || id == filter || id.StartsWith(filter + "@", StringComparison.Ordinal))
+            .ToArray();
+        if (filter is not null && selected.Length == 0)
         {
-            error.WriteLine($"No enabled provider named {filter}.");
+            error.WriteLine($"No enabled provider or account named {filter}.");
             return 2;
         }
 
         var providers = new SortedDictionary<string, WireProvider>(StringComparer.Ordinal);
-        foreach (var provider in enabled.Where(LimitsProjection.HasProvider).Where(id => filter is null || id == filter))
+        foreach (var provider in selected)
         {
             var snapshot = Read<Snapshot>(Path.Combine(dataDirectory, "cache", provider + ".json"), null, error);
             if (snapshot is not { Limits: { } limits } || snapshot.ProviderId != provider || snapshot.RefreshedAt == default)
@@ -56,6 +59,14 @@ public static class LimitsCommand
         if (providers.Count > 0) return 0;
         error.WriteLine("No usage has been fetched yet. Open OpenUsage and refresh your providers.");
         return 4;
+    }
+
+    private static bool IsSupported(string? id)
+    {
+        if (id is null) return false;
+        var scope = id.IndexOf('@');
+        return scope < 0 ? LimitsProjection.HasProvider(id)
+            : ApiKeyAccounts.Supports(id[..scope]) && Guid.TryParseExact(id[(scope + 1)..], "N", out _);
     }
 
     private static T? Read<T>(string path, JsonSerializerOptions? options, TextWriter error) where T : class

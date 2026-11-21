@@ -20,14 +20,26 @@ public sealed class AppContainer : IDisposable
         Keys = new ApiKeyStore();
         _http = new AppHttp();
         Providers = ProviderCatalog.Make(_http, Keys);
+        ApiKeyAccountStore = new ApiKeyAccountStore();
+        _apiKeyAccounts = new ApiKeyAccounts(_http, ApiKeyAccountStore);
         Layout = new LayoutStore(Settings, Providers);
-        Data = new WidgetDataStore(Layout, Settings);
-        // Fresh installs start with nothing on; the welcome screen turns on the user's picks.
         WelcomePending = FirstLaunchSetup.MarkPendingIfNeeded(Settings);
+        try
+        {
+            foreach (var account in ApiKeyAccountStore.List())
+                if (ApiKeyAccounts.Supports(account.ProviderId)) RegisterAccount(account);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("accounts", "could not restore API key accounts", ex);
+        }
+        Data = new WidgetDataStore(Layout, Settings);
     }
 
     public AppSettings Settings { get; }
     public ApiKeyStore Keys { get; }
+    public ApiKeyAccountStore ApiKeyAccountStore { get; }
+    private readonly ApiKeyAccounts _apiKeyAccounts;
     public IReadOnlyList<IProviderRuntime> Providers { get; }
     public LayoutStore Layout { get; }
     public WidgetDataStore Data { get; }
@@ -61,6 +73,34 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public async Task ConnectAccountAsync(string providerId, string label, string key)
+    {
+        var account = await _apiKeyAccounts.ConnectAsync(providerId, label, key, _cts.Token);
+        RegisterAccount(account);
+        _ = Data.RefreshProviderAsync(account.CardId, _cts.Token);
+    }
+
+    public void RenameAccount(ApiKeyAccount account, string label)
+    {
+        if (!ApiKeyAccountStore.Rename(account.Id, label)) return;
+        var renamed = account with { Label = label.Trim() };
+        RegisterAccount(renamed);
+        Data.RenameAccount(renamed.CardId, Layout.Providers.First(p => p.Provider.Id == renamed.CardId).Provider.DisplayName);
+    }
+
+    public void RemoveAccount(ApiKeyAccount account)
+    {
+        if (!ApiKeyAccountStore.Remove(account.Id)) return;
+        Layout.RemoveAccount(account.CardId);
+        Data.ForgetAccount(account.CardId);
+    }
+
+    private void RegisterAccount(ApiKeyAccount account)
+    {
+        var template = Providers.First(p => p.Provider.Id == account.ProviderId);
+        Layout.RegisterAccount(_apiKeyAccounts.MakeRuntime(account, template), account.ProviderId);
+    }
 
     private async Task RefreshLoopAsync(CancellationToken ct)
     {

@@ -41,6 +41,33 @@ public sealed class WidgetDataStore
     public string? ProviderError(string providerId) =>
         _errors.TryGetValue(providerId, out var message) ? message : null;
 
+    internal void ForgetAccount(string cardId)
+    {
+        lock (_gate)
+        {
+            _snapshots.TryRemove(cardId, out _);
+            _errors.TryRemove(cardId, out _);
+            try { File.Delete(Path.Combine(CacheDir, $"{cardId}.json")); }
+            catch (IOException ex) { AppLog.Warn("cache", $"could not remove account snapshot: {ex.Message}"); }
+            catch (UnauthorizedAccessException ex) { AppLog.Warn("cache", $"could not remove account snapshot: {ex.Message}"); }
+        }
+        Raise();
+    }
+
+    internal void RenameAccount(string cardId, string displayName)
+    {
+        lock (_gate)
+        {
+            if (_snapshots.TryGetValue(cardId, out var snapshot))
+            {
+                snapshot = snapshot with { DisplayName = displayName };
+                _snapshots[cardId] = snapshot;
+                SaveCache(snapshot);
+            }
+        }
+        Raise();
+    }
+
     public WidgetData Resolve(WidgetDescriptor descriptor)
     {
         var line = Snapshot(descriptor.ProviderId)?.Line(descriptor.MetricLabel);
@@ -117,15 +144,28 @@ public sealed class WidgetDataStore
             RememberFailure(providerId, message);
             return;
         }
-        _errors.TryRemove(providerId, out _);
-        _snapshots[providerId] = snapshot;
-        SaveCache(snapshot);
+        lock (_gate)
+        {
+            if (providerId.Contains('@'))
+            {
+                var account = _layout.Providers.FirstOrDefault(p => p.Provider.Id == providerId);
+                if (account is null) return;
+                snapshot = snapshot with { DisplayName = account.Provider.DisplayName };
+            }
+            _errors.TryRemove(providerId, out _);
+            _snapshots[providerId] = snapshot;
+            SaveCache(snapshot);
+        }
     }
 
     private void RememberFailure(string providerId, string message)
     {
-        _errors[providerId] = message;
-        AppLog.Warn(providerId, $"refresh failed; keeping last-good snapshot: {message}");
+        lock (_gate)
+        {
+            if (providerId.Contains('@') && !_layout.Providers.Any(p => p.Provider.Id == providerId)) return;
+            _errors[providerId] = message;
+            AppLog.Warn(providerId, $"refresh failed; keeping last-good snapshot: {message}");
+        }
     }
 
     private void Raise() => Changed?.Invoke();
@@ -139,6 +179,8 @@ public sealed class WidgetDataStore
                 using var source = AtomicFile.OpenRead(file);
                 var json = JsonSerializer.Deserialize<CachedSnapshot>(source);
                 if (json is null) continue;
+                if (json.ProviderId.Contains('@') && !_layout.Providers.Any(p => p.Provider.Id == json.ProviderId))
+                    continue;
                 var lines = json.Lines.Select(CachedLine.ToMetric).OfType<MetricLine>().ToList();
                 _snapshots[json.ProviderId] = new ProviderSnapshot(
                     json.ProviderId, json.DisplayName, lines, json.RefreshedAt, json.Plan, json.Warning);

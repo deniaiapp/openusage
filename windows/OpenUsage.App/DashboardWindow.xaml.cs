@@ -36,6 +36,7 @@ public partial class DashboardWindow : Window
     private readonly DispatcherTimer _clock;
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
+    private ApiKeyAccountsView? _accountEditor;
     public event Action<string?>? HotkeyChanged;
 
     public DashboardWindow(AppContainer container)
@@ -43,9 +44,9 @@ public partial class DashboardWindow : Window
         _container = container;
         InitializeComponent();
         VersionLabel.Text = $"OpenUsage {AppContainer.Version}";
-        _container.Data.Changed += () => Dispatcher.Invoke(Render);
+        _container.Data.Changed += () => Dispatcher.Invoke(() => Render(preserveEditor: true));
         _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
-        _clock.Tick += (_, _) => Render();
+        _clock.Tick += (_, _) => Render(preserveEditor: true);
         _clock.Start();
         Loaded += (_, _) => Render();
         PreviewKeyDown += OnKey;
@@ -146,7 +147,7 @@ public partial class DashboardWindow : Window
         return item;
     }
 
-    private void Render()
+    private void Render(bool preserveEditor = false)
     {
         var remaining = _container.Data.NextRefresh - DateTimeOffset.Now;
         RefreshLabel.Text = _container.Data.IsRefreshing
@@ -164,6 +165,8 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
+        if (preserveEditor && _accountEditor is not null) return;
+        _accountEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -521,6 +524,13 @@ public partial class DashboardWindow : Window
             };
             box.LostFocus += (_, _) => keys.SaveKey(string.IsNullOrWhiteSpace(box.Text) ? null : box.Text.Trim());
             ContentHost.Children.Add(box);
+
+            if (OpenUsage.Core.Services.ApiKeyAccounts.Supports(runtime.Provider.Id))
+            {
+                ContentHost.Children.Add(SectionTitle("Additional Accounts"));
+                _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
+                ContentHost.Children.Add(_accountEditor);
+            }
         }
 
         ContentHost.Children.Add(SectionTitle("Always Visible"));
