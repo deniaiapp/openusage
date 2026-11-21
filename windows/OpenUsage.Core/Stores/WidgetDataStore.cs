@@ -45,6 +45,16 @@ public sealed class WidgetDataStore
     public string? ProviderError(string providerId) =>
         _errors.TryGetValue(providerId, out var message) ? message : null;
 
+    internal void ReplaceAccountSnapshot(ProviderSnapshot snapshot)
+    {
+        lock (_gate)
+        {
+            _providerRefreshes.TryRemove(snapshot.ProviderId, out _);
+            ApplySnapshot(snapshot.ProviderId, snapshot);
+        }
+        Raise();
+    }
+
     internal void ForgetAccount(string cardId)
     {
         lock (_gate)

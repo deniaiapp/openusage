@@ -12,6 +12,7 @@ using OpenUsage.App.Views;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
@@ -39,6 +40,7 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private DevinSignInView? _devinSignIn;
     public event Action<string?>? HotkeyChanged;
 
     public DashboardWindow(AppContainer container)
@@ -61,8 +63,11 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        _screen = DashboardScreen.Dashboard;
-        Render();
+        if (_devinSignIn?.IsPending != true)
+        {
+            _screen = DashboardScreen.Dashboard;
+            Render();
+        }
         ShowAnchored();
         Activate();
     }
@@ -167,8 +172,10 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && _accountEditor is not null) return;
+        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null)) return;
         _accountEditor = null;
+        _devinSignIn?.Cancel();
+        _devinSignIn = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -554,6 +561,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is DevinProvider devin)
+        {
+            ContentHost.Children.Add(SectionTitle("Devin Account"));
+            _devinSignIn = new DevinSignInView(_container, devin);
+            ContentHost.Children.Add(_devinSignIn);
+        }
         if (runtime is IApiKeyManaging keys)
         {
             ContentHost.Children.Add(SectionTitle("API Key"));

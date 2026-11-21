@@ -32,7 +32,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | OpenCode | `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
 | Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a short-lived cache under `%APPDATA%\OpenUsage\antigravity` |
 | Ollama | API key in Customize, or `%USERPROFILE%\.ollama\id_ed25519` (opt-in; never auto-enabled). Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
-| Devin | `credentials.toml` under `.local\share\devin` / `%LOCALAPPDATA%\devin`, or the Devin/Windsurf `state.vscdb` |
+| Devin | Browser sign-in from **Customize → Devin**; the session is stored by OpenUsage |
 | OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
 
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.

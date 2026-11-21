@@ -1,4 +1,5 @@
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -70,6 +71,15 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public async Task ConnectDevinAsync(DevinProvider provider, Action<Uri> openBrowser, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        var snapshot = await provider.ConnectAsync(openBrowser, linked.Token);
+        if (!Layout.IsProviderEnabled(provider.Provider.Id))
+            Layout.SetProviderEnabled(provider.Provider.Id, true);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
 
     public async Task ConnectAccountAsync(string providerId, string label, string key)
     {

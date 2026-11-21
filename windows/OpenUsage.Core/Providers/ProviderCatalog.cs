@@ -24,7 +24,7 @@ public static class ProviderCatalog
         new CursorProvider(http),
         new AntigravityProvider(http),
         new CopilotProvider(http),
-        new DevinProvider(http),
+        new DevinProvider(http, keys),
         new GrokProvider(http),
         new OllamaProvider(http),
         new OpenCodeProvider(http),

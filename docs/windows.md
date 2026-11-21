@@ -23,6 +23,7 @@ Provider details that match macOS:
 - **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
 - **Codex:** Pro 100 / 200 / 500 plan names.
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, extra usage is measured against the matching personal or pooled budget. Spend history is fetched day by day and finished days are cached per account.
+- **Devin:** Choose **Customize → Devin → Sign In to Devin** and finish in your browser. Windows keeps the resulting session in its encrypted app store. Previously detected Devin CLI and editor sign-ins need to connect once in Customize; those other apps are not signed out.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** reads OpenCode 2's database (usage and Go key) and falls back to `auth.json` on OpenCode 1.
