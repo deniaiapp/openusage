@@ -11,7 +11,6 @@ public sealed class AppContainer : IDisposable
 
     private readonly AppHttp _http;
     private readonly CancellationTokenSource _cts = new();
-    private LocalApiServer? _api;
     private Task? _refreshLoop;
 
     public AppContainer()
@@ -47,12 +46,10 @@ public sealed class AppContainer : IDisposable
     /// <summary>True when this launch opens the welcome screen instead of the dashboard.</summary>
     public bool WelcomePending { get; private set; }
 
-    /// <summary>Starts the local API, and scheduled refreshes unless the welcome screen is still pending.</summary>
+    /// <summary>Starts scheduled refreshes unless the welcome screen is still pending.</summary>
     public void Start()
     {
         AppLog.Info("lifecycle", $"OpenUsage {Version} starting");
-        _api = new LocalApiServer(Data, Layout);
-        _api.Start();
         if (!WelcomePending) StartRefreshing();
     }
 
@@ -125,7 +122,6 @@ public sealed class AppContainer : IDisposable
     public void Dispose()
     {
         _cts.Cancel();
-        _api?.Dispose();
         _http.Dispose();
     }
 }

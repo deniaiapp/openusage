@@ -633,7 +633,7 @@ public partial class DashboardWindow : Window
         ContentHost.Children.Add(reset);
         ContentHost.Children.Add(new TextBlock
         {
-            Text = $"Logs: {AppPaths.LogFile}\nLocal API: http://127.0.0.1:6736/v1/limits",
+            Text = $"Logs: {AppPaths.LogFile}",
             Style = (Style)FindResource("MutedText"),
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 12, 0, 0)
