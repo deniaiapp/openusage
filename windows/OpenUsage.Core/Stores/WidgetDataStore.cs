@@ -46,6 +46,7 @@ public sealed class WidgetDataStore
     {
         lock (_gate)
         {
+            _providerRefreshes.TryRemove(cardId, out _);
             _snapshots.TryRemove(cardId, out _);
             _errors.TryRemove(cardId, out _);
             try { File.Delete(Path.Combine(CacheDir, $"{cardId}.json")); }
@@ -117,23 +118,38 @@ public sealed class WidgetDataStore
     }
 
     private Task RefreshAsync(IProviderRuntime provider, CancellationToken cancellationToken) =>
-        _providerRefreshes.GetOrAdd(provider.Provider.Id, id =>
-            new Lazy<Task>(() => RefreshCoreAsync(id, provider, cancellationToken))).Value;
+        _providerRefreshes.GetOrAdd(provider.Provider.Id, _ => CreateRefresh(provider, cancellationToken)).Value;
 
-    private async Task RefreshCoreAsync(string providerId, IProviderRuntime provider, CancellationToken cancellationToken)
+    private Lazy<Task> CreateRefresh(IProviderRuntime provider, CancellationToken cancellationToken)
     {
+        Lazy<Task> refresh = null!;
+        refresh = new(() => RefreshCoreAsync(provider, refresh, cancellationToken));
+        return refresh;
+    }
+
+    private async Task RefreshCoreAsync(IProviderRuntime provider, Lazy<Task> refresh, CancellationToken cancellationToken)
+    {
+        var providerId = provider.Provider.Id;
+        bool IsCurrent() => _providerRefreshes.TryGetValue(providerId, out var active) && active == refresh;
         try
         {
-            ApplySnapshot(providerId, await provider.RefreshAsync(cancellationToken));
+            var snapshot = await provider.RefreshAsync(cancellationToken);
+            lock (_gate)
+            {
+                if (IsCurrent()) ApplySnapshot(providerId, snapshot);
+            }
         }
         catch (Exception ex)
         {
             AppLog.Error(providerId, "refresh failed", ex);
-            RememberFailure(providerId, ex.Message);
+            lock (_gate)
+            {
+                if (IsCurrent()) RememberFailure(providerId, ex.Message);
+            }
         }
         finally
         {
-            _providerRefreshes.TryRemove(providerId, out _);
+            _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
         }
     }
 
@@ -146,28 +162,22 @@ public sealed class WidgetDataStore
             RememberFailure(providerId, message);
             return;
         }
-        lock (_gate)
+        if (providerId.Contains('@'))
         {
-            if (providerId.Contains('@'))
-            {
-                var account = _layout.Providers.FirstOrDefault(p => p.Provider.Id == providerId);
-                if (account is null) return;
-                snapshot = snapshot with { DisplayName = account.Provider.DisplayName };
-            }
-            _errors.TryRemove(providerId, out _);
-            _snapshots[providerId] = snapshot;
-            SaveCache(snapshot);
+            var account = _layout.Providers.FirstOrDefault(p => p.Provider.Id == providerId);
+            if (account is null) return;
+            snapshot = snapshot with { DisplayName = account.Provider.DisplayName };
         }
+        _errors.TryRemove(providerId, out _);
+        _snapshots[providerId] = snapshot;
+        SaveCache(snapshot);
     }
 
     private void RememberFailure(string providerId, string message)
     {
-        lock (_gate)
-        {
-            if (providerId.Contains('@') && !_layout.Providers.Any(p => p.Provider.Id == providerId)) return;
-            _errors[providerId] = message;
-            AppLog.Warn(providerId, $"refresh failed; keeping last-good snapshot: {message}");
-        }
+        if (providerId.Contains('@') && !_layout.Providers.Any(p => p.Provider.Id == providerId)) return;
+        _errors[providerId] = message;
+        AppLog.Warn(providerId, $"refresh failed; keeping last-good snapshot: {message}");
     }
 
     private void Raise() => Changed?.Invoke();

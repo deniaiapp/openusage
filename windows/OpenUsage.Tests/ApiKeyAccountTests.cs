@@ -199,6 +199,42 @@ public sealed class ApiKeyAccountTests : IDisposable
         Assert.Equal(4, Assert.IsType<MetricLine.ProgressLine>(personalSnapshot.Line("Key Limit")).Used);
     }
 
+    [WindowsFact]
+    public async Task ReplacementKeepsAccountIdentityAndOnlySavesValidUniqueKeys()
+    {
+        using var http = MakeHttp(request =>
+        {
+            if (request.RequestUri != OpenRouterProvider.KeyUrl) return (403, "{}");
+            return request.Headers.Authorization?.Parameter switch
+            {
+                "old-key" => (200, """{"data":{"limit":20,"limit_remaining":11}}"""),
+                "new-key" => (200, """{"data":{"limit":20,"limit_remaining":15}}"""),
+                "other-key" => (200, """{"data":{"limit":20,"limit_remaining":12}}"""),
+                "rejected-key" => (401, "{}"),
+                _ => throw new InvalidOperationException("Unexpected key sent.")
+            };
+        });
+        var store = new ApiKeyAccountStore(AccountFile);
+        var service = new ApiKeyAccounts(http, store);
+        var original = await service.ConnectAsync("openrouter", "Work", "old-key");
+        var other = await service.ConnectAsync("openrouter", "Other", "other-key");
+        Assert.True(store.Rename(original.Id, "Renamed Work"));
+
+        await Assert.ThrowsAsync<ProviderRequestException>(() => service.ReplaceKeyAsync(original, "rejected-key"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReplaceKeyAsync(original, "other-key"));
+        Assert.Equal("old-key", new ApiKeyAccountStore(AccountFile).Key(original.Id));
+
+        await service.ReplaceKeyAsync(original, " new-key ");
+        var reloaded = new ApiKeyAccountStore(AccountFile);
+        Assert.Equal(new[] { original with { Label = "Renamed Work" }, other }, reloaded.List());
+        Assert.Equal("new-key", reloaded.Key(original.Id));
+        Assert.Equal("other-key", reloaded.Key(other.Id));
+
+        Assert.True(store.Remove(original.Id));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.ReplaceKeyAsync(original, "new-key"));
+        Assert.Equal(other, Assert.Single(reloaded.List()));
+    }
+
     private static AppHttp MakeHttp(Func<HttpRequestMessage, (int Status, string Body)> respond) =>
         new(new HttpClient(new StubHandler(respond)));
 
