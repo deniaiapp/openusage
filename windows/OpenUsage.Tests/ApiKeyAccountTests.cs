@@ -117,6 +117,17 @@ public sealed class ApiKeyAccountTests : IDisposable
         var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
         layout.RegisterAccount(service.MakeRuntime(account, provider), account.ProviderId);
         Assert.Equal(account.CardId, Assert.Single(layout.VisibleProviders).Provider.Id);
+        Assert.Equal(account.CardId + ".monthly", Assert.Single(layout.PinnedDescriptors()).Id);
+
+        layout.TogglePin(account.CardId + ".monthly");
+        var second = new ApiKeyAccount(Guid.NewGuid(), provider.Provider.Id, "Second");
+        layout.RegisterAccount(service.MakeRuntime(second, provider), second.ProviderId);
+        var restored = new LayoutStore(AppSettings.Load(Path.Combine(_directory, "settings.json")), [provider]);
+        restored.RegisterAccount(service.MakeRuntime(account, provider), account.ProviderId);
+        restored.RegisterAccount(service.MakeRuntime(second, provider), second.ProviderId);
+        Assert.Empty(restored.PinnedDescriptors());
+        restored.ResetToDefault();
+        Assert.Equal(account.CardId + ".monthly", Assert.Single(restored.PinnedDescriptors()).Id);
     }
 
     [Fact]

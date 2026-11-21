@@ -87,14 +87,17 @@ public sealed class LayoutStore
                 : IsProviderGroup(candidate));
             order.Insert(last < 0 ? order.Count : last + 1, id);
             _settings.ProviderOrder = order;
-            SeedAccountLayout(runtime, providerId);
+            var firstTemplateAccount = IsAccountTemplate(providerId) &&
+                !Providers.Any(p => p.Provider.Id != providerId && IsProviderGroup(p.Provider.Id));
+            SeedAccountLayout(runtime, providerId, firstTemplateAccount);
             SetProviderEnabled(id, true);
         }
         _registry = Registry.From(providers);
     }
 
-    private void SeedAccountLayout(IProviderRuntime runtime, string providerId)
+    private void SeedAccountLayout(IProviderRuntime runtime, string providerId, bool inheritPins = false)
     {
+        var pins = 0;
         foreach (var descriptor in runtime.WidgetDescriptors)
         {
             var templateId = providerId + descriptor.Id[runtime.Provider.Id.Length..];
@@ -102,6 +105,9 @@ public sealed class LayoutStore
             _settings.EnabledMetrics.Add(descriptor.Id);
             if (DefaultLayout.ExpandedMetricIds.Contains(templateId))
                 _settings.ExpandedMetrics.Add(descriptor.Id);
+            if (inheritPins && descriptor.Pinnable && DefaultLayout.PinnedMetricIds.Contains(templateId) &&
+                pins < MaxPinsPerProvider && _settings.PinnedMetrics.Add(descriptor.Id))
+                pins++;
         }
     }
 
@@ -264,10 +270,12 @@ public sealed class LayoutStore
         _settings.PinnedMetrics = new HashSet<string>(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal);
         _settings.SeededDefaultMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal);
         _settings.ProviderOrder = accountLayouts.Length == 0 ? [] : Providers.Select(p => p.Provider.Id).ToList();
+        var templatesWithPins = new HashSet<string>(StringComparer.Ordinal);
         foreach (var runtime in accountLayouts)
         {
             _settings.EnabledProviders.Add(runtime.Provider.Id);
-            SeedAccountLayout(runtime, runtime.Provider.Id.Split('@')[0]);
+            var providerId = runtime.Provider.Id.Split('@')[0];
+            SeedAccountLayout(runtime, providerId, IsAccountTemplate(providerId) && templatesWithPins.Add(providerId));
         }
         _settings.OpenCards.Clear();
         _settings.Save();
