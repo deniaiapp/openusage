@@ -1,5 +1,6 @@
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
 using OpenUsage.Core.Stores;
@@ -9,11 +10,12 @@ namespace OpenUsage.Core.Services;
 
 public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
 {
-    public static bool Supports(string providerId) => providerId is "openrouter" or "zai";
+    public static bool Supports(string providerId) => providerId is "ollama" or "openrouter" or "zai";
 
     public IProviderRuntime MakeRuntime(ApiKeyAccount account, IProviderRuntime provider) =>
         (provider, account.ProviderId) switch
         {
+            (OllamaProvider ollama, "ollama") => new AccountRuntime(account, provider, store, ollama.RefreshWithApiKeyAsync),
             (OpenRouterProvider openRouter, "openrouter") =>
                 new AccountRuntime(account, provider, store, (key, ct) => openRouter.RefreshWithKeyAsync(key, ct, requireKey: true)),
             (ZaiProvider zai, "zai") => new AccountRuntime(account, provider, store, zai.RefreshWithKeyAsync),
@@ -42,17 +44,14 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
         key = key.Trim();
         if (key.Length == 0 || key.Any(char.IsControl))
             throw new ArgumentException("Enter a valid API key.");
-        var url = providerId switch
+        var request = providerId switch
         {
-            "openrouter" => OpenRouterProvider.KeyUrl,
-            "zai" => ZaiProvider.QuotaUrl,
+            "ollama" => OllamaProvider.ApiKeyRequest("GET", OllamaProvider.BalancePath, key),
+            "openrouter" => BearerGet(OpenRouterProvider.KeyUrl, key),
+            "zai" => BearerGet(ZaiProvider.QuotaUrl, key),
             _ => throw new ArgumentException("This provider does not support API key accounts.")
         };
-        var response = await http.SendAsync(new AppHttpRequest("GET", url, new Dictionary<string, string>
-        {
-            ["Authorization"] = $"Bearer {key}",
-            ["Accept"] = "application/json"
-        }), ct);
+        var response = await http.SendAsync(request, ct);
         ct.ThrowIfCancellationRequested();
 
         if (AuthRetry.IsAuthFailure(response))
@@ -62,7 +61,15 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
         if (response.Json is not { } body)
             throw new ProviderRequestException(ProviderErrors.InvalidResponse);
 
-        if (providerId == "zai")
+        if (providerId == "ollama")
+        {
+            try { _ = OllamaUsageMapper.BalanceLines(body); }
+            catch (InvalidOperationException ex)
+            {
+                throw new ProviderRequestException(ProviderErrors.InvalidResponse, ex);
+            }
+        }
+        else if (providerId == "zai")
         {
             if (ZaiUsageMapper.IsRejectedKey(body))
                 throw new ProviderRequestException("Z.ai rejected this API key.");
@@ -80,9 +87,16 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
         return key;
     }
 
+    private static AppHttpRequest BearerGet(Uri url, string key) =>
+        new("GET", url, new Dictionary<string, string>
+        {
+            ["Authorization"] = $"Bearer {key}",
+            ["Accept"] = "application/json"
+        });
+
     private sealed class AccountRuntime(
         ApiKeyAccount account, IProviderRuntime template, ApiKeyAccountStore accounts,
-        Func<string?, CancellationToken, Task<ProviderSnapshot>> refresh) : IProviderRuntime
+        Func<string, CancellationToken, Task<ProviderSnapshot>> refresh) : IProviderRuntime
     {
         public Provider Provider => template.Provider with
         {
