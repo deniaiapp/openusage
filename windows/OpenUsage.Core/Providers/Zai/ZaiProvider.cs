@@ -11,6 +11,9 @@ public static class ZaiUsageMapper
         JsonUtil.Bool(root?["success"]) == false &&
         (JsonUtil.String(root?["msg"]) ?? "").Contains("coding plan", StringComparison.OrdinalIgnoreCase);
 
+    public static bool IsRejectedKey(JsonObject root) =>
+        JsonUtil.Bool(root["success"]) == false && JsonUtil.Number(root["code"]) == 401;
+
     public static (string? Plan, List<MetricLine> Lines) Map(JsonObject quotaBody, JsonObject? subscriptionBody)
     {
         var plan = PlanName(subscriptionBody);
@@ -125,12 +128,17 @@ public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
         try
         {
             var quota = await GetAsync(QuotaUrl, key, cancellationToken);
+            const string rejectedKey = "Z.ai rejected your API key. Replace it in Customize.";
+            if (quota.StatusCode == 401)
+                return ProviderSnapshot.Error(Provider, rejectedKey);
             if (!quota.IsSuccess)
                 return ProviderSnapshot.Error(Provider, ProviderErrors.RequestFailed(quota.StatusCode));
             if (quota.Json is not { } quotaBody)
                 return ProviderSnapshot.Error(Provider, ProviderErrors.InvalidResponse);
             if (ZaiUsageMapper.IsNoCodingPlan(quotaBody))
                 return ProviderSnapshot.Error(Provider, "No active GLM Coding Plan. Subscribe at z.ai/subscribe to see usage.");
+            if (ZaiUsageMapper.IsRejectedKey(quotaBody))
+                return ProviderSnapshot.Error(Provider, rejectedKey);
 
             JsonObject? subscription = null;
             try { subscription = (await GetAsync(SubscriptionUrl, key, cancellationToken)).Json; }

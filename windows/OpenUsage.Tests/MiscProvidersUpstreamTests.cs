@@ -69,6 +69,21 @@ public class MiscProvidersUpstreamTests
     }
 
     [Theory]
+    [InlineData(0)]
+    [InlineData(17.5)]
+    public void Ollama_FreeAccountReportsPurchasedCreditsWithoutIncludedAllowance(double credits)
+    {
+        var balance = new System.Text.Json.Nodes.JsonObject
+        {
+            ["included"] = new System.Text.Json.Nodes.JsonObject { ["allowance_usd"] = 0 },
+            ["purchased"] = new System.Text.Json.Nodes.JsonObject { ["balance_usd"] = credits }
+        };
+        var purchased = Assert.IsType<MetricLine.ValuesLine>(Assert.Single(OllamaUsageMapper.BalanceLines(balance)));
+        Assert.Equal("Purchased Credits", purchased.Label);
+        Assert.Equal(credits, Assert.Single(purchased.Items).Number);
+    }
+
+    [Theory]
     [InlineData("""{"plan":"max"}""", "Max", false)]
     [InlineData("""{"Plan":"  "}""", null, false)]
     [InlineData("""{"Plan":5}""", null, true)]

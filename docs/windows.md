@@ -12,9 +12,11 @@ Provider details that match macOS:
 
 - **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
 - **Codex:** Pro 100 / 200 / 500 plan names, auto-review usage free from October 6, Ultrafast priced at 6x on GPT-6 Astra. A slow history scan shows a warning instead of holding back live limits.
-- **Cursor:** Today / Yesterday / Last 30 Days and the usage trend, fetched day by day; finished days are cached per account.
-- **Ollama:** Monthly and Purchased Credits from the balance endpoint; a warning shows when the plan can't be read.
+- **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, extra usage is measured against the matching personal or pooled budget. Spend history is fetched day by day and finished days are cached per account.
+- **Grok:** The pay-as-you-go limit is shown in dollars.
+- **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** reads OpenCode 2's database (usage and Go key) and falls back to `auth.json` on OpenCode 1.
+- **Z.ai:** A rejected API key prompts you to replace it in Customize.
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
 
