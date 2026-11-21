@@ -45,6 +45,8 @@ internal static class LimitsProjection
         ["devin.weekly"] = new("weekly", "percent"),
         ["devin.extra"] = DollarBalance("extraUsageBalance"),
         ["grok.weekly"] = new("weekly", "percent"),
+        ["muse.session"] = new("session", "percent"),
+        ["muse.weekly"] = new("weekly", "percent"),
         ["ollama.session"] = new("session", "percent"),
         ["ollama.weekly"] = new("weekly", "percent"),
         ["ollama.monthly"] = new("monthly", "usd"),
