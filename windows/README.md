@@ -20,7 +20,7 @@ On first launch a welcome screen lists the AI tools already signed in on this PC
 
 ## What it reads
 
-Same idea as macOS: credentials already on the machine, no extra login for most providers.
+Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For OpenRouter and Z.ai, use **Additional Accounts** in Customize to connect more than one API key.
 
 | Provider | Windows credential sources |
 |---|---|
