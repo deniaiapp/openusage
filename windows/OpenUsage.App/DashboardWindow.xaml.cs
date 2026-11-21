@@ -235,8 +235,8 @@ public partial class DashboardWindow : Window
         var provider = runtime.Provider;
         var snapshot = _container.Data.Snapshot(provider.Id);
         var open = _container.Layout.IsCardOpen(provider.Id);
-        var always = _container.Layout.VisibleMetrics(provider.Id, false);
-        var onDemand = _container.Layout.OnDemandMetrics(provider.Id);
+        var always = _container.Data.ResolveCardRows(_container.Layout.VisibleMetrics(provider.Id, false));
+        var onDemand = _container.Data.ResolveCardRows(_container.Layout.OnDemandMetrics(provider.Id));
         var card = Card();
         var stack = new StackPanel();
 
@@ -282,8 +282,8 @@ public partial class DashboardWindow : Window
 
         stack.Children.Add(header);
 
-        foreach (var descriptor in always)
-            stack.Children.Add(MetricRow(descriptor));
+        foreach (var (descriptor, data) in always)
+            stack.Children.Add(MetricRow(descriptor, data));
 
         // The caret sits at the bottom of the card: below Always Visible when collapsed, and below a
         // thin line, the On Demand rows, and the quick links when open.
@@ -296,8 +296,8 @@ public partial class DashboardWindow : Window
                 Background = (Brush)FindResource("SeparatorBrush"),
                 Margin = new Thickness(14, 5, 14, 5)
             });
-            foreach (var descriptor in onDemand)
-                stack.Children.Add(MetricRow(descriptor));
+            foreach (var (descriptor, data) in onDemand)
+                stack.Children.Add(MetricRow(descriptor, data));
             if (provider.VisibleLinks.Count > 0)
             {
                 var links = new WrapPanel { Margin = new Thickness(10, 4, 10, 0) };
