@@ -172,16 +172,20 @@ public sealed class LayoutStore
         return true;
     }
 
-    public bool IsProviderEnabled(string providerId) => _settings.EnabledProviders.Contains(providerId);
+    public bool IsProviderEnabled(string providerId) =>
+        _settings.EnabledProviders.Contains(providerId) && !IsAccountTemplate(providerId);
 
     public void SetProviderEnabled(string providerId, bool enabled)
     {
         var providers = new HashSet<string>(_settings.EnabledProviders, StringComparer.Ordinal);
-        if (enabled) providers.Add(providerId);
+        if (enabled && !IsAccountTemplate(providerId)) providers.Add(providerId);
         else providers.Remove(providerId);
         _settings.EnabledProviders = providers;
         _settings.Save();
     }
+
+    private bool IsAccountTemplate(string providerId) =>
+        Providers.Any(p => p.Provider.Id == providerId && p.IsAccountTemplate);
 
     public bool IsMetricEnabled(string metricId) => _settings.EnabledMetrics.Contains(metricId);
 

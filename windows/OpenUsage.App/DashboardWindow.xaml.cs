@@ -509,7 +509,7 @@ public partial class DashboardWindow : Window
             Grid.SetColumn(toggle, 2);
             grid.Children.Add(icon);
             grid.Children.Add(name);
-            grid.Children.Add(toggle);
+            if (!runtime.IsAccountTemplate) grid.Children.Add(toggle);
             var button = new Button { Style = (Style)FindResource("GhostButton"), Padding = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
             button.Content = grid;
             button.Click += (_, _) =>
@@ -545,7 +545,7 @@ public partial class DashboardWindow : Window
                 row.Child = button;
             }
             row.Margin = new Thickness(0, 0, 0, 8);
-            row.Opacity = _container.Layout.IsProviderEnabled(provider.Id) ? 1 : 0.55;
+            row.Opacity = runtime.IsAccountTemplate || _container.Layout.IsProviderEnabled(provider.Id) ? 1 : 0.55;
             ContentHost.Children.Add(row);
         }
     }
@@ -569,11 +569,12 @@ public partial class DashboardWindow : Window
 
         if (ApiKeyAccounts.Supports(runtime.Provider.Id))
         {
-            ContentHost.Children.Add(SectionTitle("Additional Accounts"));
+            ContentHost.Children.Add(SectionTitle(runtime.IsAccountTemplate ? "Accounts" : "Additional Accounts"));
             _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
             ContentHost.Children.Add(_accountEditor);
         }
 
+        if (runtime.IsAccountTemplate) return;
         ContentHost.Children.Add(SectionTitle("Always Visible"));
         foreach (var descriptor in runtime.WidgetDescriptors.Where(d => !_container.Layout.IsOnDemand(d.Id)))
             ContentHost.Children.Add(MetricCustomizeRow(descriptor));

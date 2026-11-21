@@ -6,7 +6,7 @@ The Windows tray app has its own dashboard, Customize, Settings, five-minute ref
 
 To add one, open **Customize**, choose **OpenRouter** or **Z.ai**, and enter a name and API key under **Additional Accounts**. OpenUsage checks the key before saving it with Windows user encryption. New cards go after the provider's existing additional accounts or its visible main card. If neither exists, the new card goes at the bottom. Rename or remove the account in the same section. Existing API keys and provider settings stay in place.
 
-Ollama Cloud also supports **Additional Accounts**. Get a key from [Ollama settings](https://ollama.com/settings/keys), then enter it in **Customize → Ollama**. You do not need Ollama installed to connect with a key.
+Ollama Cloud connects with API keys only. Get a key from [Ollama settings](https://ollama.com/settings/keys), then add it under **Customize → Ollama → Accounts**. Existing API-key accounts keep their settings. If you used the old local Ollama sign-in, add a key to resume tracking cloud usage.
 
 Choose **Replace API Key** next to an additional account to change its key without changing its name or dashboard settings. If the new key doesn't pass validation, OpenUsage keeps the old key.
 
@@ -16,7 +16,7 @@ Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` confi
 
 A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.
 
-Ollama's local sign-in stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
+Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
 
 Provider details that match macOS:
 
