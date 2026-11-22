@@ -28,6 +28,8 @@ public sealed class AppSettings
     public HashSet<string> OpenCards { get; set; } = new(StringComparer.Ordinal);
     public List<string> ProviderOrder { get; set; } = [];
     public bool CustomizeHintDismissed { get; set; }
+    public bool NotifyBurningFast { get; set; }
+    public bool NotifyUseItOrLoseIt { get; set; }
     /// <summary>Default metric IDs this layout has already been offered; null on layouts saved before tracking.</summary>
     public HashSet<string>? SeededDefaultMetrics { get; set; }
 
