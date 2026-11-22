@@ -105,7 +105,11 @@ reported zeroes remain visible, and Last 30 Days adds the reported days in that 
 OpenUsage checks the report once an hour and on the first refresh of a new UTC day. A report error
 does not hide live limits. History rows are not pinned to the tray by default.
 
-CLIProxyAPI hub connections are not available in the Windows UI yet. The connection service saves a new hub or replacement key only after the hub returns a valid login list. Saved addresses and keys are encrypted for the current Windows user. Hub accounts are not saved or shown on Windows yet.
+## CLIProxyAPI hubs
+
+Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management key, and choose **Connect**. OpenUsage saves a connection or replacement key only after the hub returns a valid login list. Saved addresses and keys are encrypted for the current Windows user.
+
+**Replace Key** keeps the old key if verification fails. **Disconnect** removes only the saved connection on this PC; it does not change the hub. Hub accounts are not saved or shown on the Windows dashboard yet.
 
 ## Privacy Mode
 

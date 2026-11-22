@@ -33,7 +33,7 @@ using TextBox = System.Windows.Controls.TextBox;
 
 namespace OpenUsage.App;
 
-public enum DashboardScreen { Dashboard, Customize, CustomizeDetail, Settings }
+public enum DashboardScreen { Dashboard, Customize, CustomizeDetail, Settings, CliProxyHubs }
 
 public partial class DashboardWindow : Window
 {
@@ -42,6 +42,7 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private CliProxyHubsView? _hubEditor;
     private DevinSignInView? _devinSignIn;
     private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
@@ -144,7 +145,8 @@ public partial class DashboardWindow : Window
 
     private void OnBack(object sender, RoutedEventArgs e)
     {
-        _screen = _screen == DashboardScreen.CustomizeDetail ? DashboardScreen.Customize : DashboardScreen.Dashboard;
+        _screen = _screen is DashboardScreen.CustomizeDetail or DashboardScreen.CliProxyHubs
+            ? DashboardScreen.Customize : DashboardScreen.Dashboard;
         Render();
     }
 
@@ -195,13 +197,16 @@ public partial class DashboardWindow : Window
             DashboardScreen.Customize => "Customize",
             DashboardScreen.CustomizeDetail => _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId)?.Provider.DisplayName ?? "Provider",
             DashboardScreen.Settings => "Settings",
+            DashboardScreen.CliProxyHubs => "CLIProxyAPI Hubs",
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null ||
+        if (preserveEditor && (_hubEditor is not null || _accountEditor is not null || _devinSignIn is not null ||
             _codexLoginEditor is not null || _copilotLoginEditor is not null || _grokLoginEditor is not null ||
             _claudeSignInEditor is not null || _cursorLoginEditor is not null)) return;
         _accountEditor = null;
+        _hubEditor?.Cancel();
+        _hubEditor = null;
         _devinSignIn?.Cancel();
         _devinSignIn = null;
         _codexLoginEditor = null;
@@ -224,6 +229,10 @@ public partial class DashboardWindow : Window
                 break;
             case DashboardScreen.Settings:
                 RenderSettings();
+                break;
+            case DashboardScreen.CliProxyHubs:
+                _hubEditor = new CliProxyHubsView(_container, (Style)FindResource("GhostButton"));
+                ContentHost.Children.Add(_hubEditor);
                 break;
         }
     }
@@ -529,6 +538,15 @@ public partial class DashboardWindow : Window
 
     private void RenderCustomize()
     {
+        var hubs = new Button
+        {
+            Content = "CLIProxyAPI Hubs",
+            Style = (Style)FindResource("GhostButton"),
+            Margin = new Thickness(0, 0, 0, 8)
+        };
+        hubs.Click += (_, _) => ShowScreen(DashboardScreen.CliProxyHubs);
+        ContentHost.Children.Add(hubs);
+
         if (_container.ApiKeyAccountStore.HasUnreadableAccounts)
         {
             ContentHost.Children.Add(new TextBlock
