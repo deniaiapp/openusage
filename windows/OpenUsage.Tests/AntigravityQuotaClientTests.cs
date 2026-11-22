@@ -10,6 +10,49 @@ namespace OpenUsage.Tests;
 
 public sealed class AntigravityQuotaClientTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RefreshUsesOnlyTheAppsOwnSavedSignIn(bool hasPreviousCache)
+    {
+        var directory = Directory.CreateTempSubdirectory("openusage-antigravity-");
+        try
+        {
+            if (hasPreviousCache)
+            {
+                var cache = Path.Combine(directory.FullName, AntigravityAuthStore.CacheRelative);
+                Directory.CreateDirectory(Path.GetDirectoryName(cache)!);
+                File.WriteAllText(cache, """{"access_token":"fixture-token","refresh_token":"fixture-refresh"}""");
+            }
+            using var handler = new Handler("""
+                {"groups":[{"buckets":[
+                    {"bucketId":"gemini-5h","remainingFraction":0.9},
+                    {"bucketId":"gemini-weekly","remainingFraction":0.8},
+                    {"bucketId":"3p-5h","remainingFraction":0.7},
+                    {"bucketId":"3p-weekly","remainingFraction":0.6}
+                ]}]}
+                """, "{}");
+            using var http = new AppHttp(new HttpClient(handler));
+            var provider = new AntigravityProvider(http, null, new(directory.FullName));
+
+            Assert.Equal(hasPreviousCache, await provider.HasLocalCredentialsAsync());
+            var snapshot = await provider.RefreshAsync();
+            if (hasPreviousCache)
+            {
+                Assert.False(snapshot.IsError);
+                Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Session"));
+                Assert.Equal("fixture-token", Assert.Single(handler.Tokens));
+            }
+            else
+            {
+                Assert.Equal("Connect Antigravity with Google in Customize.",
+                    Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+                Assert.Empty(handler.Hosts);
+            }
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
     [Fact]
     public async Task DailyKeepsItsActiveSessionWhenProductionAddsMissingBuckets()
     {
@@ -241,11 +284,13 @@ public sealed class AntigravityQuotaClientTests
         HttpStatusCode productionStatus = HttpStatusCode.OK) : HttpMessageHandler
     {
         public List<string> Hosts { get; } = [];
+        public List<string?> Tokens { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var host = request.RequestUri!.Host;
             Hosts.Add(host);
+            Tokens.Add(request.Headers.Authorization?.Parameter);
             Assert.Equal("/v1internal:retrieveUserQuotaSummary", request.RequestUri.AbsolutePath);
             var userAgent = Assert.Single(request.Headers.GetValues("User-Agent"));
             Assert.StartsWith("antigravity/hub/", userAgent);
