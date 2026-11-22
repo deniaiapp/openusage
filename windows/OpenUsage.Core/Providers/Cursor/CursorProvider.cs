@@ -139,11 +139,13 @@ public static class CursorUsageMapper
         if (spendLimitUsage is not null)
         {
             var (onDemandLimit, spent) = OnDemandBudget(spendLimitUsage, isTeam);
+            var title = isTeam && JsonUtil.Number(spendLimitUsage["individualLimit"]) is null ? "Team Spend" : null;
             if (onDemandLimit > 0)
                 lines.Add(MetricLine.Progress("On-demand", JsonUtil.CentsToDollars(spent),
-                    JsonUtil.CentsToDollars(onDemandLimit), ProgressFormat.Dollars));
+                    JsonUtil.CentsToDollars(onDemandLimit), ProgressFormat.Dollars) with { Title = title });
             else if (spent > 0)
-                lines.Add(MetricLine.Values("On-demand", [new MetricValue(JsonUtil.CentsToDollars(spent), MetricKind.Dollars)]));
+                lines.Add(MetricLine.Values("On-demand", [new MetricValue(JsonUtil.CentsToDollars(spent), MetricKind.Dollars)])
+                    with { Title = title });
         }
 
         return (PlanLabel(planName), lines);
