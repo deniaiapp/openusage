@@ -119,6 +119,8 @@ On Windows, Copilot and Antigravity distinguish provider throttling from sign-in
 
 If Claude's first check for rate limit resets can't connect, the next refresh tries again.
 
+Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
+
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
 On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
