@@ -110,6 +110,8 @@ If Claude's first check for rate limit resets can't connect, the next refresh tr
 
 Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
 
+Windows keeps your metric choices across restarts, even if you unpin every metric.
+
 On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
