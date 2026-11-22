@@ -3,7 +3,10 @@ using OpenUsage.Core.Stores;
 
 namespace OpenUsage.Core.Services;
 
-public sealed record PriorityMetric(Provider Provider, WidgetDescriptor Descriptor, WidgetData Data);
+public sealed record PriorityMetric(Provider Provider, WidgetDescriptor Descriptor, WidgetData Data)
+{
+    public UnifiedAccountMetric? UnifiedMetric { get; init; }
+}
 
 public sealed record PriorityBoard(
     IReadOnlyList<PriorityMetric> Pinned,
@@ -28,11 +31,23 @@ public sealed record PriorityBoard(
             else if (store.Snapshot(runtime.Provider.Id) is null)
                 waiting.Add(runtime.Provider);
         }
-        var metrics = (from runtime in providers
-                       from descriptor in layout.VisibleMetrics(runtime.Provider.Id, includeOnDemand: true)
-                       let data = store.Resolve(descriptor)
-                       where data.HasData
-                       select new PriorityMetric(runtime.Provider, descriptor, data)).ToList();
+        var metrics = new List<PriorityMetric>();
+        var unified = store.UnifiedAccounts();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var runtime in providers)
+        {
+            var provider = runtime.Provider;
+            if (unified.TryGetValue(provider.Id.Split('@', 2)[0], out var combined))
+            {
+                if (seen.Add(combined.Provider.Id))
+                    metrics.AddRange(combined.Metrics.Select(metric =>
+                        new PriorityMetric(combined.Provider, metric.Descriptor, metric.Data) { UnifiedMetric = metric }));
+                continue;
+            }
+            metrics.AddRange(layout.VisibleMetrics(provider.Id, includeOnDemand: true)
+                .Select(descriptor => new PriorityMetric(provider, descriptor, store.Resolve(descriptor)))
+                .Where(metric => metric.Data.HasData));
+        }
         var pinned = new List<PriorityMetric>();
         var runningOut = new List<(PriorityMetric Metric, (int Group, double Value) Rank)>();
         var usedUp = new List<PriorityMetric>();
@@ -42,7 +57,9 @@ public sealed record PriorityBoard(
             var state = metric.Data.GetMeterState(now);
             if (state.Kind == MeterStateKind.Spent)
                 usedUp.Add(metric);
-            else if (metric.Descriptor.Pinnable && layout.IsPinned(metric.Descriptor.Id))
+            else if (metric.Descriptor.Pinnable && (metric.UnifiedMetric is { } combined
+                         ? layout.IsUnifiedMetricPinned(combined)
+                         : layout.IsPinned(metric.Descriptor.Id)))
                 pinned.Add(metric);
             else if (metric.Data.Limit is > 0 && (state.Severity is MeterSeverity.Warning or MeterSeverity.Critical))
                 runningOut.Add((metric, RunningOutRank(metric.Data, state)));

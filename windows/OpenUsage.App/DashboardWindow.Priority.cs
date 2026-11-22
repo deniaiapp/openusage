@@ -69,7 +69,7 @@ public partial class DashboardWindow
                         Text = metric.Provider.DisplayName, Style = (Style)FindResource("MutedText"),
                         TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(12, 8, 12, 0)
                     },
-                    MetricRow(metric.Descriptor, metric.Data, now)
+                    MetricRow(metric.Descriptor, metric.Data, now, metric.UnifiedMetric)
                 }
             };
             ContentHost.Children.Add(card);

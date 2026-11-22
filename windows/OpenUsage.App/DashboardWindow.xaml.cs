@@ -265,8 +265,16 @@ public partial class DashboardWindow : Window
             return;
         }
 
+        var unified = _container.Data.UnifiedAccounts();
+        var shown = new HashSet<string>(StringComparer.Ordinal);
         foreach (var runtime in providers)
-            ContentHost.Children.Add(ProviderCard(runtime));
+        {
+            var kind = runtime.Provider.Id.Split('@', 2)[0];
+            if (!unified.TryGetValue(kind, out var combined))
+                ContentHost.Children.Add(ProviderCard(runtime));
+            else if (shown.Add(kind))
+                ContentHost.Children.Add(UnifiedProviderCard(kind, combined));
+        }
     }
 
     private UIElement ProviderCard(IProviderRuntime runtime)
@@ -353,7 +361,8 @@ public partial class DashboardWindow : Window
         return card;
     }
 
-    private UIElement MetricRow(WidgetDescriptor descriptor, WidgetData? resolved = null, DateTimeOffset? evaluatedAt = null)
+    private UIElement MetricRow(WidgetDescriptor descriptor, WidgetData? resolved = null,
+        DateTimeOffset? evaluatedAt = null, UnifiedAccountMetric? unified = null)
     {
         var data = resolved ?? _container.Data.Resolve(descriptor);
         var now = evaluatedAt ?? DateTimeOffset.Now;
@@ -361,7 +370,9 @@ public partial class DashboardWindow : Window
         {
             Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4),
             Background = Brushes.Transparent,
-            ContextMenu = _container.Settings.PrivacyMode ? null : MetricContextMenu(descriptor)
+            ContextMenu = _container.Settings.PrivacyMode ? null : unified is { } metric
+                ? UnifiedMetricMenu(metric)
+                : MetricContextMenu(descriptor)
         };
 
         var labelLine = new Grid();
@@ -644,6 +655,7 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        AddUnifiedAccountsSetting(runtime.Provider.Id);
         if (runtime is OpenUsage.Core.Providers.Claude.ClaudeProvider claude)
         {
             ContentHost.Children.Add(SectionTitle("Claude Sign-In"));

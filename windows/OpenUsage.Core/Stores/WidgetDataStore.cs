@@ -103,13 +103,62 @@ public sealed class WidgetDataStore
             .Where(row => !row.Descriptor.HideWhenMissing || row.Data.HasData)
             .ToArray();
 
+    public IReadOnlyDictionary<string, UnifiedAccountView> UnifiedAccounts() =>
+        _layout.VisibleProviders
+            .GroupBy(runtime => runtime.Provider.Id.Split('@', 2)[0], StringComparer.Ordinal)
+            .Where(group => _layout.UnifiesAccounts(group.Key) && group.Skip(1).Any())
+            .ToDictionary(group => group.Key, group => MakeUnifiedAccount(group.Key, group.ToArray()), StringComparer.Ordinal);
+
+    private UnifiedAccountView MakeUnifiedAccount(string providerId, IProviderRuntime[] accounts)
+    {
+        var provider = accounts[0].Provider with
+        {
+            Id = providerId + ".unified",
+            DisplayName = accounts[0].Provider.DisplayName.Split(" · ", 2)[0] + $" · {accounts.Length} Accounts"
+        };
+        var metricsByAccount = accounts
+            .Select(runtime => _layout.VisibleMetrics(runtime.Provider.Id, includeOnDemand: true))
+            .ToArray();
+        var orders = metricsByAccount.Select(descriptors => descriptors.Select(MetricKey).ToArray());
+        var metrics = new List<UnifiedAccountMetric>();
+        foreach (var key in UnifiedMetrics.MergeOrder(orders))
+        {
+            var readings = metricsByAccount.SelectMany(descriptors => descriptors.Where(d => MetricKey(d) == key))
+                .Select(descriptor => (Descriptor: descriptor, Data: Resolve(descriptor)))
+                .Where(row => row.Data.HasData && !row.Data.IsChart).ToArray();
+            if (UnifiedMetrics.Pool(readings.Select(row => row.Data)) is not { HasData: true } pooled) continue;
+
+            var descriptorIds = accounts.SelectMany(account =>
+                account.WidgetDescriptors.Where(d => MetricKey(d) == key).Select(d => d.Id)).ToArray();
+            var combined = readings[0].Descriptor with { ProviderId = provider.Id, Id = provider.Id + "." + key };
+            metrics.Add(new UnifiedAccountMetric(key, combined, pooled,
+                readings.All(row => _layout.IsOnDemand(row.Descriptor.Id)), descriptorIds));
+        }
+
+        var plans = accounts.Select(runtime => Snapshot(runtime.Provider.Id)?.Plan)
+            .OfType<string>().Distinct(StringComparer.Ordinal).ToArray();
+        return new UnifiedAccountView(provider, accounts.Select(runtime => runtime.Provider).ToArray(),
+            plans.Length > 1 ? "Multiple" : plans.FirstOrDefault(), metrics);
+    }
+
+    private static string MetricKey(WidgetDescriptor descriptor) => descriptor.Id[(descriptor.ProviderId.Length + 1)..];
+
     public void NotifyPresentationChanged() => Raise();
 
     public IReadOnlyList<(WidgetDescriptor Descriptor, WidgetData Data)> PinnedTiles()
     {
         var tiles = new List<(WidgetDescriptor, WidgetData)>();
+        var unified = UnifiedAccounts();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var descriptor in _layout.PinnedDescriptors())
         {
+            if (unified.TryGetValue(descriptor.ProviderId.Split('@', 2)[0], out var combined))
+            {
+                var metric = combined.Metrics.FirstOrDefault(row => row.CopyIds.Contains(descriptor.Id));
+                if (metric is not null && seen.Add(metric.Descriptor.Id))
+                    tiles.Add((metric.Descriptor, metric.Data));
+                continue;
+            }
             var data = Resolve(descriptor);
             if (!data.HasData) continue;
             tiles.Add((descriptor, data));
