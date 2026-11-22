@@ -125,6 +125,8 @@ Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
 Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
 
+Windows shows available Z.ai Limit Resets when you expand the account card.
+
 OpenUsage encrypts its Antigravity sign-in cache for your Windows user.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
