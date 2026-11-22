@@ -14,19 +14,37 @@ public partial class App : Application
     private TrayController? _tray;
     private DashboardWindow? _window;
     private HotkeyService? _hotkey;
+    private NotificationActivation? _notificationActivation;
+    private bool _openDashboard;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        _mutex = new Mutex(true, @"Local\OpenUsage.Windows", out var created);
+        if (e.Args.FirstOrDefault() == NotificationRequest.Argument)
+        {
+            if (!NotificationRequest.OpensDashboard(e.Args))
+            {
+                Shutdown();
+                return;
+            }
+            _openDashboard = true;
+        }
+
+        var mutex = new Mutex(true, @"Local\OpenUsage.Windows", out var created);
         if (!created)
         {
+            mutex.Dispose();
+            if (_openDashboard) NotificationActivation.Forward();
             Shutdown();
             return;
         }
+        _mutex = mutex;
 
         try
         {
+            try { _notificationActivation = new NotificationActivation(OpenDashboardFromNotification); }
+            catch (Exception ex) { AppLog.Warn("notifications", $"Could not listen for toast activation ({ex.GetType().Name})."); }
+
             _container = new AppContainer();
             ThemeService.Apply(_container.Settings.Theme);
             LaunchAtLogin.Apply(_container.Settings.LaunchAtLogin);
@@ -84,6 +102,7 @@ public partial class App : Application
         _hotkey.Attach(_window);
         _hotkey.Apply(container.Settings.GlobalHotkey);
         var window = _window;
+        if (_openDashboard) window.ShowScreen(DashboardScreen.Dashboard);
         _hotkey.Activated += () => window.Dispatcher.Invoke(window.ToggleFromTray);
         _window.HotkeyChanged += combo =>
         {
@@ -93,8 +112,15 @@ public partial class App : Application
         };
     }
 
+    private void OpenDashboardFromNotification()
+    {
+        if (_window is { } window) window.ShowScreen(DashboardScreen.Dashboard);
+        else _openDashboard = true;
+    }
+
     protected override void OnExit(ExitEventArgs e)
     {
+        _notificationActivation?.Dispose();
         _hotkey?.Dispose();
         _tray?.Dispose();
         _container?.Dispose();
