@@ -81,6 +81,7 @@ How everything works, in [docs/](docs/README.md):
 - [Updates](docs/updates.md)
 - [Proxy](docs/proxy.md)
 - [Privacy](docs/privacy.md), including optional daily provider account counts
+- [OpenUsage on Windows](docs/windows.md), including optional usage notifications
 
 ## Windows
 
@@ -94,6 +95,8 @@ dotnet run --project OpenUsage.App
 ```
 
 In **Settings → Priority Limits**, choose when low limits turn orange or red.
+
+On Windows, Copilot and Antigravity distinguish provider throttling from sign-in failures and empty usage.
 
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment. Management keys also show Yesterday and Prior 30 Days spend.
 
