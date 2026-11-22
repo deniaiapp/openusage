@@ -95,10 +95,10 @@ macOS-only pieces left out on purpose:
 - Share-screenshot cards
 
 You can [connect and disconnect CLIProxyAPI hubs](../docs/windows.md#cliproxyapi-hubs) in Customize.
-The app saves supported logins when you connect or replace the key, but does not run scheduled
-hub sync or show hub accounts yet. Management requests use HTTPS, or HTTP for loopback, local
-network, and Tailscale addresses, without following redirects. The core can create an account-scoped
-provider runtime that reads usage through the hub's `api-call` transport. These runtimes are not
-registered for app refreshes or the dashboard yet.
+The app keeps supported hub logins in sync on startup, on demand, and on scheduled refreshes.
+Failed checks appear next to the hub in Customize; hub accounts are not shown yet.
+Management requests use HTTPS, or HTTP for loopback, local
+network, and Tailscale addresses, without following redirects. The core supports the hub's
+`api-call` transport, but provider refreshes do not use it yet.
 
 Proxy support still honors `~\.openusage\config.json` (or `%APPDATA%\OpenUsage\config.json`) with a `proxy` URL.

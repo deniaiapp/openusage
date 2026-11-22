@@ -7,6 +7,8 @@ internal sealed class CliProxyHubConnections(CliProxyHubClient client, CliProxyH
 {
     public IReadOnlyList<CliProxyHub> List() => store.List();
 
+    public string? SyncError(Guid hubId) => store.SyncError(hubId);
+
     public async Task<(CliProxyHub Hub, IReadOnlyList<CliProxyHubLogin> Logins)> ConnectAsync(
         string input, string key, CancellationToken ct)
     {
