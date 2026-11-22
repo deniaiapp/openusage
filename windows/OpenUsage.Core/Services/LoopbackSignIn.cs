@@ -9,12 +9,14 @@ namespace OpenUsage.Core.Services;
 internal sealed class LoopbackSignIn : IDisposable
 {
     private const int HeaderLimit = 16_384;
-    private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
+    private readonly TcpListener _listener;
 
-    public LoopbackSignIn()
+    public LoopbackSignIn(bool useLocalhost = false, int port = 0, string path = "/callback")
     {
+        _listener = new(IPAddress.Loopback, port);
         _listener.Start();
-        RedirectUri = new Uri($"http://127.0.0.1:{((IPEndPoint)_listener.LocalEndpoint).Port}/callback");
+        var host = useLocalhost ? "localhost" : "127.0.0.1";
+        RedirectUri = new Uri($"http://{host}:{((IPEndPoint)_listener.LocalEndpoint).Port}{path}");
     }
 
     public Uri RedirectUri { get; }
@@ -30,8 +32,9 @@ internal sealed class LoopbackSignIn : IDisposable
             {
                 var stream = client.GetStream();
                 var target = await ReadTargetAsync(stream, connection.Token);
-                var query = target?.StartsWith("/callback?", StringComparison.Ordinal) == true
-                    ? HttpUtility.ParseQueryString(target[10..])
+                var callback = RedirectUri.AbsolutePath + "?";
+                var query = target?.StartsWith(callback, StringComparison.Ordinal) == true
+                    ? HttpUtility.ParseQueryString(target[callback.Length..])
                     : null;
                 var matched = query?.GetValues("state") is [var received] && received == state;
                 var code = matched && query?.GetValues("error") is null &&
@@ -39,7 +42,7 @@ internal sealed class LoopbackSignIn : IDisposable
                     !value.Any(char.IsControl) ? value : null;
                 await ReplyAsync(stream, code is not null, connection.Token);
                 if (code is not null) return code;
-                if (matched) throw new ProviderRequestException("Devin sign-in was not completed. Try again.");
+                if (matched) throw new ProviderRequestException("Sign-in was not completed. Try again.");
             }
             catch (IOException) when (!ct.IsCancellationRequested) { }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested) { }
