@@ -85,19 +85,22 @@ public sealed class CodexTokenHistoryTests
             data.ReplaceAccountSnapshot(snapshot);
 
             var expanded = data.ResolveCardRows(layout.OnDemandMetrics("codex"))
-                .SkipWhile(row => row.Descriptor.Id != "codex.rateLimitResets").ToArray();
-            Assert.Equal(available ? new[] { "Rate Limit Resets", "Today", "Yesterday", "Last 30 Days" } : ["Rate Limit Resets"],
+                .SkipWhile(row => row.Descriptor.Id != "codex.credits").ToArray();
+            Assert.Equal(available
+                    ? new[] { "Credits", "Credit Limit", "Rate Limit Resets", "Today", "Yesterday", "Last 30 Days" }
+                    : ["Credits", "Credit Limit", "Rate Limit Resets"],
                 expanded.Select(row => row.Descriptor.Title));
             Assert.Equal(new[] { "codex.session", "codex.weekly" }, layout.PinnedDescriptors().Select(d => d.Id).Order());
             Assert.Equal(31d, Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Session")).Used);
             Assert.Equal(47d, Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Weekly")).Used);
-            Assert.All(expanded.Skip(1), row =>
+            var history = expanded.Skip(3);
+            Assert.All(history, row =>
             {
                 Assert.False(row.Data.IsBounded);
                 Assert.Equal("tokens", Assert.Single(row.Data.SelectedValues).Label);
             });
             if (available)
-                Assert.Equal(new[] { 500d, 0d, 500d }, expanded.Skip(1).Select(row => row.Data.SelectedValues.Single().Number));
+                Assert.Equal(new[] { 500d, 0d, 500d }, history.Select(row => row.Data.SelectedValues.Single().Number));
         }
         finally { cache.Delete(recursive: true); }
     }
@@ -117,6 +120,7 @@ public sealed class CodexTokenHistoryTests
             {
                 "/backend-api/wham/usage" => Reply(HttpStatusCode.OK, """
                     {"rate_limit":{"primary_window":{"used_percent":31},"secondary_window":{"used_percent":47}},
+                     "credits":{"balance":"10"},"spend_control":{"individual_limit":{"used":12.5,"limit":100.75}},
                      "rate_limit_reset_credits":{"available_count":1}}
                     """),
                 "/backend-api/wham/rate-limit-reset-credits" => Reply(HttpStatusCode.OK, """{"available_count":1}"""),
