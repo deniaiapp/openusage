@@ -89,7 +89,7 @@ When ChatGPT reports a workspace credit limit, the expanded Codex card shows **C
 
 Codex logins stored in Credential Manager aren't refreshed by OpenUsage. If a CLI-based Codex session expires, run the corresponding CLI once.
 
-For Grok, choose **Customize → Grok → Sign In with Grok**, then open xAI to confirm the device code. **Sign In Again** replaces the encrypted OpenUsage connection only after usage is verified. Existing Grok CLI sign-ins still work if you haven't connected Grok in OpenUsage.
+For Grok, choose **Customize → Grok → Sign In with Grok**, then open xAI to confirm the device code. **Sign In Again** replaces the encrypted OpenUsage connection only after usage is verified. OpenUsage no longer reads Grok CLI credentials; existing CLI-only connections need to sign in once in Customize.
 
 Antigravity, Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown.
 

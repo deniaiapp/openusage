@@ -35,7 +35,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Codex | **Customize → Codex → Sign In with ChatGPT** (requires device code authorization enabled in ChatGPT), or an existing Codex CLI sign-in |
 | Cursor | **Customize → Cursor → Sign In with Cursor**, or existing Cursor sign-ins in `%APPDATA%\Cursor\User\globalStorage\state.vscdb` or Credential Manager (`cursor-access-token`) |
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com) |
-| Grok | **Customize → Grok → Sign In with Grok**, or an existing Grok CLI sign-in |
+| Grok | **Customize → Grok → Sign In with Grok**; Grok CLI credentials are not read |
 | Muse Code | **Customize → Muse Code → Sign In with Meta** |
 | OpenCode | Go API key in Customize, or `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
 | Antigravity | **Customize → Antigravity → Sign In with Google**, or an existing OpenUsage sign-in cache. Windows Credential Manager is no longer read |
