@@ -125,38 +125,4 @@ public class CodexUpstreamTests
         finally { cache.Delete(recursive: true); }
     }
 
-    // #1322
-    [Fact]
-    public void Save_KeepsOtherFieldsAndRefusesToOverwriteANewerLogin()
-    {
-        var path = Path.GetTempFileName();
-        try
-        {
-            File.WriteAllText(path, """{"auth_mode":"chatgpt","tokens":{"access_token":"a1","refresh_token":"r1","account_id":"acc"}}""");
-            var store = new CodexAuthStore();
-            var auth = CodexAuthStore.ParseFile(path)!;
-            auth.AccessToken = "a2";
-            auth.RefreshToken = "r2";
-            Assert.True(store.Save(auth));
-            var saved = JsonUtil.ParseObject(File.ReadAllText(path))!;
-            Assert.Equal("chatgpt", JsonUtil.String(saved["auth_mode"]));
-            Assert.Equal("a2", JsonUtil.String(saved["tokens"]!["access_token"]));
-            Assert.Equal("acc", JsonUtil.String(saved["tokens"]!["account_id"]));
-
-            File.WriteAllText(path, """{"tokens":{"access_token":"a3","refresh_token":"r3"}}""");
-            auth.AccessToken = "a4";
-            auth.RefreshToken = "r4";
-            Assert.False(store.Save(auth));
-            Assert.Equal("a3", CodexAuthStore.ParseFile(path)!.AccessToken);
-        }
-        finally { File.Delete(path); }
-    }
-
-    // #1317
-    [Fact]
-    public void KeyringAccount_MatchesCodexStoreKey()
-    {
-        Assert.Equal("cli|ba7816bf8f01cfea", CodexAuthStore.KeyringAccount("abc"));
-        Assert.All(CodexAuthStore.KeyringAccounts("~/.codex"), a => Assert.Matches("^cli\\|[0-9a-f]{16}$", a));
-    }
 }

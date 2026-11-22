@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Grok;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -32,7 +33,7 @@ public sealed class GrokDeviceLoginTests
         {
             Assert.Equal(HttpMethod.Post, request.Method);
             Assert.Equal("auth.x.ai", request.RequestUri!.Host);
-            Assert.Contains("client_id=" + GrokAuthStore.DefaultClientId, body);
+            Assert.Contains("client_id=" + GrokDeviceLogin.ClientId, body);
             if (request.RequestUri.AbsolutePath == "/oauth2/device/code")
             {
                 Assert.Contains("scope=openid+email+offline_access+grok-cli%3Aaccess", body);
@@ -147,6 +148,29 @@ public sealed class GrokDeviceLoginTests
             Assert.Equal(1, renewed);
             Assert.False((await new GrokProvider(http, new ApiKeyStore(path)).RefreshAsync()).IsError);
             Assert.Equal(1, renewed);
+        }
+        finally { dir.Delete(recursive: true); }
+    }
+
+    [Fact]
+    public async Task MissingAppSignInDoesNotDiscoverCredentialsOrRequestUsage()
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var calls = 0;
+            using var http = Http((_, _) =>
+            {
+                calls++;
+                throw new InvalidOperationException("Unsigned Grok must not request usage.");
+            });
+            var provider = new GrokProvider(http, new ApiKeyStore(Path.Combine(dir.FullName, "keys.bin")));
+            Assert.False(provider.HasAppCredential);
+            Assert.False(await provider.HasLocalCredentialsAsync());
+            var snapshot = await provider.RefreshAsync();
+            Assert.True(snapshot.IsError);
+            Assert.Contains("Customize", Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+            Assert.Equal(0, calls);
         }
         finally { dir.Delete(recursive: true); }
     }

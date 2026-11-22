@@ -79,17 +79,15 @@ If the connection briefly drops while OpenUsage waits for GitHub, it retries wit
 
 To connect Claude, go to **Customize → Claude → Sign In with Claude**. Finish in the browser, or return to the Claude settings page and paste the code the browser gives you. A failed sign-in leaves your existing connection in place. OpenUsage saves verified sign-ins with Windows user encryption.
 
-Existing Claude CLI credentials still work until you connect in Customize.
+Claude uses only verified OpenUsage sign-ins. It does not read Claude CLI files, Credential Manager items, environment tokens, or local OAuth endpoint overrides. If you previously used a CLI-only connection, sign in once in Customize. OpenUsage renews its own sign-in without changing the CLI's files.
 
-For Cursor, choose **Customize → Cursor → Sign In with Cursor** and finish signing in in your browser. OpenUsage verifies usage before saving the sign-in with Windows user encryption. **Sign In Again** replaces it without changing your card settings. Existing local Cursor sign-ins still work if you haven't connected Cursor in OpenUsage.
+For Cursor, choose **Customize → Cursor → Sign In with Cursor** and finish signing in in your browser. OpenUsage verifies usage before saving the sign-in with Windows user encryption. **Sign In Again** replaces it without changing your card settings. Existing local-only connections need to sign in once in Customize; OpenUsage no longer reads or changes the Cursor app's SQLite database or Credential Manager tokens.
 
-For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing Codex CLI logins still work if you haven't connected ChatGPT in OpenUsage.
+For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing CLI-only connections need to sign in once in Customize; OpenUsage no longer reads Codex CLI files or Credential Manager items.
 
 When ChatGPT reports a workspace credit limit, the expanded Codex card shows **Credit Limit** between **Credits** and **Rate Limit Resets**, with a reset time when reported. It is not pinned to the tray by default.
 
-Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage. If a CLI-based session expires, run the corresponding CLI once.
-
-For Grok, choose **Customize → Grok → Sign In with Grok**, then open xAI to confirm the device code. **Sign In Again** replaces the encrypted OpenUsage connection only after usage is verified. Existing Grok CLI sign-ins still work if you haven't connected Grok in OpenUsage.
+For Grok, choose **Customize → Grok → Sign In with Grok**, then open xAI to confirm the device code. **Sign In Again** replaces the encrypted OpenUsage connection only after usage is verified. OpenUsage no longer reads Grok CLI credentials; existing CLI-only connections need to sign in once in Customize.
 
 Antigravity, Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown.
 
@@ -111,7 +109,7 @@ does not hide live limits. History rows are not pinned to the tray by default.
 
 Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management key, and choose **Connect**. OpenUsage saves a connection or replacement key only after the hub returns a valid login list. Saved addresses and keys are encrypted for the current Windows user.
 
-**Replace Key** keeps the old key if verification fails. **Disconnect** removes only the saved connection on this PC; it does not change the hub. Hub accounts do not appear on the Windows dashboard yet.
+**Replace Key** keeps the old key if verification fails. **Disconnect** removes only the saved connection on this PC; it does not change the hub. Hub accounts are not saved or shown on the Windows dashboard yet.
 
 ## Privacy Mode
 

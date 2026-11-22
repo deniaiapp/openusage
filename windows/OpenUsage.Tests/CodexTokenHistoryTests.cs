@@ -77,7 +77,7 @@ public sealed class CodexTokenHistoryTests
             settings.EnabledProviders.Add("codex");
             var layout = new LayoutStore(settings, [provider]);
             var data = new WidgetDataStore(layout, settings, cache.FullName);
-            var snapshot = await provider.ProbeAsync(new CodexAuth
+            var snapshot = await provider.FetchUsageAsync(new CodexAuth
             {
                 AccessToken = "fixture",
                 AccountId = "workspace"

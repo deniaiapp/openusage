@@ -135,7 +135,7 @@ Cursor's usage history shows actual on-demand charges and reported tokens, not e
 
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
-On Windows, connect Claude in Customize using your browser, or connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment. OpenRouter management keys also show Yesterday and Prior 30 Days spend.
+On Windows, connect Claude in Customize using your browser, or connect ChatGPT for Codex in Customize using a device code. Claude and Codex no longer read CLI files or Credential Manager items, and Claude ignores environment tokens; existing CLI-only connections need to sign in once in Customize. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment. OpenRouter management keys also show Yesterday and Prior 30 Days spend.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
@@ -143,9 +143,9 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 
 Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
-Connect Cursor from **Customize → Cursor → Sign In with Cursor**. Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
+Connect Cursor from **Customize → Cursor → Sign In with Cursor**. OpenUsage no longer reads or changes the Cursor app's SQLite database or Credential Manager tokens; existing local-only connections need to sign in once in Customize. Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
 
-Connect Grok from Customize without installing the Grok CLI.
+Connect Grok from Customize without installing the Grok CLI. OpenUsage no longer reads Grok CLI credentials; existing CLI-only connections need to sign in once in Customize.
 
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 

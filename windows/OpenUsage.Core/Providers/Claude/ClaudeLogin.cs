@@ -9,6 +9,9 @@ namespace OpenUsage.Core.Providers.Claude;
 
 internal sealed class ClaudeLogin(AppHttp http, Func<DateTimeOffset> now, TimeSpan? callbackTimeout = null)
 {
+    internal const string BaseApi = "https://api.anthropic.com";
+    internal const string TokenUrl = "https://platform.claude.com/v1/oauth/token";
+    internal const string ClientId = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
     internal static readonly Uri AuthorizeUrl = new("https://claude.ai/oauth/authorize");
     internal const string Scope = "user:profile user:inference";
 
@@ -21,7 +24,7 @@ internal sealed class ClaudeLogin(AppHttp http, Func<DateTimeOffset> now, TimeSp
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
         var uri = new UriBuilder(AuthorizeUrl) { Query =
-            $"client_id={ClaudeAuthStore.ProdClientId}&response_type=code&redirect_uri={Uri.EscapeDataString(redirect.AbsoluteUri)}" +
+            $"client_id={ClientId}&response_type=code&redirect_uri={Uri.EscapeDataString(redirect.AbsoluteUri)}" +
             $"&scope={Uri.EscapeDataString(Scope)}&code_challenge={challenge}&code_challenge_method=S256&state={state}&code=true" };
         ct.ThrowIfCancellationRequested();
         openBrowser(uri.Uri);
@@ -47,7 +50,7 @@ internal sealed class ClaudeLogin(AppHttp http, Func<DateTimeOffset> now, TimeSp
         return await ExchangeAsync(new
         {
             grant_type = "authorization_code",
-            client_id = ClaudeAuthStore.ProdClientId,
+            client_id = ClientId,
             code,
             state,
             redirect_uri = redirect.AbsoluteUri,
@@ -59,14 +62,14 @@ internal sealed class ClaudeLogin(AppHttp http, Func<DateTimeOffset> now, TimeSp
         ExchangeAsync(new
         {
             grant_type = "refresh_token",
-            client_id = ClaudeAuthStore.ProdClientId,
+            client_id = ClientId,
             refresh_token = previous.RefreshToken,
             scope = Scope
         }, previous.RefreshToken, ct);
 
     private async Task<ClaudeOAuth> ExchangeAsync<T>(T fields, string? priorRefresh, CancellationToken ct)
     {
-        var response = await http.SendAsync(new AppHttpRequest("POST", new Uri(ClaudeAuthStore.ProdRefreshUrl),
+        var response = await http.SendAsync(new AppHttpRequest("POST", new Uri(TokenUrl),
             new Dictionary<string, string> { ["Content-Type"] = "application/json" },
             JsonSerializer.SerializeToUtf8Bytes(fields)), ct);
         if (response.StatusCode == 429)
