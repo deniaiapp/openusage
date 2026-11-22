@@ -4,6 +4,7 @@ using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Providers.Grok;
+using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -122,6 +123,14 @@ public sealed class AppContainer : IDisposable
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
         var grok = Providers.OfType<GrokProvider>().Single();
         var snapshot = await grok.ConnectAsync(showCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
+
+    public async Task ConnectCursorAsync(Action<Uri> openBrowser, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var cursor = Providers.OfType<CursorProvider>().Single();
+        var snapshot = await cursor.ConnectAsync(openBrowser, linked.Token);
         Data.ReplaceAccountSnapshot(snapshot);
     }
 

@@ -140,7 +140,7 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 
 Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
-Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
+Connect Cursor from **Customize → Cursor → Sign In with Cursor**. Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
 
 Connect Grok from Customize without installing the Grok CLI.
 
