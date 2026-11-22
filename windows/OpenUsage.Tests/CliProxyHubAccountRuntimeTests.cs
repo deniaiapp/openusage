@@ -81,6 +81,38 @@ public sealed class CliProxyHubAccountRuntimeTests
     }
 
     [Fact]
+    public async Task AntigravitySurfacesTheHubErrorWhenNeitherEndpointIsReachable()
+    {
+        using var handler = new FixtureHub(hubStatus: HttpStatusCode.BadGateway);
+        using var client = new CliProxyHubClient(new AppHttp(new HttpClient(handler)));
+        using var runtime = new CliProxyHubAccountRuntime(client, Hub, Account("antigravity"), () => "fixture-key");
+
+        var snapshot = await runtime.RefreshAsync();
+
+        Assert.True(snapshot.IsError);
+        Assert.Contains("couldn't reach Antigravity",
+            Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+        Assert.Equal(2, handler.Calls.Count);
+    }
+
+    [Theory]
+    [InlineData("daily-cloudcode-pa.googleapis.com")]
+    [InlineData("cloudcode-pa.googleapis.com")]
+    public async Task AntigravityKeepsQuotaWhenOneUpstreamEndpointIsUnreachable(string unavailableHost)
+    {
+        using var handler = new FixtureHub(managementStatusFor: upstream =>
+            upstream.Host == unavailableHost ? HttpStatusCode.BadGateway : HttpStatusCode.OK);
+        using var client = new CliProxyHubClient(new AppHttp(new HttpClient(handler)));
+        using var runtime = new CliProxyHubAccountRuntime(client, Hub, Account("antigravity"), () => "fixture-key");
+
+        var snapshot = await runtime.RefreshAsync();
+
+        Assert.False(snapshot.IsError);
+        Assert.Equal(25, Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Session")).Used);
+        Assert.Equal(2, handler.Calls.Count);
+    }
+
+    [Fact]
     public async Task ReadsTheCurrentKeyAndStopsUsingADisconnectedLogin()
     {
         using var handler = new FixtureHub();
@@ -138,7 +170,9 @@ public sealed class CliProxyHubAccountRuntimeTests
     private static CliProxyMirroredAccount Account(string providerId) =>
         new(Guid.NewGuid(), providerId, "Fixture Account", new(Hub.Id, "fixture-login", "fixture-index", "fixture-workspace"));
 
-    private sealed class FixtureHub(int status = 200, HttpStatusCode hubStatus = HttpStatusCode.OK) : HttpMessageHandler
+    private sealed class FixtureHub(
+        int status = 200, HttpStatusCode hubStatus = HttpStatusCode.OK,
+        Func<Uri, HttpStatusCode>? managementStatusFor = null) : HttpMessageHandler
     {
         public List<JsonObject> Calls { get; } = [];
         public List<string?> ManagementKeys { get; } = [];
@@ -152,8 +186,9 @@ public sealed class CliProxyHubAccountRuntimeTests
             ManagementKeys.Add(key);
             var call = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!.AsObject();
             Calls.Add(call);
-            if (hubStatus != HttpStatusCode.OK) return new HttpResponseMessage(hubStatus);
             var upstream = new Uri((string)call["url"]!);
+            var managementStatus = managementStatusFor?.Invoke(upstream) ?? hubStatus;
+            if (managementStatus != HttpStatusCode.OK) return new HttpResponseMessage(managementStatus);
             var body = upstream.Host switch
             {
                 "api.anthropic.com" when upstream.AbsolutePath.EndsWith("/usage") => """{"five_hour":{"utilization":10}}""",

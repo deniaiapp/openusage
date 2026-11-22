@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Antigravity;
@@ -34,9 +35,16 @@ public sealed class AntigravityUsageClient(AppHttp http)
         var accepted = false;
         var rateLimited = false;
         var authRejected = false;
+        CliProxyHubUpstreamUnavailableException? unavailable = null;
         foreach (var baseUrl in AntigravityProvider.CloudCodeUrls)
         {
-            var response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuotaSummary", token, ct, fromHub);
+            AppHttpResponse? response;
+            try { response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuotaSummary", token, ct, fromHub); }
+            catch (CliProxyHubUpstreamUnavailableException ex) when (fromHub)
+            {
+                unavailable ??= ex;
+                continue;
+            }
             accepted |= response is { IsSuccess: true };
             if (response is not { IsSuccess: true, Json: { } body })
             {
@@ -56,6 +64,7 @@ public sealed class AntigravityUsageClient(AppHttp http)
         if ((refused || fromHub && authRejected) && !accepted) throw new TokenRefused();
         if (buckets.Count == 0 && rateLimited && !authRejected)
             throw new ProviderRequestException(ProviderErrors.RateLimited);
+        if (!accepted && unavailable is not null) throw unavailable;
         return (QuotaOrder.Select(label => buckets.GetValueOrDefault(label)).OfType<MetricLine>().ToList(), plan);
     }
 
@@ -66,7 +75,9 @@ public sealed class AntigravityUsageClient(AppHttp http)
     {
         foreach (var baseUrl in AntigravityProvider.CloudCodeUrls)
         {
-            var response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuota", token, ct, fromHub);
+            AppHttpResponse? response;
+            try { response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuota", token, ct, fromHub); }
+            catch (CliProxyHubUpstreamUnavailableException) when (fromHub) { continue; }
             if (response is { StatusCode: 401 or 403 }) break;
             if (response is { IsSuccess: true }) return AntigravityUsageMapper.PlanName(response.Json);
         }

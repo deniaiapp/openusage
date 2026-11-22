@@ -57,7 +57,10 @@ internal sealed partial class CliProxyHubClient
         if (CliProxyHubRefusal.From(response) is { } refusal)
         {
             AppLog.Error("cliproxy", $"{host} api-call -> HTTP {response.StatusCode} ({refusal})");
-            throw new ProviderRequestException(CliProxyHubRefusal.Message(refusal, host, upstream, response.StatusCode));
+            var message = CliProxyHubRefusal.Message(refusal, host, upstream, response.StatusCode);
+            if (refusal == CliProxyHubRefusalKind.UpstreamUnreachable)
+                throw new CliProxyHubUpstreamUnavailableException(message);
+            throw new ProviderRequestException(message);
         }
         return Unwrap(response.Body) ?? throw InvalidAnswer(host);
     }
@@ -94,6 +97,8 @@ internal enum CliProxyHubRefusalKind
 {
     KeyRejected, Banned, RemoteManagementOff, ManagementRefused, ManagementOff, LoginMissing, NoToken, UpstreamUnreachable, Failed
 }
+
+internal sealed class CliProxyHubUpstreamUnavailableException(string message) : ProviderRequestException(message);
 
 /// <summary>A management answer that isn't a success, sorted by what the user can do about it.</summary>
 internal static class CliProxyHubRefusal
