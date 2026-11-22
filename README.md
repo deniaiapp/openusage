@@ -121,6 +121,8 @@ If Claude's first check for rate limit resets can't connect, the next refresh tr
 
 Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
 
+Cursor's usage history shows actual on-demand charges and reported tokens, not estimated spend.
+
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
 On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
@@ -128,6 +130,8 @@ On Windows, connect ChatGPT for Codex in Customize using a device code. Add Open
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
 Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
+
+Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 

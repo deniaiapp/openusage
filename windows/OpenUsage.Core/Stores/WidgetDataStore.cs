@@ -20,17 +20,20 @@ public sealed class WidgetDataStore
     private readonly object _gate = new();
     private readonly string? _cacheDir;
     private readonly TimeProvider _clock;
+    private readonly TimeSpan _refreshTimeout;
     private DateTimeOffset _lastRefresh;
     private DateTimeOffset _nextRefresh;
     private bool _refreshing;
 
     /// <param name="cacheDir">Snapshot cache folder; defaults to the app's cache. Tests point it elsewhere.</param>
-    public WidgetDataStore(LayoutStore layout, AppSettings settings, string? cacheDir = null, TimeProvider? clock = null)
+    public WidgetDataStore(LayoutStore layout, AppSettings settings, string? cacheDir = null, TimeProvider? clock = null,
+        TimeSpan? refreshTimeout = null)
     {
         _layout = layout;
         _settings = settings;
         _cacheDir = cacheDir;
         _clock = clock ?? TimeProvider.System;
+        _refreshTimeout = refreshTimeout ?? TimeSpan.FromMinutes(2);
         _nextRefresh = DateTimeOffset.Now;
         LoadCache();
     }
@@ -172,24 +175,22 @@ public sealed class WidgetDataStore
     {
         var providerId = provider.Provider.Id;
         bool IsCurrent() => _providerRefreshes.TryGetValue(providerId, out var active) && active == refresh;
+        var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var work = Task.Run(() => ReadWithOfflineRetriesAsync(provider, IsCurrent, attempt.Token), attempt.Token);
         try
         {
-            for (var retry = 0; IsCurrent() && !cancellationToken.IsCancellationRequested; retry++)
+            var snapshot = await work.WaitAsync(_refreshTimeout, _clock, cancellationToken).ConfigureAwait(false);
+            lock (_gate)
             {
-                var snapshot = await ReadSnapshotAsync(provider, cancellationToken);
-                if (!snapshot.IsError || snapshot.ErrorCategory != ProviderSnapshot.OfflineCategory
-                    || retry == OfflineRetrySeconds.Length)
-                {
-                    lock (_gate)
-                    {
-                        if (IsCurrent() && !cancellationToken.IsCancellationRequested) ApplySnapshot(providerId, snapshot);
-                    }
-                    return;
-                }
-                if (!IsCurrent()) return;
-                var delay = OfflineRetrySeconds[retry];
-                AppLog.Warn(providerId, $"No network path. Retrying the refresh in {delay}s.");
-                await Task.Delay(TimeSpan.FromSeconds(delay), _clock, cancellationToken);
+                if (snapshot is not null && IsCurrent() && !cancellationToken.IsCancellationRequested)
+                    ApplySnapshot(providerId, snapshot);
+            }
+        }
+        catch (TimeoutException) when (!cancellationToken.IsCancellationRequested)
+        {
+            lock (_gate)
+            {
+                if (IsCurrent()) RememberFailure(providerId, "Provider refresh timed out. Try again later.");
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
@@ -203,6 +204,40 @@ public sealed class WidgetDataStore
         }
         finally
         {
+            _ = RetireRefreshAsync(providerId, refresh, work, attempt);
+        }
+    }
+
+    private async Task<ProviderSnapshot?> ReadWithOfflineRetriesAsync(
+        IProviderRuntime provider, Func<bool> isCurrent, CancellationToken ct)
+    {
+        for (var retry = 0; isCurrent(); retry++)
+        {
+            ct.ThrowIfCancellationRequested();
+            var snapshot = await ReadSnapshotAsync(provider, ct);
+            if (!snapshot.IsError || snapshot.ErrorCategory != ProviderSnapshot.OfflineCategory
+                || retry == OfflineRetrySeconds.Length)
+                return snapshot;
+            if (!isCurrent()) return null;
+            var delay = OfflineRetrySeconds[retry];
+            AppLog.Warn(provider.Provider.Id, $"No network path. Retrying the refresh in {delay}s.");
+            await Task.Delay(TimeSpan.FromSeconds(delay), _clock, ct);
+        }
+        return null;
+    }
+
+    private async Task RetireRefreshAsync(string providerId, Lazy<Task> refresh, Task work, CancellationTokenSource attempt)
+    {
+        using (attempt)
+        {
+            if (!work.IsCompleted)
+            {
+                try { await attempt.CancelAsync().ConfigureAwait(false); }
+                catch (Exception ex) { AppLog.Error(providerId, "refresh cancellation failed", ex); }
+            }
+
+            // Don't start a second read while the first can still rotate credentials.
+            await work.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
         }
     }
@@ -326,6 +361,7 @@ public sealed class WidgetDataStore
         public double Limit { get; set; }
         public string? Format { get; set; }
         public string? Suffix { get; set; }
+        public string? CurrencyCode { get; set; }
         public DateTimeOffset? ResetsAt { get; set; }
         public long? PeriodDurationMs { get; set; }
         public string? ColorHex { get; set; }
@@ -350,6 +386,7 @@ public sealed class WidgetDataStore
                 Limit = p.Limit,
                 Format = p.Format.FormatKind.ToString().ToLowerInvariant(),
                 Suffix = p.Format.Suffix,
+                CurrencyCode = p.Format.CurrencyCode,
                 ResetsAt = p.ResetsAt,
                 PeriodDurationMs = p.PeriodDurationMs,
                 ColorHex = p.ColorHex
@@ -358,7 +395,8 @@ public sealed class WidgetDataStore
             {
                 Type = "values",
                 Label = v.Label,
-                Values = v.Items.Select(x => new CachedValue { Number = x.Number, Kind = x.Kind.ToString(), Label = x.Label }).ToList(),
+                Values = v.Items.Select(x => new CachedValue
+                    { Number = x.Number, Kind = x.Kind.ToString(), Label = x.Label, CurrencyCode = x.CurrencyCode }).ToList(),
                 ColorHex = v.ColorHex,
                 ExpiriesAt = v.ExpiriesAt?.ToList() ?? []
             },
@@ -389,13 +427,13 @@ public sealed class WidgetDataStore
         {
             "progress" => MetricLine.Progress(
                 line.Label, line.Used, line.Limit,
-                line.Format == "dollars" ? ProgressFormat.Dollars
+                line.Format == "dollars" ? ProgressFormat.Currency(line.CurrencyCode)
                     : line.Format == "count" ? ProgressFormat.Count(line.Suffix ?? "")
                     : ProgressFormat.Percent,
                 line.ResetsAt, line.PeriodDurationMs, line.ColorHex),
             "values" => MetricLine.Values(
                 line.Label,
-                line.Values.Select(v => new MetricValue(v.Number, Enum.Parse<MetricKind>(v.Kind, true), v.Label)).ToList(),
+                line.Values.Select(v => new MetricValue(v.Number, Enum.Parse<MetricKind>(v.Kind, true), v.Label, v.CurrencyCode)).ToList(),
                 line.ColorHex,
                 line.ExpiriesAt),
             "badge" => MetricLine.Badge(line.Label, line.Text ?? "", line.ColorHex, line.Subtitle),
@@ -409,5 +447,6 @@ public sealed class WidgetDataStore
         public double Number { get; set; }
         public string Kind { get; set; } = "Dollars";
         public string? Label { get; set; }
+        public string? CurrencyCode { get; set; }
     }
 }
