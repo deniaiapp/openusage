@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -287,6 +288,10 @@ public sealed partial class CursorProvider : IProviderRuntime
     private readonly AppHttp _http;
     private readonly CursorUsageHistoryStore _historyStore;
     private readonly TimeSpan _spendHistoryBudget;
+    private BillingPlan? _lastBillingPlan;
+
+    private sealed record BillingIdentity(string? Issuer, string? Subject, string? TokenHash);
+    private sealed record BillingPlan(BillingIdentity Identity, string? Name, bool IsMerged);
 
     public CursorProvider(
         AppHttp http,
@@ -369,11 +374,10 @@ public sealed partial class CursorProvider : IProviderRuntime
             throw new InvalidOperationException(ProviderErrors.RequestFailed(usageResponse.StatusCode));
         var usage = usageResponse.Json ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
 
-        var plan = await ReadOptionalAsync("plan", () => ConnectPost(PlanUrl, access, ct), ct);
-        var planName = JsonUtil.String(JsonUtil.Object(plan?["planInfo"])?["planName"]
-            ?? plan?["planName"] ?? plan?["membershipType"]);
+        var plan = await ReadBillingPlanAsync(access, ct);
+        var planName = plan?.Name;
         var session = CursorSession.From(access);
-        var isMerged = JsonUtil.Bool(plan?["isMerged"]) == true;
+        var isMerged = plan?.IsMerged == true;
         (string? Plan, List<MetricLine> Lines) mapped;
         if (CursorUsageMapper.NeedsRequestFallback(usage, planName) && session is not null &&
             CursorRequestUsageMapper.Map(await ReadDashboardAsync("request-based usage",
@@ -402,6 +406,31 @@ public sealed partial class CursorProvider : IProviderRuntime
         if (includeHistory) await AppendSpendLinesAsync(lines, access, ct);
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
+    }
+
+    private async Task<BillingPlan?> ReadBillingPlanAsync(string access, CancellationToken ct)
+    {
+        var claims = Jwt.Payload(access);
+        var subject = JsonUtil.String(claims?["sub"]);
+        var identity = !string.IsNullOrWhiteSpace(subject)
+            ? new BillingIdentity(JsonUtil.String(claims?["iss"]), subject, null)
+            : new BillingIdentity(null, null, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(access))));
+        var previous = _lastBillingPlan is { } cached && cached.Identity == identity ? cached : null;
+        var response = await ReadOptionalAsync("plan", () => ConnectPost(PlanUrl, access, ct), ct);
+        var name = new[]
+        {
+            JsonUtil.String(JsonUtil.Object(response?["planInfo"])?["planName"]),
+            JsonUtil.String(response?["planName"]),
+            JsonUtil.String(response?["membershipType"])
+        }.FirstOrDefault(candidate => !string.IsNullOrWhiteSpace(candidate));
+        var merged = JsonUtil.Bool(response?["isMerged"]);
+        if (merged is null && string.IsNullOrWhiteSpace(name))
+        {
+            if (response is not null) AppLog.Warn("cursor", "plan response did not identify the billing plan");
+            return previous;
+        }
+        ct.ThrowIfCancellationRequested();
+        return _lastBillingPlan = new(identity, name ?? previous?.Name, merged ?? previous?.IsMerged ?? false);
     }
 
     private async Task<JsonObject?> ReadDashboardAsync(string label, Uri url, CursorSession? session, CancellationToken ct)

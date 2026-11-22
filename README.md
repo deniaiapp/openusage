@@ -138,7 +138,7 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 
 Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
-Connect Cursor from **Customize → Cursor → Sign In with Cursor**.
+Connect Cursor from **Customize → Cursor → Sign In with Cursor**. Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
 
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 
@@ -153,6 +153,8 @@ Grok on Windows keeps using a still-valid sign-in if an early renewal fails.
 Saved Windows API-key accounts that this version cannot read stay encrypted when you edit other accounts.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
+
+Expand Antigravity on Windows to see Argon Weekly immediately after Weekly when the account has a separate Argon quota.
 
 ## License
 
