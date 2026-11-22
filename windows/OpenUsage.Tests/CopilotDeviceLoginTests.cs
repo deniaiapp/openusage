@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -84,6 +85,75 @@ public sealed class CopilotDeviceLoginTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RetriesTheSameCodeAfterALostConnectionOrTimeout(bool timeout)
+    {
+        var polls = 0;
+        var waits = new List<TimeSpan>();
+        using var http = MakeHttp((request, form) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/login/device/code") return (200, DeviceResponse);
+            Assert.Contains("device_code=fixture-device%2Bcode", form);
+            if (++polls == 1)
+                throw timeout ? new TaskCanceledException() : new HttpRequestException(HttpRequestError.ConnectionError);
+            return (200, TokenResponse);
+        });
+        var login = new CopilotDeviceLogin(http, (delay, _) =>
+        {
+            waits.Add(delay);
+            return Task.CompletedTask;
+        });
+
+        var prompts = 0;
+        Assert.Equal("fixture-copilot-token", await login.AuthorizeAsync(_ => prompts++, CancellationToken.None));
+        Assert.Equal(1, prompts);
+        Assert.Equal(2, polls);
+        Assert.Equal(new[] { TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5) }, waits);
+    }
+
+    [Fact]
+    public async Task AnHttpErrorIsNotRetriedAsAConnectionFailure()
+    {
+        var polls = 0;
+        using var http = MakeHttp((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/login/device/code") return (200, DeviceResponse);
+            Assert.Equal(1, ++polls);
+            return (503, "{}");
+        });
+
+        var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
+            new CopilotDeviceLogin(http, NoWait).AuthorizeAsync(_ => { }, CancellationToken.None));
+
+        Assert.Contains("HTTP 503", error.Message);
+        Assert.Equal(1, polls);
+    }
+
+    [Fact]
+    public async Task CancelingBetweenPollsAfterALostConnectionStopsSignIn()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var polls = 0;
+        using var http = MakeHttp((request, _) =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/login/device/code") return (200, DeviceResponse);
+            Assert.Equal(1, ++polls);
+            throw new HttpRequestException(HttpRequestError.ConnectionError);
+        });
+        var login = new CopilotDeviceLogin(http, (_, ct) =>
+        {
+            if (polls > 0) cancellation.Cancel();
+            ct.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            login.AuthorizeAsync(_ => { }, cancellation.Token));
+        Assert.Equal(1, polls);
+    }
+
+    [Theory]
     [InlineData("access_denied", "denied")]
     [InlineData("expired_token", "expired")]
     [InlineData("invalid_client", "could not finish")]
@@ -120,6 +190,27 @@ public sealed class CopilotDeviceLoginTests
         Assert.False(shown);
     }
 
+    [Fact]
+    public async Task WithoutAnAppSignInCopilotDoesNotRequestUsage()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            using var http = MakeHttp((_, _) => throw new InvalidOperationException("No usage request expected."));
+            var copilot = new CopilotProvider(http, new ApiKeyStore(Path.Combine(directory.FullName, "keys.bin")));
+
+            Assert.False(await copilot.HasLocalCredentialsAsync());
+            var snapshot = await copilot.RefreshAsync();
+            Assert.True(snapshot.IsError);
+            Assert.Equal("Sign in to GitHub in Customize → Copilot.",
+                Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
     [WindowsFact]
     public async Task RejectedReplacementDoesNotOverrideTheSavedGitHubSignIn()
     {
@@ -154,6 +245,7 @@ public sealed class CopilotDeviceLoginTests
             Assert.Contains("Copilot seat", error.Message);
             var reopened = new CopilotProvider(http, new ApiKeyStore(path));
             Assert.True(reopened.HasAppCredential);
+            Assert.True(await reopened.HasLocalCredentialsAsync());
             Assert.False((await reopened.RefreshAsync()).IsError);
             Assert.Equal(new[] { "fixture-copilot-token", "fixture-rejected-token", "fixture-copilot-token" }, usages);
         }

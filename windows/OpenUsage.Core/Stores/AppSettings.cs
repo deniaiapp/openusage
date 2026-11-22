@@ -7,16 +7,19 @@ namespace OpenUsage.Core.Stores;
 
 public sealed class AppSettings
 {
+    public const int DefaultRefreshIntervalSeconds = 300;
+
     public AppTheme Theme { get; set; } = AppTheme.System;
     public DensitySetting Density { get; set; } = DensitySetting.Regular;
     public WidgetDisplayMode MeterStyle { get; set; } = WidgetDisplayMode.Remaining;
     public ResetDisplayMode ResetDisplay { get; set; } = ResetDisplayMode.Relative;
     public bool AlwaysShowPacing { get; set; }
+    public bool PrivacyMode { get; set; }
     public PriorityLimits PriorityLimits { get; set; } = PriorityLimits.Default;
     public bool ShowUnusedQuotaInPriority { get; set; } = true;
     public bool LaunchAtLogin { get; set; }
     public string? GlobalHotkey { get; set; }
-    public int RefreshIntervalSeconds { get; set; } = 300;
+    public int RefreshIntervalSeconds { get; set; } = DefaultRefreshIntervalSeconds;
     public bool Seeded { get; set; }
     /// <summary>True from a fresh install until the user leaves the welcome screen.</summary>
     public bool WelcomePending { get; set; }
@@ -55,7 +58,7 @@ public sealed class AppSettings
                     loaded.OpenCards ??= new HashSet<string>(StringComparer.Ordinal);
                     loaded.ProviderOrder ??= [];
                     loaded.PriorityLimits ??= PriorityLimits.Default;
-                    if (loaded.RefreshIntervalSeconds < 30) loaded.RefreshIntervalSeconds = 300;
+                    loaded.RefreshIntervalSeconds = NormalizeRefreshInterval(loaded.RefreshIntervalSeconds);
                     return loaded;
                 }
             }
@@ -68,6 +71,9 @@ public sealed class AppSettings
         fresh.FilePath = path;
         return fresh;
     }
+
+    internal static int NormalizeRefreshInterval(int? seconds) =>
+        seconds is >= 30 ? seconds.Value : DefaultRefreshIntervalSeconds;
 
     /// <summary>A fresh install starts with no providers on; the welcome screen turns on the user's picks.</summary>
     public static AppSettings Fresh() => new()

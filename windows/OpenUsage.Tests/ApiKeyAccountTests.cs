@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text.Json;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
@@ -26,6 +27,55 @@ public sealed class ApiKeyAccountTests : IDisposable
     private string AccountFile => Path.Combine(_directory, "accounts.bin");
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
+
+    [WindowsFact]
+    public void UnreadableAccountSurvivesEditsAlongsideReadableAccounts()
+    {
+        var firstId = Guid.NewGuid();
+        var lastId = Guid.NewGuid();
+        const string unreadable = """{"Account":{"Id":"new-format-id","ProviderId":"future","Label":"Future"},"Credential":{"Version":2,"Value":"fixture"}}""";
+        var fixture = $$"""
+            [
+                {"Account":{"Id":"{{firstId}}","ProviderId":"zai","Label":"First"},"Key":"fixture-first"},
+                {{unreadable}},
+                {"Account":{"Id":"{{lastId}}","ProviderId":"openrouter","Label":"Last"},"Key":"fixture-last"}
+            ]
+            """;
+        File.WriteAllBytes(AccountFile, ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(fixture), null,
+            DataProtectionScope.CurrentUser));
+
+        var store = new ApiKeyAccountStore(AccountFile);
+        Assert.Equal(new[] { firstId, lastId }, store.List().Select(account => account.Id));
+        Assert.True(store.HasUnreadableAccounts);
+        var newAccount = store.Add("openrouter", "New", "fixture-new");
+        Assert.True(store.Rename(lastId, "Renamed"));
+        store.ReplaceKey(store.List()[1], "fixture-replacement");
+        Assert.True(store.Remove(firstId));
+
+        var reopened = new ApiKeyAccountStore(AccountFile);
+        Assert.Equal(new[] { lastId, newAccount.Id }, reopened.List().Select(account => account.Id));
+        Assert.True(reopened.HasUnreadableAccounts);
+        Assert.Equal("Renamed", reopened.List()[0].Label);
+        Assert.Equal("fixture-replacement", reopened.Key(lastId));
+        using var contents = JsonDocument.Parse(ProtectedData.Unprotect(File.ReadAllBytes(AccountFile), null,
+            DataProtectionScope.CurrentUser));
+        Assert.Equal(unreadable, contents.RootElement[0].GetRawText());
+
+        File.Delete(AccountFile);
+        Assert.Empty(reopened.List());
+        Assert.False(reopened.HasUnreadableAccounts);
+    }
+
+    [WindowsFact]
+    public void InvalidAccountFileIsNotOverwritten()
+    {
+        var invalid = ProtectedData.Protect("{}"u8.ToArray(), null, DataProtectionScope.CurrentUser);
+        File.WriteAllBytes(AccountFile, invalid);
+        var store = new ApiKeyAccountStore(AccountFile);
+
+        Assert.Throws<InvalidDataException>(() => store.Add("zai", "New", "fixture-key"));
+        Assert.Equal(invalid, File.ReadAllBytes(AccountFile));
+    }
 
     [Fact]
     public void ZaiLimitResetsSeedInOrderWithoutOverwritingAnExistingAccountsPreferences()
@@ -382,6 +432,7 @@ public sealed class ApiKeyAccountTests : IDisposable
             if (request.RequestUri == OpenRouterProvider.CreditsUrl) return (403, "{}");
             if (request.RequestUri == OpenRouterProvider.KeyUrl)
                 return (200, """{"data":{"is_management_key":true,"usage_daily":0,"usage_weekly":0,"usage_monthly":0}}""");
+            if (request.RequestUri == OpenRouterActivity.Url) return (403, "{}");
 
             Assert.Equal("/api/v1/keys", request.RequestUri!.AbsolutePath);
             var query = request.RequestUri.Query;
@@ -397,6 +448,103 @@ public sealed class ApiKeyAccountTests : IDisposable
         Assert.Equal(104, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("Today")).Items).Number);
         Assert.Equal(205, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("This Week")).Items).Number);
         Assert.Equal(306, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("This Month")).Items).Number);
+        Assert.Null(snapshot.Line("Yesterday"));
+    }
+
+    [Fact]
+    public async Task OpenRouterHistoryIsOptionalAndScopedToTheManagementKeyAndUtcDay()
+    {
+        var clock = new FixtureClock();
+        var requests = new List<string>();
+        using var http = MakeHttp(request =>
+        {
+            var key = request.Headers.Authorization!.Parameter!;
+            if (request.RequestUri == OpenRouterProvider.CreditsUrl)
+                return (200, """{"data":{"total_credits":50,"total_usage":9}}""");
+            if (request.RequestUri == OpenRouterProvider.KeyUrl)
+                return key == "fixture-standard"
+                    ? (200, """{"data":{"is_management_key":false,"usage_daily":1}}""")
+                    : (200, """{"data":{"is_management_key":true,"usage_daily":0,"limit":20,"limit_remaining":18}}""");
+            if (request.RequestUri?.AbsolutePath == "/api/v1/keys")
+                return (200, """{"data":[{"usage_daily":3,"usage_weekly":5,"usage_monthly":9}]}""");
+            Assert.Equal(OpenRouterActivity.Url, request.RequestUri);
+            requests.Add(key);
+            return key == "fixture-denied" ? (403, "{}")
+                : (200, """{"data":[{"date":"2026-11-20 00:00:00","usage":1.5},{"date":"2026-11-20","usage":2.5},{"date":"2026-10-22","usage":7},{"date":"2026-10-21","usage":9},{"date":"2026-11-21","usage":12}]}""");
+        });
+        var provider = new OpenRouterProvider(http, new ApiKeyStore(), clock);
+
+        var management = await provider.RefreshWithKeyAsync("fixture-management", default);
+        Assert.Equal(3, Spend(management, "Today"));
+        Assert.Equal(4, Spend(management, "Yesterday"));
+        Assert.Equal(11, Spend(management, "Prior 30 Days"));
+        Assert.Equal(41, Spend(management, "Balance"));
+        Assert.Equal(2, Assert.IsType<MetricLine.ProgressLine>(management.Line("Key Limit")).Used);
+
+        clock.Now = clock.Now.AddMinutes(10);
+        Assert.Equal(4, Spend(await provider.RefreshWithKeyAsync("fixture-management", default), "Yesterday"));
+        var denied = await provider.RefreshWithKeyAsync("fixture-denied", default);
+        Assert.False(denied.IsError);
+        Assert.Null(denied.Line("Yesterday"));
+        Assert.Null((await provider.RefreshWithKeyAsync("fixture-standard", default)).Line("Yesterday"));
+
+        clock.Now = clock.Now.AddMinutes(20);
+        Assert.Equal(12, Spend(await provider.RefreshWithKeyAsync("fixture-management", default), "Yesterday"));
+        Assert.Equal(new[] { "fixture-management", "fixture-denied", "fixture-management" }, requests);
+    }
+
+    [Fact]
+    public void OpenRouterHistoryDistinguishesEmptyAndMalformedActivity()
+    {
+        var today = new DateOnly(2026, 11, 21);
+        var empty = OpenRouterActivity.Parse(JsonUtil.ParseObject("""{"data":[]}"""), today);
+        Assert.NotNull(empty);
+        Assert.All(empty, line => Assert.Equal(0, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(line).Items).Number));
+        Assert.Null(OpenRouterActivity.Parse(JsonUtil.ParseObject("""{"data":[{"date":"2026-11-20","usage":-3}]}"""), today));
+        Assert.Null(OpenRouterActivity.Parse(JsonUtil.ParseObject("""{"data":[{"date":"2026-11-20 29:00:00","usage":3}]}"""), today));
+    }
+
+    [Fact]
+    public void OpenRouterHistorySeedsExistingAccountLayoutsOnlyOnce()
+    {
+        using var http = new AppHttp();
+        var keyStore = new ApiKeyStore();
+        var provider = new OpenRouterProvider(http, keyStore);
+        var account = new ApiKeyAccount(Guid.NewGuid(), "openrouter", "Work");
+        var runtime = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile)).MakeRuntime(account, provider);
+        var path = Path.Combine(_directory, "settings.json");
+        var settings = AppSettings.Load(path);
+        settings.ProviderOrder = [account.CardId];
+        settings.EnabledMetrics.Add("openrouter.month");
+        settings.EnabledMetrics.Add(account.CardId + ".month");
+        settings.ExpandedMetrics.UnionWith(["openrouter.month", account.CardId + ".month"]);
+
+        var layout = new LayoutStore(settings, [provider]);
+        layout.RegisterAccount(runtime, "openrouter");
+        foreach (var card in new[] { "openrouter", account.CardId })
+        {
+            var titles = layout.OnDemandMetrics(card).Select(d => d.Title).ToList();
+            var month = titles.IndexOf("This Month");
+            Assert.True(month >= 0);
+            Assert.Equal(new[] { "Yesterday", "Prior 30 Days" }, titles.Skip(month + 1).Take(2));
+            Assert.False(layout.IsPinned(card + ".yesterday"));
+            Assert.False(layout.IsPinned(card + ".prior30"));
+        }
+        layout.SetMetricEnabled(account.CardId + ".yesterday", false);
+        layout.SetOnDemand(account.CardId + ".prior30", false);
+        var restored = new LayoutStore(AppSettings.Load(path), [provider]);
+        restored.RegisterAccount(runtime, "openrouter");
+        Assert.False(restored.IsMetricEnabled(account.CardId + ".yesterday"));
+        Assert.False(restored.IsOnDemand(account.CardId + ".prior30"));
+    }
+
+    private static double Spend(ProviderSnapshot snapshot, string label) =>
+        Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line(label)).Items).Number;
+
+    private sealed class FixtureClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = new(2026, 11, 21, 23, 40, 0, TimeSpan.Zero);
+        public override DateTimeOffset GetUtcNow() => Now;
     }
 
     [Fact]

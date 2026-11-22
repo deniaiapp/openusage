@@ -14,6 +14,8 @@ public sealed record WidgetData
     public double Used { get; init; }
     public double? Limit { get; init; }
     public string? CountSuffix { get; init; }
+    public string? CurrencyCode { get; init; }
+    public bool ShowsCountLimit { get; init; }
     public string? ValuePrefix { get; init; }
     public WidgetDisplayMode DisplayMode { get; set; } = WidgetDisplayMode.Used;
     public ResetDisplayMode ResetDisplayMode { get; set; } = ResetDisplayMode.Relative;
@@ -53,8 +55,8 @@ public sealed record WidgetData
             if (!HasData) return NoDataHeadline;
             if (ValueTextOverride is not null) return ValueTextOverride;
             if (SelectedValues.FirstOrDefault() is { } first)
-                return (ValuePrefix ?? "") + MetricFormatter.Number(first.Number, first.Kind, MetricFormatter.Style.Row);
-            return (ValuePrefix ?? "") + MetricFormatter.Number(DisplayedValue, Kind, MetricFormatter.Style.Full);
+                return (ValuePrefix ?? "") + MetricFormatter.Number(first.Number, first.Kind, MetricFormatter.Style.Row, first.CurrencyCode);
+            return (ValuePrefix ?? "") + MetricFormatter.Number(DisplayedValue, Kind, MetricFormatter.Style.Full, CurrencyCode);
         }
     }
 
@@ -70,7 +72,7 @@ public sealed record WidgetData
                     var percent = (int)Math.Clamp(Math.Round(DisplayedValue / limit * 100), 0, 100);
                     return $"{percent}%";
                 }
-                return MetricFormatter.Number(DisplayedValue, Kind, MetricFormatter.Style.Tray);
+                return MetricFormatter.Number(DisplayedValue, Kind, MetricFormatter.Style.Tray, CurrencyCode);
             }
             if (SelectedValues.FirstOrDefault() is { } first)
             {
@@ -93,7 +95,10 @@ public sealed record WidgetData
             if (IsBounded)
             {
                 if (ValueTextOverride is not null) return ValueTextOverride;
-                return $"{ValueText} {DisplayMode.Label().ToLowerInvariant()}";
+                var label = DisplayMode.Label().ToLowerInvariant();
+                if (ShowsCountLimit && Kind == MetricKind.Count && Limit is { } limit)
+                    return $"{ValueText} of {MetricFormatter.Number(limit, Kind, MetricFormatter.Style.Full)} {CountSuffix} {label}";
+                return $"{ValueText} {label}";
             }
             return ValueText;
         }
@@ -110,7 +115,7 @@ public sealed record WidgetData
             {
                 var value = selected[0];
                 if (value.Kind == MetricKind.Dollars && UnboundedValueWord is not null)
-                    return $"{MetricFormatter.Number(value.Number, MetricKind.Dollars, MetricFormatter.Style.Row)} {UnboundedValueWord}";
+                    return $"{MetricFormatter.Number(value.Number, value.Kind, MetricFormatter.Style.Row, value.CurrencyCode)} {UnboundedValueWord}";
                 return MetricFormatter.String(value, MetricFormatter.Style.Row);
             }
             if (selected.Count > 1)
@@ -132,7 +137,7 @@ public sealed record WidgetData
             var opposite = DisplayMode == WidgetDisplayMode.Remaining ? Used : Math.Max(0, limit - Used);
             var word = (DisplayMode == WidgetDisplayMode.Remaining ? WidgetDisplayMode.Used : WidgetDisplayMode.Remaining)
                 .Label().ToLowerInvariant();
-            return $"{(ValuePrefix ?? "") + MetricFormatter.Number(opposite, Kind, MetricFormatter.Style.Full)} {word}";
+            return $"{(ValuePrefix ?? "") + MetricFormatter.Number(opposite, Kind, MetricFormatter.Style.Full, CurrencyCode)} {word}";
         }
     }
 
@@ -169,7 +174,8 @@ public sealed record WidgetData
         return Kind switch
         {
             MetricKind.Dollars when Limit is { } limit =>
-                $"{Formatters.Currency(limit, limit == Math.Round(limit) ? 0 : 2)} {LimitNoun ?? "limit"}",
+                $"{(CurrencyCode is null ? Formatters.Currency(limit, limit == Math.Round(limit) ? 0 : 2)
+                    : MetricFormatter.Number(limit, Kind, MetricFormatter.Style.Full, CurrencyCode))} {LimitNoun ?? "limit"}",
             MetricKind.Count => CountSuffix,
             _ => null
         };
@@ -261,6 +267,7 @@ public sealed record WidgetData
     {
         MetricKind.Percent => Math.Round(value),
         MetricKind.Count => Math.Round(value * 10) / 10,
+        MetricKind.Dollars when CurrencyCode is not (null or "USD") => Math.Round(value, MetricFormatter.NonUsdFractionDigits),
         _ => Math.Round(value * 100) / 100
     };
 
@@ -279,6 +286,7 @@ public sealed record WidgetData
             ResetDisplayMode = resetDisplayMode,
             AlwaysShowPacing = alwaysShowPacing,
             PriorityLimits = priorityLimits ?? PriorityLimits.Default,
+            ShowsCountLimit = descriptor.ShowsCountLimit,
             HasData = false
         };
         if (line is null) return sample;
@@ -291,6 +299,7 @@ public sealed record WidgetData
                 Used = progress.Used,
                 Limit = progress.Limit,
                 Kind = progress.Format.MetricKind,
+                CurrencyCode = progress.Format.CurrencyCode,
                 CountSuffix = progress.Format.Suffix,
                 ResetsAt = progress.ResetsAt,
                 PeriodDurationMs = progress.PeriodDurationMs ?? sample.PeriodDurationMs

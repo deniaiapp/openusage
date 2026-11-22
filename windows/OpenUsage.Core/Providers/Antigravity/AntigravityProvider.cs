@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Antigravity;
@@ -213,7 +214,7 @@ public static class AntigravityUsageMapper
     }
 }
 
-public sealed class AntigravityProvider : IProviderRuntime
+public sealed partial class AntigravityProvider : IProviderRuntime
 {
     public static readonly string[] CloudCodeUrls =
     [
@@ -227,10 +228,12 @@ public sealed class AntigravityProvider : IProviderRuntime
     private readonly AppHttp _http;
     private readonly AntigravityUsageClient _usage;
 
-    public AntigravityProvider(AppHttp http)
+    public AntigravityProvider(AppHttp http, ApiKeyStore? keys = null)
     {
         _http = http;
         _usage = new AntigravityUsageClient(http);
+        _keys = keys;
+        _connected = LoadConnected(keys);
     }
 
     public Provider Provider { get; } = new(
@@ -246,32 +249,19 @@ public sealed class AntigravityProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_auth.Load() is not null);
+        Task.FromResult(IsSignedIn || _auth.Load() is not null);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
+        if (IsSignedIn)
+            return await RefreshConnectedAsync(cancellationToken);
         var loaded = _auth.Load(migrateCache: true);
         if (loaded is null)
-            return ProviderSnapshot.Error(Provider, "Start Antigravity or run `agy` and try again.");
+            return ProviderSnapshot.Error(Provider, "Connect Antigravity with Google in Customize.");
         try
         {
-            var access = loaded.Value.Access;
-            var refresh = loaded.Value.Refresh;
-            if (string.IsNullOrEmpty(access) || (loaded.Value.Expiry is { } exp && exp <= DateTimeOffset.UtcNow.AddMinutes(5)))
-            {
-                if (string.IsNullOrEmpty(refresh))
-                    return ProviderSnapshot.Error(Provider, "Couldn't read Antigravity credentials. Sign in to Antigravity again.");
-                var rotated = await RefreshGoogleToken(refresh, cancellationToken);
-                if (rotated is null)
-                    return ProviderSnapshot.Error(Provider, "Antigravity login expired. Sign in again.");
-                access = rotated.Value.Access;
-                refresh = rotated.Value.Refresh ?? refresh;
-                _auth.SaveCache(access, refresh, DateTimeOffset.UtcNow.AddSeconds(rotated.Value.ExpiresIn));
-            }
-
-            var (lines, plan) = await _usage.QuotaAsync(access!, cancellationToken);
-            if (lines.Count == 0)
-                plan ??= await _usage.FallbackPlanAsync(access!, cancellationToken);
+            var (lines, plan) = await ReadQuotaAsync(loaded.Value,
+                (access, refresh, expiry) => _auth.SaveCache(access, refresh, expiry), cancellationToken);
             MetricLine.AppendNoDataIfNeeded(lines);
             return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);
         }
@@ -281,8 +271,42 @@ public sealed class AntigravityProvider : IProviderRuntime
         }
     }
 
-    private async Task<(string Access, string? Refresh, double ExpiresIn)?> RefreshGoogleToken(string refreshToken, CancellationToken ct)
+    internal async Task<(List<MetricLine> Lines, string? Plan)> ReadQuotaAsync(
+        (string? Access, string? Refresh, DateTimeOffset? Expiry) auth,
+        Action<string, string, DateTimeOffset> save,
+        CancellationToken ct)
     {
+        var renewed = string.IsNullOrEmpty(auth.Access) || auth.Expiry <= DateTimeOffset.UtcNow.AddMinutes(5);
+        var access = renewed ? await RenewAccessAsync(auth.Refresh, save, ct) : auth.Access!;
+        try
+        {
+            return await ReadWithTokenAsync(access, ct);
+        }
+        catch (AntigravityUsageClient.TokenRefused)
+        {
+            if (renewed) throw ExpiredSignIn();
+        }
+
+        AppLog.Info("antigravity", "quota request refused; renewing sign-in once");
+        access = await RenewAccessAsync(auth.Refresh, save, ct);
+        try { return await ReadWithTokenAsync(access, ct); }
+        catch (AntigravityUsageClient.TokenRefused) { throw ExpiredSignIn(); }
+    }
+
+    private async Task<(List<MetricLine> Lines, string? Plan)> ReadWithTokenAsync(string access, CancellationToken ct)
+    {
+        var (lines, plan) = await _usage.QuotaAsync(access, ct);
+        if (lines.Count == 0)
+            plan ??= await _usage.FallbackPlanAsync(access, ct);
+        return (lines, plan);
+    }
+
+    private static ProviderRequestException ExpiredSignIn() =>
+        new("Antigravity login expired. Sign in again.");
+
+    private async Task<string> RenewAccessAsync(string? refreshToken, Action<string, string, DateTimeOffset> save, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken)) throw ExpiredSignIn();
         var body = "grant_type=refresh_token" +
                    $"&client_id={WebUtility.UrlEncode(GoogleClientId)}" +
                    $"&client_secret={WebUtility.UrlEncode(GoogleClientSecret)}" +
@@ -293,9 +317,18 @@ public sealed class AntigravityProvider : IProviderRuntime
             new Dictionary<string, string> { ["Content-Type"] = "application/x-www-form-urlencoded" },
             Encoding.UTF8.GetBytes(body),
             15), ct);
-        if (!response.IsSuccess) return null;
+        ct.ThrowIfCancellationRequested();
+        if (response.StatusCode is 400 or 401 or 403 && JsonUtil.String(response.Json?["error"]) == "invalid_grant")
+            throw ExpiredSignIn();
+        if (!response.IsSuccess)
+            throw new ProviderRequestException($"Antigravity token renewal failed (HTTP {response.StatusCode}). Try again later.");
         var access = JsonUtil.String(response.Json?["access_token"]);
-        if (string.IsNullOrEmpty(access)) return null;
-        return (access, JsonUtil.String(response.Json?["refresh_token"]), JsonUtil.Number(response.Json?["expires_in"]) ?? 3600);
+        if (string.IsNullOrWhiteSpace(access))
+            throw new ProviderRequestException("Antigravity returned an invalid token renewal response. Try again later.");
+        var expires = JsonUtil.Number(response.Json?["expires_in"]);
+        var expiry = DateTimeOffset.UtcNow.AddSeconds(expires is > 0 and <= int.MaxValue ? expires.Value : 3600);
+        var rotated = JsonUtil.String(response.Json?["refresh_token"]);
+        save(access, string.IsNullOrWhiteSpace(rotated) ? refreshToken : rotated, expiry);
+        return access;
     }
 }

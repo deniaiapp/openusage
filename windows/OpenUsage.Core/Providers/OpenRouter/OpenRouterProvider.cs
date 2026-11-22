@@ -75,11 +75,16 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
 
     private readonly AppHttp _http;
     private readonly ApiKeyStore _keys;
+    private readonly OpenRouterActivity _activity;
 
     public OpenRouterProvider(AppHttp http, ApiKeyStore keys)
+        : this(http, keys, TimeProvider.System) { }
+
+    internal OpenRouterProvider(AppHttp http, ApiKeyStore keys, TimeProvider clock)
     {
         _http = http;
         _keys = keys;
+        _activity = new OpenRouterActivity(GetAsync, clock);
     }
 
     public string ProviderId => Provider.Id;
@@ -96,6 +101,8 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
         WidgetDescriptor.Values("openrouter.today", Provider, "Today", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.week", Provider, "This Week", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.month", Provider, "This Month", isUsagePeriod: true),
+        WidgetDescriptor.Values("openrouter.yesterday", Provider, "Yesterday", isUsagePeriod: true),
+        WidgetDescriptor.Values("openrouter.prior30", Provider, "Prior 30 Days", isUsagePeriod: true),
         WidgetDescriptor.BoundedDollars("openrouter.keyLimit", Provider, "Key Limit", 100)
     ];
 
@@ -148,7 +155,11 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
             }
             catch (Exception ex) when (!requireKey) { AppLog.Warn("openrouter", $"key fetch failed: {ex.Message}"); }
 
-            if (management) lines.AddRange(await ListedKeysSpendAsync(key, cancellationToken));
+            if (management)
+            {
+                lines.AddRange(await ListedKeysSpendAsync(key, cancellationToken));
+                lines.AddRange(await _activity.ReadAsync(key, cancellationToken));
+            }
             MetricLine.AppendNoDataIfNeeded(lines);
             return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);
         }
