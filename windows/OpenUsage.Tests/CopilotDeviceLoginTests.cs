@@ -231,19 +231,21 @@ public sealed class CopilotDeviceLoginTests
     [InlineData(429, null, null, "rate-limiting")]
     [InlineData(403, "X-RateLimit-Remaining", "15", "Copilot seat")]
     [InlineData(401, "Retry-After", "30", "Copilot seat")]
+    [InlineData(403, "Retry-After", "30", "rate-limiting", "octocorp.ghe.com")]
+    [InlineData(403, "X-RateLimit-Remaining", "15", "Copilot seat on octocorp.ghe.com", "octocorp.ghe.com")]
     public async Task GitHubUsageDistinguishesRateLimitsFromRejectedSignIn(int status, string? header, string? value,
-        string expected)
+        string expected, string host = "github.com")
     {
         using var http = MakeHttp((request, _) =>
         {
-            if (request.RequestUri == CopilotProvider.UsageUrl) return (status, "{}");
+            if (request.RequestUri!.AbsolutePath == "/copilot_internal/user") return (status, "{}");
             return request.RequestUri!.AbsolutePath == "/login/device/code"
                 ? (200, DeviceResponse) : (200, TokenResponse);
         }, header, value);
         var path = Path.Combine(Path.GetTempPath(), $"openusage-rate-limit-{Guid.NewGuid():N}.bin");
         var copilot = new CopilotProvider(http, new ApiKeyStore(path), new CopilotDeviceLogin(http, NoWait));
         var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
-            copilot.ConnectAsync(_ => { }, CancellationToken.None));
+            copilot.ConnectAsync(host, (_, _) => { }, CancellationToken.None));
         Assert.Contains(expected, error.Message);
         Assert.False(File.Exists(path));
     }
@@ -263,7 +265,7 @@ public sealed class CopilotDeviceLoginTests
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
             };
-            if (header is not null && request.RequestUri == CopilotProvider.UsageUrl)
+            if (header is not null && request.RequestUri?.AbsolutePath == "/copilot_internal/user")
                 response.Headers.TryAddWithoutValidation(header, value);
             return response;
         }
