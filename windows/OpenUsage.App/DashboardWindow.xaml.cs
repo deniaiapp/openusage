@@ -12,6 +12,7 @@ using OpenUsage.App.Views;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
@@ -40,6 +41,7 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private DevinSignInView? _devinSignIn;
     private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
     private GrokLoginView? _grokLoginEditor;
@@ -74,7 +76,7 @@ public partial class DashboardWindow : Window
         }
         if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true || _grokLoginEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
-        else
+        else if (_devinSignIn?.IsPending != true)
         {
             _screen = DashboardScreen.Dashboard;
             Render();
@@ -188,8 +190,10 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null || _grokLoginEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null || _grokLoginEditor is not null)) return;
         _accountEditor = null;
+        _devinSignIn?.Cancel();
+        _devinSignIn = null;
         _codexLoginEditor = null;
         _copilotLoginEditor = null;
         _grokLoginEditor = null;
@@ -590,6 +594,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is DevinProvider devin)
+        {
+            ContentHost.Children.Add(SectionTitle("Devin Account"));
+            _devinSignIn = new DevinSignInView(_container, devin);
+            ContentHost.Children.Add(_devinSignIn);
+        }
         if (runtime is OpenUsage.Core.Providers.Codex.CodexProvider codex)
         {
             ContentHost.Children.Add(SectionTitle("ChatGPT Sign-In"));

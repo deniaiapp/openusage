@@ -27,7 +27,7 @@ public static class ProviderCatalog
         new AmpProvider(http, keys),
         new AntigravityProvider(http),
         new CopilotProvider(http, keys),
-        new DevinProvider(http),
+        new DevinProvider(http, keys),
         new GrokProvider(http, keys),
         new MuseProvider(http, keys),
         new OllamaProvider(http),
