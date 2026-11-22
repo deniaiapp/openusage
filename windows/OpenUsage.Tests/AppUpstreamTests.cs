@@ -28,6 +28,19 @@ public sealed class AppUpstreamTests : IDisposable
     }
 
     [Fact]
+    public void PrivacyModeDefaultsOffAndPersistsWhenEnabled()
+    {
+        File.WriteAllText(SettingsPath, "{}");
+        var settings = AppSettings.Load(SettingsPath);
+        Assert.False(settings.PrivacyMode);
+
+        settings.PrivacyMode = true;
+        settings.Save();
+
+        Assert.True(AppSettings.Load(SettingsPath).PrivacyMode);
+    }
+
+    [Fact]
     public void FreshInstall_StartsWithNothingOnAndOwesTheWelcome()
     {
         var (settings, _, _) = Make(new FakeProvider("claude", detected: true));

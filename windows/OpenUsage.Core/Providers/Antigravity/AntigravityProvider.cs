@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Antigravity;
@@ -258,7 +259,7 @@ public static class AntigravityUsageMapper
     }
 }
 
-public sealed class AntigravityProvider : IProviderRuntime
+public sealed partial class AntigravityProvider : IProviderRuntime
 {
     public static readonly string[] CloudCodeUrls =
     [
@@ -272,10 +273,12 @@ public sealed class AntigravityProvider : IProviderRuntime
     private readonly AppHttp _http;
     private readonly AntigravityUsageClient _usage;
 
-    public AntigravityProvider(AppHttp http)
+    public AntigravityProvider(AppHttp http, ApiKeyStore? keys = null)
     {
         _http = http;
         _usage = new AntigravityUsageClient(http);
+        _keys = keys;
+        _connected = LoadConnected(keys);
     }
 
     public Provider Provider { get; } = new(
@@ -292,13 +295,15 @@ public sealed class AntigravityProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_auth.Load() is not null);
+        Task.FromResult(IsSignedIn || _auth.Load() is not null);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
+        if (IsSignedIn)
+            return await RefreshConnectedAsync(cancellationToken);
         var loaded = _auth.Load(migrateCache: true);
         if (loaded is null)
-            return ProviderSnapshot.Error(Provider, "Start Antigravity or run `agy` and try again.");
+            return ProviderSnapshot.Error(Provider, "Connect Antigravity with Google in Customize.");
         try
         {
             var access = loaded.Value.Access;

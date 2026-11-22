@@ -4,7 +4,7 @@ Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tra
 
 The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, and global shortcut. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
 
-The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Both tabs respect which providers and metrics you have turned on.
+The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Accounts without a saved reading appear under **Waiting for Usage** until their first refresh finishes; failures are reported separately. Both tabs respect which providers and metrics you have turned on.
 
 **Running Out** puts the shortest projected time to exhaustion first. Limits without a usable pace follow, with the lowest remaining percentage first.
 
@@ -13,6 +13,8 @@ To add one, open **Customize**, choose **OpenRouter** or **Z.ai**, and enter a n
 Ollama Cloud connects with API keys only. Get a key from [Ollama settings](https://ollama.com/settings/keys), then add it under **Customize → Ollama → Accounts**. The first new Ollama account gets the default Monthly tray pin. Existing API-key accounts keep their settings. If you used the old local Ollama sign-in, add a key to resume tracking cloud usage.
 
 Choose **Replace API Key** next to an additional account to change its key without changing its name or dashboard settings. If the new key doesn't pass validation, OpenUsage keeps the old key.
+
+If this version cannot read a saved API-key account, Customize shows a notice instead of listing that account. It stays saved and encrypted even when you edit other accounts.
 
 In **Customize**, use the up and down arrows to move a provider and its accounts together on the dashboard. The order is saved; **Undo Reorder** restores the previous order during the current session.
 
@@ -40,8 +42,9 @@ Antigravity reads the `gemini:antigravity` Windows credential (or a cached Googl
 
 When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
 
-Expanded provider cards keep the configured metric order instead of grouping On Demand rows beneath Always Visible rows. When Antigravity reports a separate Argon quota, expand its card to see **Argon Weekly** immediately after **Weekly**. The CLI reports it as `argonWeekly`.
+In **Customize → Antigravity**, use **Sign In with Google** and finish in your browser. OpenUsage only replaces the connection once it can read that account's quota and encrypt its sign-in for your Windows user. An existing Windows Antigravity connection still works if you haven't signed in through OpenUsage. **Sign In Again** keeps the current layout and pins.
 
+Expanded provider cards keep the configured metric order instead of grouping On Demand rows beneath Always Visible rows. When Antigravity reports a separate Argon quota, expand its card to see **Argon Weekly** immediately after **Weekly**. The CLI reports it as `argonWeekly`.
 
 OpenUsage encrypts its cached Antigravity sign-in for your Windows user. On refresh, it removes the old unencrypted cache only after saving a protected copy.
 
@@ -58,7 +61,8 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 
 - **Claude:** Rate Limit Resets and a plan badge from the live profile. Resets are checked hourly; if the first check can't connect, the next refresh tries again. Usage limits still show if the resets check fails. Enterprise plans show **Spend** instead of **Extra Usage**. Max 5x shows as Max, and Max 20x shows as Ultra.
 - **Codex:** Pro 100 / 200 / 500 plan names. The Credits row shows a reported balance, including zero. It is hidden if ChatGPT says the account has no credits or does not report a balance.
-- **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, personal budgets show **Extra Usage** and team pools show **Team Spend**. Spend history is fetched day by day and finished days are cached per account.
+- **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, personal budgets show **Extra Usage** and team pools show **Team Spend**. If Cursor doesn't report a usable plan meter, OpenUsage shows the request count and cap. When Cursor supplies the request period start, the estimated reset is one calendar month later. Spend history is fetched day by day and finished days are cached per account.
+- **Devin:** Choose **Customize → Devin → Sign In to Devin** and finish in your browser. Windows keeps the resulting session in its encrypted app store. Previously detected Devin CLI and editor sign-ins need to connect once in Customize; those other apps are not signed out.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** Add a Go API key in **Customize → OpenCode → Additional Accounts** to see live Session, Weekly, and Monthly limits without a local OpenCode install. Existing local connections still work.
@@ -68,6 +72,8 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 Z.ai shows token windows of a day or longer on the **Weekly** row, with the reset time it reports.
 
 For Copilot, open **Customize → Copilot**. Leave the address as `github.com`, or enter your organization's GitHub Enterprise Cloud address (for example, `octocorp.ghe.com`). Choose **Sign In with GitHub** and enter the code on the matching site. Turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. **Sign In Again** replaces the connection without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
+
+If the connection briefly drops while OpenUsage waits for GitHub, it retries with the same code until the code expires or you cancel.
 
 For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing Codex CLI logins still work if you haven't connected ChatGPT in OpenUsage.
 
@@ -80,6 +86,14 @@ See the [Windows README](../windows/README.md) for how to build it and which pro
 
 For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when available, including zero.
 The CLI lists expiries from the usage response if the separate reset list disagrees.
+
+## Privacy Mode
+
+Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.
+
+Privacy Mode pauses new usage notifications. It does not remove notifications Windows already saved.
+
+This is off by default and stays set after a restart. Not every capture method honors Windows' protection. Check your capture preview before sharing; other apps, the CLI and saved data are unchanged.
 
 ## Priority Limits
 

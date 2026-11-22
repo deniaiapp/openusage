@@ -86,23 +86,27 @@ How everything works, in [docs/](docs/README.md):
 
 ## Windows
 
-A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). It is not a substitute for the macOS app; see [OpenUsage on Windows](docs/windows.md).
+A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). See [OpenUsage on Windows](docs/windows.md) and its [Privacy Mode](docs/windows.md#privacy-mode).
 
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 
+Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
+
 Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
 
 Windows reset countdowns show calendar months and years for longer waits.
 
-Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
+Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known. Priority also shows which accounts are waiting for their first reading.
 Priority also lists unpinned limits you can use before they reset.
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 
 OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
+
+Copilot sign-in keeps the same GitHub device code through a brief network interruption.
 
 ```powershell
 cd windows
@@ -115,6 +119,8 @@ On Windows, Copilot and Antigravity distinguish provider throttling from sign-in
 
 If Claude's first check for rate limit resets can't connect, the next refresh tries again.
 
+Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
+
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
 On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
@@ -123,9 +129,13 @@ Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
 Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
 
+To connect Antigravity on Windows, choose **Sign In with Google** in Customize.
+
 Windows shows available Z.ai Limit Resets when you expand the account card.
 
 OpenUsage encrypts its Antigravity sign-in cache for your Windows user.
+
+Saved Windows API-key accounts that this version cannot read stay encrypted when you edit other accounts.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
