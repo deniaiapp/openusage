@@ -18,6 +18,7 @@ In **Customize**, use the up and down arrows to move a provider and its accounts
 
 Right-click a dashboard metric or usage chart and choose **Hide** to remove it from the dashboard. Turn it back on from the provider's page in **Customize**.
 
+Reset countdowns show calendar months and years for long waits and omit zero units, such as `17d`, `3mo 17d`, or `1y 2mo`.
 
 Your metric choices are saved even if you clear an entire group of settings, such as unpinning every metric. New metrics can still appear with their defaults after an update.
 
