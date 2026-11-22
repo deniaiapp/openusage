@@ -86,7 +86,7 @@ How everything works, in [docs/](docs/README.md):
 
 ## Windows
 
-A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). It is not a substitute for the macOS app; see [OpenUsage on Windows](docs/windows.md).
+A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). See [OpenUsage on Windows](docs/windows.md) and its [Privacy Mode](docs/windows.md#privacy-mode).
 
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
@@ -106,6 +106,8 @@ On Windows, ChatGPT's Credits row shows a reported balance, including zero, and 
 
 OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
 
+Copilot sign-in keeps the same GitHub device code through a brief network interruption.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App
@@ -116,6 +118,8 @@ In **Settings → Priority Limits**, choose when low limits turn orange or red.
 On Windows, Copilot and Antigravity distinguish provider throttling from sign-in failures and empty usage.
 
 If Claude's first check for rate limit resets can't connect, the next refresh tries again.
+
+Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
 
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
