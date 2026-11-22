@@ -18,6 +18,7 @@ In **Customize**, use the up and down arrows to move a provider and its accounts
 
 Right-click a dashboard metric or usage chart and choose **Hide** to remove it from the dashboard. Turn it back on from the provider's page in **Customize**.
 
+Reset countdowns show calendar months and years for long waits and omit zero units, such as `17d`, `3mo 17d`, or `1y 2mo`.
 
 Your metric choices are saved even if you clear an entire group of settings, such as unpinning every metric. New metrics can still appear with their defaults after an update.
 
@@ -59,9 +60,11 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 
 Z.ai shows token windows of a day or longer on the **Weekly** row, with the reset time it reports.
 
-For Copilot on GitHub.com, open **Customize → Copilot → Sign In with GitHub**. Copy the code into GitHub's device sign-in page, then turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. Choose **Sign In Again** to replace it without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
+For Copilot, open **Customize → Copilot**. Leave the address as `github.com`, or enter your organization's GitHub Enterprise Cloud address (for example, `octocorp.ghe.com`). Choose **Sign In with GitHub** and enter the code on the matching site. Turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. **Sign In Again** replaces the connection without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
 
-Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
+For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing Codex CLI logins still work if you haven't connected ChatGPT in OpenUsage.
+
+Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage. If a CLI-based session expires, run the corresponding CLI once.
 
 Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown; Cursor's provider-reported history is unchanged.
 

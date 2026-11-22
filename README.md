@@ -94,6 +94,8 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 Expand the Codex card to see ChatGPT's reported tokens for Today, Yesterday, and Last 30 Days, using UTC dates.
 
+Windows reset countdowns show calendar months and years for longer waits.
+
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
 Priority also lists unpinned limits you can use before they reset.
 
@@ -112,7 +114,7 @@ If Claude's first check for rate limit resets can't connect, the next refresh tr
 
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
-On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
+On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
