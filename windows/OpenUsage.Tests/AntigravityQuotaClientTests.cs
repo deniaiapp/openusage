@@ -68,6 +68,93 @@ public sealed class AntigravityQuotaClientTests
         Assert.Equal(25, Assert.IsType<MetricLine.ProgressLine>(Assert.Single(lines)).Used);
     }
 
+    [Theory]
+    [InlineData(200, false, false)]
+    [InlineData(200, true, false)]
+    [InlineData(200, true, true)]
+    [InlineData(400, false, false)]
+    [InlineData(503, false, false)]
+    public async Task RenewsARefusedAccessTokenAtMostOnce(int renewalStatus, bool renewedRefused, bool expired)
+    {
+        using var handler = new RenewalHandler(renewalStatus, renewedRefused);
+        using var http = new AppHttp(new HttpClient(handler));
+        var provider = new AntigravityProvider(http);
+        var expiry = DateTimeOffset.UtcNow.AddHours(expired ? -1 : 1);
+        var saved = new List<(string Access, string Refresh)>();
+        var read = () => provider.ReadQuotaAsync(
+            ("fixture-old", "fixture-refresh", expiry),
+            (access, refresh, _) => saved.Add((access, refresh)),
+            CancellationToken.None);
+
+        if (renewalStatus == 200 && !renewedRefused)
+        {
+            var (lines, _) = await read();
+            Assert.Equal(25, Assert.IsType<MetricLine.ProgressLine>(Assert.Single(lines)).Used);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<ProviderRequestException>(read);
+            Assert.Equal(renewalStatus == 503
+                ? "Antigravity token renewal failed (HTTP 503). Try again later."
+                : "Antigravity login expired. Sign in again.", error.Message);
+        }
+
+        var expected = new List<string>();
+        if (!expired) expected.AddRange(["fixture-old", "fixture-old"]);
+        expected.Add("renewal");
+        if (renewalStatus == 200)
+        {
+            expected.AddRange(["fixture-renewed", "fixture-renewed"]);
+            Assert.Equal(("fixture-renewed", "fixture-rotated"), Assert.Single(saved));
+        }
+        else Assert.Empty(saved);
+        Assert.Equal(expected, handler.Requests);
+    }
+
+    [Fact]
+    public async Task AcceptsOneHostsQuotaWithoutRenewingWhenTheOtherRejectsTheToken()
+    {
+        using var handler = new Handler("{}", """
+            {"groups":[{"buckets":[{"bucketId":"gemini-5h","remainingFraction":0.75}]}]}
+            """, HttpStatusCode.Unauthorized);
+        using var http = new AppHttp(new HttpClient(handler));
+        var provider = new AntigravityProvider(http);
+        var (lines, _) = await provider.ReadQuotaAsync(("fixture-old", "fixture-refresh", null),
+            (_, _, _) => throw new Exception("Usable quota should not require token renewal."), CancellationToken.None);
+
+        Assert.Equal(2, handler.Hosts.Count);
+        Assert.Equal(25, Assert.IsType<MetricLine.ProgressLine>(Assert.Single(lines)).Used);
+    }
+
+    private sealed class RenewalHandler(int renewalStatus, bool renewedRefused) : HttpMessageHandler
+    {
+        public List<string> Requests { get; } = [];
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.Host == "oauth2.googleapis.com")
+            {
+                Requests.Add("renewal");
+                Assert.Contains("refresh_token=fixture-refresh", await request.Content!.ReadAsStringAsync(cancellationToken));
+                return new HttpResponseMessage((HttpStatusCode)renewalStatus)
+                {
+                    Content = new StringContent(renewalStatus == 200
+                        ? """{"access_token":"fixture-renewed","refresh_token":"fixture-rotated"}"""
+                        : """{"error":"invalid_grant"}""")
+                };
+            }
+            Assert.Equal("/v1internal:retrieveUserQuotaSummary", request.RequestUri.AbsolutePath);
+            var token = request.Headers.Authorization!.Parameter!;
+            Requests.Add(token);
+            return token == "fixture-renewed" && !renewedRefused
+                ? new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("""{"groups":[{"buckets":[{"bucketId":"gemini-5h","remainingFraction":0.75}]}]}""")
+                }
+                : new HttpResponseMessage(HttpStatusCode.Unauthorized);
+        }
+    }
+
     [Fact]
     public async Task BothQuotaEndpointsRateLimitedReportAnErrorInsteadOfEmptyUsage()
     {
