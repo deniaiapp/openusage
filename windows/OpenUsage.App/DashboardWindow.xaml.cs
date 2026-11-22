@@ -42,6 +42,7 @@ public partial class DashboardWindow : Window
     private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
+    private DeviceLoginView? _deviceLoginEditor;
 
     public DashboardWindow(AppContainer container)
     {
@@ -58,6 +59,12 @@ public partial class DashboardWindow : Window
 
     public void ToggleFromTray()
     {
+        if (!IsVisible && _deviceLoginEditor?.ResumeIfPending() == true)
+        {
+            ShowAnchored();
+            Activate();
+            return;
+        }
         if (IsVisible)
         {
             Hide();
@@ -158,6 +165,8 @@ public partial class DashboardWindow : Window
 
     private void Render(bool preserveEditor = false)
     {
+        if (preserveEditor && _deviceLoginEditor is not null) return;
+        _deviceLoginEditor = null;
         var remaining = _container.Data.NextRefresh - DateTimeOffset.Now;
         RefreshLabel.Text = _container.Data.IsRefreshing
             ? "Updating…"
@@ -604,6 +613,13 @@ public partial class DashboardWindow : Window
             ContentHost.Children.Add(_accountEditor);
         }
 
+        if (runtime is IDeviceSignInProvider deviceProvider)
+        {
+            ContentHost.Children.Add(SectionTitle($"{deviceProvider.SignInAuthority} Sign-In"));
+            _deviceLoginEditor = new DeviceLoginView(_container, deviceProvider, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_deviceLoginEditor);
+        }
+
         ContentHost.Children.Add(SectionTitle("Always Visible"));
         foreach (var descriptor in runtime.WidgetDescriptors.Where(d => !_container.Layout.IsOnDemand(d.Id)))
             ContentHost.Children.Add(MetricCustomizeRow(descriptor));
@@ -692,6 +708,18 @@ public partial class DashboardWindow : Window
                 _container.Settings.RefreshIntervalSeconds = index switch { 0 => 60, 2 => 900, _ => 300 };
                 _container.Settings.Save();
             }));
+
+        ContentHost.Children.Add(SectionTitle("Usage Notifications"));
+        ContentHost.Children.Add(SettingToggle("Burning Fast", _container.Settings.NotifyBurningFast, value =>
+        {
+            _container.Settings.NotifyBurningFast = value;
+            _container.Settings.Save();
+        }));
+        ContentHost.Children.Add(SettingToggle("Use It or Lose It", _container.Settings.NotifyUseItOrLoseIt, value =>
+        {
+            _container.Settings.NotifyUseItOrLoseIt = value;
+            _container.Settings.Save();
+        }));
 
         var reset = new Button { Content = "Reset Layout to Default", Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 12, 0, 0) };
         reset.Click += (_, _) =>
