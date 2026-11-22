@@ -105,6 +105,8 @@ If Claude's first check for rate limit resets can't connect, the next refresh tr
 
 On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
 
+Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
+
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
 ## License
