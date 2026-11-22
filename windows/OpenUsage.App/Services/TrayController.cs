@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Threading;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
 using Forms = System.Windows.Forms;
@@ -18,6 +19,8 @@ public sealed class TrayController : IDisposable
     private readonly DashboardWindow _window;
     private readonly Forms.NotifyIcon _notify;
     private readonly DispatcherTimer _clock;
+    private readonly PaceAlerts _paceAlerts = new();
+    private readonly UsageToast _usageToast = new();
     private Icon? _icon;
 
     public TrayController(AppContainer container, DashboardWindow window)
@@ -30,6 +33,7 @@ public sealed class TrayController : IDisposable
             Text = "OpenUsage"
         };
         _notify.MouseClick += OnClick;
+        _notify.BalloonTipClicked += (_, _) => _window.ShowScreen(DashboardScreen.Dashboard);
         _notify.ContextMenuStrip = BuildMenu();
         _container.Data.Changed += () => Application.Current.Dispatcher.Invoke(Update);
         _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
@@ -65,13 +69,14 @@ public sealed class TrayController : IDisposable
 
     private void Update()
     {
+        var now = DateTimeOffset.Now;
         var pins = _container.Data.PinnedTiles();
         var tooltip = pins.Count == 0
             ? "OpenUsage"
             : string.Join(Environment.NewLine,
-                pins.Select(p => $"{p.Descriptor.Title}: {p.Data.MenuBarValue}").Take(8));
+                pins.Select(p => $"{p.Data.Title}: {p.Data.MenuBarValue}").Take(8));
         _notify.Text = tooltip.Length > 63 ? tooltip[..60] + "…" : tooltip;
-        var worst = pins.Select(p => p.Data.GetMeterState(DateTimeOffset.Now).Severity)
+        var worst = pins.Select(p => p.Data.GetMeterState(now).Severity)
             .Where(s => s is not null)
             .DefaultIfEmpty(MeterSeverity.Normal)
             .Max();
@@ -84,6 +89,42 @@ public sealed class TrayController : IDisposable
             DestroyIcon(previous.Handle);
             previous.Dispose();
         }
+        UpdateAlerts(now);
+    }
+
+    private void UpdateAlerts(DateTimeOffset now)
+    {
+        var settings = _container.Settings;
+        var enabled = settings.NotifyBurningFast || settings.NotifyUseItOrLoseIt;
+        _usageToast.SetEnabled(enabled);
+        if (!enabled)
+        {
+            _paceAlerts.Clear();
+            return;
+        }
+
+        var layout = _container.Layout;
+        var data = _container.Data;
+        var metrics = from runtime in layout.VisibleProviders
+                      let provider = runtime.Provider
+                      let healthy = data.ProviderError(provider.Id) is null
+                      from descriptor in layout.VisibleMetrics(provider.Id, includeOnDemand: true)
+                      select new PaceAlertMetric(descriptor.Id, $"{provider.DisplayName}: {descriptor.Title}",
+                          healthy ? data.Resolve(descriptor) : null);
+        var alerts = _paceAlerts.Observe(metrics, now).Where(alert => alert.Kind == PaceAlertKind.BurningFast
+            ? settings.NotifyBurningFast
+            : settings.NotifyUseItOrLoseIt).ToArray();
+        if (alerts.Length == 0) return;
+
+        var first = alerts[0];
+        var reason = first.Kind == PaceAlertKind.BurningFast
+            ? "May run out before it resets."
+            : "Over half left; resets within 24 hours.";
+        var title = first.Kind == PaceAlertKind.BurningFast ? "Burning Fast" : "Use It or Lose It";
+        var summary = alerts.Length > 1 ? $" {alerts.Length - 1} more usage alerts." : "";
+        var message = $"{first.Label}\n{reason}{summary}";
+        if (!_usageToast.TryShow(title, message))
+            _notify.ShowBalloonTip(5000, $"OpenUsage — {title}", message, Forms.ToolTipIcon.Info);
     }
 
     private static Icon RenderIcon(MeterSeverity severity)

@@ -10,6 +10,13 @@ public partial class DashboardWindow
         var limits = _container.Settings.PriorityLimits;
         AddThreshold("Warning at", PriorityLimits.MinWarning, PriorityLimits.MaxWarning, limits.Warning, limits.WithWarning);
         AddThreshold("Critical at", PriorityLimits.MinCritical, PriorityLimits.MaxCritical, limits.Critical, limits.WithCritical);
+        ContentHost.Children.Add(SettingToggle("Show Use It or Lose It",
+            _container.Settings.ShowUnusedQuotaInPriority, value =>
+            {
+                _container.Settings.ShowUnusedQuotaInPriority = value;
+                _container.Settings.Save();
+                _container.Data.NotifyPresentationChanged();
+            }));
     }
 
     private void AddThreshold(string label, int min, int max, int selected, Func<int, PriorityLimits> change)

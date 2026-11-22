@@ -8,7 +8,8 @@ public sealed record DevicePrompt(string Code, Uri VerificationUrl);
 
 internal sealed record DeviceGrant(string AccessToken, string? RefreshToken);
 
-internal sealed record DeviceEndpoints(string Authority, string ClientId, Uri Start, Uri Token, Func<Uri, bool> VerifyPage);
+internal sealed record DeviceEndpoints(string Authority, string ClientId, Uri Start, Uri Token,
+    Func<Uri, bool> VerifyPage, Func<string, Uri>? FixedPage = null);
 
 internal sealed class DeviceAuthorization(AppHttp http, Func<TimeSpan, CancellationToken, Task>? delay = null)
 {
@@ -21,7 +22,8 @@ internal sealed class DeviceAuthorization(AppHttp http, Func<TimeSpan, Cancellat
         var userCode = JsonUtil.String(challenge?["user_code"]);
         var life = JsonUtil.Number(challenge?["expires_in"]);
         var interval = JsonUtil.Number(challenge?["interval"]) ?? 5;
-        var page = new[] { "verification_uri_complete", "verification_uri" }
+        var page = userCode is not null ? endpoints.FixedPage?.Invoke(userCode) : null;
+        page ??= new[] { "verification_uri_complete", "verification_uri" }
             .Select(key => JsonUtil.String(challenge?[key]))
             .Select(url => Uri.TryCreate(url, UriKind.Absolute, out var parsed) ? parsed : null)
             .FirstOrDefault(uri => uri is { Scheme: "https", IsDefaultPort: true, UserInfo.Length: 0 }

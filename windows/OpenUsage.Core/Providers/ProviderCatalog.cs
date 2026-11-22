@@ -1,4 +1,5 @@
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers.Amp;
 using OpenUsage.Core.Providers.Antigravity;
 using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Codex;
@@ -21,8 +22,9 @@ public static class ProviderCatalog
     public static IReadOnlyList<IProviderRuntime> Make(AppHttp http, ApiKeyStore keys) =>
     [
         new ClaudeProvider(http),
-        new CodexProvider(http),
+        new CodexProvider(http, keys),
         new CursorProvider(http),
+        new AmpProvider(http, keys),
         new AntigravityProvider(http),
         new CopilotProvider(http, keys),
         new DevinProvider(http),
