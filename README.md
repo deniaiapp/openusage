@@ -88,6 +88,8 @@ How everything works, in [docs/](docs/README.md):
 
 A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). See [OpenUsage on Windows](docs/windows.md) and its [Privacy Mode](docs/windows.md#privacy-mode).
 
+Developers can also [publish a self-contained x64 build](windows/README.md#self-contained-build) locally. This is not an installer or an update channel.
+
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 

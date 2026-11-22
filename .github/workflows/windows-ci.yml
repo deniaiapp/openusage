@@ -29,3 +29,16 @@ jobs:
           dotnet-version: '8.0.x'
       - run: dotnet build windows/OpenUsage.sln --configuration Release
       - run: dotnet test windows/OpenUsage.sln --configuration Release --no-build
+      - name: Verify self-contained x64 publish
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'openusage-win-x64'
+          ./windows/package.ps1 -OutputDirectory $output
+          foreach ($file in @('app/OpenUsage.exe', 'app/PresentationFramework.dll',
+                              'app/coreclr.dll', 'cli/coreclr.dll')) {
+            if (!(Test-Path -LiteralPath (Join-Path $output $file) -PathType Leaf)) {
+              throw "Published file is missing: $file"
+            }
+          }
+          & (Join-Path $output 'cli/openusage.exe') --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
