@@ -151,17 +151,15 @@ public static class CodexUsageMapper
 
     public static (int Count, List<DateTimeOffset> Expiries)? ReadResetCredits(JsonObject body, AppHttpResponse? resetCredits)
     {
-        JsonObject? source = null;
-        if (resetCredits is { IsSuccess: true } && resetCredits.Json is { } dedicated &&
-            JsonUtil.Number(dedicated["available_count"]) is not null)
-        {
-            source = dedicated;
-        }
-        source ??= JsonUtil.Object(body["rate_limit_reset_credits"]);
-        if (source is null || JsonUtil.Number(source["available_count"]) is not { } count || count < 0)
-            return null;
+        var embedded = JsonUtil.Object(body["rate_limit_reset_credits"]);
+        var dedicated = resetCredits is { IsSuccess: true } ? resetCredits.Json : null;
+        var dedicatedCount = AvailableResetCount(dedicated);
+        if ((AvailableResetCount(embedded) ?? dedicatedCount) is not { } count) return null;
+        if (count == 0) return (0, []);
+
+        var source = dedicatedCount == count ? dedicated : embedded;
         var expiries = new List<DateTimeOffset>();
-        if (JsonUtil.Array(source["credits"]) is { } credits)
+        if (JsonUtil.Array(source?["credits"]) is { } credits)
         {
             foreach (var credit in credits.OfType<JsonObject>())
             {
@@ -173,8 +171,12 @@ public static class CodexUsageMapper
             }
             expiries.Sort();
         }
-        return ((int)Math.Floor(count), expiries);
+        return (count, expiries);
     }
+
+    private static int? AvailableResetCount(JsonObject? source) =>
+        JsonUtil.Number(source?["available_count"]) is >= 0 and < int.MaxValue + 1d and var count
+            ? (int)count : null;
 
     private static double? ReadCreditsRemaining(AppHttpResponse response, JsonObject body)
     {
