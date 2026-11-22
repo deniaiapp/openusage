@@ -18,11 +18,15 @@ If Windows reports that there is no network path, OpenUsage retries that refresh
 
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
 
+Enable **Usage Notifications** in Settings to get a Windows notification before a limit runs out at its current pace, or before a multi-day limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit. Click the banner while it is visible to open the dashboard. If it has moved to Notification Center, use the OpenUsage tray icon instead.
+
 OpenRouter only uses API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY`, enter the key in **Customize → OpenRouter**. Already saved keys keep working.
 
 A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.
 
 Ollama's local sign-in stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
+
+When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
 
 ### Amp on Windows
 
