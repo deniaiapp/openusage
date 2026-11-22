@@ -102,16 +102,19 @@ public static class ZaiUsageMapper
 
 public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
 {
+    internal const string ResetsMetricId = "zai.rateLimitResets";
     public static readonly Uri SubscriptionUrl = new("https://api.z.ai/api/biz/subscription/list");
     public static readonly Uri QuotaUrl = new("https://api.z.ai/api/monitor/usage/quota/limit");
 
     private readonly AppHttp _http;
     private readonly ApiKeyStore _keys;
+    private readonly ZaiResetBalance _resetBalance;
 
     public ZaiProvider(AppHttp http, ApiKeyStore keys)
     {
         _http = http;
         _keys = keys;
+        _resetBalance = new ZaiResetBalance(http);
     }
 
     public string ProviderId => Provider.Id;
@@ -123,7 +126,9 @@ public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
     [
         WidgetDescriptor.Percent("zai.session", Provider, "Session", sessionStartSignal: SessionStartSignal.ZeroUsage),
         WidgetDescriptor.Percent("zai.weekly", Provider, "Weekly"),
-        WidgetDescriptor.BoundedCount("zai.webSearches", Provider, "Web Searches", 100, "searches", MetricPeriod.MonthMs, "Web searches")
+        WidgetDescriptor.BoundedCount("zai.webSearches", Provider, "Web Searches", 100, "searches", MetricPeriod.MonthMs, "Web searches"),
+        WidgetDescriptor.Values(ResetsMetricId, Provider, "Limit Resets", metricLabel: ZaiResetBalance.Label,
+            valueWord: "available", traySuffix: "resets", showsResetExpiries: true)
     ];
 
     public string? LoadKey() => _keys.Get("zai");
@@ -133,15 +138,22 @@ public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
         Task.FromResult(!string.IsNullOrEmpty(LoadKey()));
 
     public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default) =>
-        RefreshWithKeyAsync(LoadKey(), cancellationToken);
+        RefreshWithKeyAsync(LoadKey(), _resetBalance, cancellationToken);
 
-    internal async Task<ProviderSnapshot> RefreshWithKeyAsync(string? key, CancellationToken cancellationToken)
+    internal Func<string, CancellationToken, Task<ProviderSnapshot>> AccountRefresh()
+    {
+        var resetBalance = new ZaiResetBalance(_http);
+        return (key, ct) => RefreshWithKeyAsync(key, resetBalance, ct);
+    }
+
+    private async Task<ProviderSnapshot> RefreshWithKeyAsync(string? key, ZaiResetBalance resetBalance,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(key))
             return ProviderSnapshot.Error(Provider, "Add a Z.ai API key in Customize.");
         try
         {
-            var quota = await GetAsync(QuotaUrl, key, cancellationToken);
+            var quota = await GetAsync(_http, QuotaUrl, key, cancellationToken);
             const string rejectedKey = "Z.ai rejected your API key. Replace it in Customize.";
             if (quota.StatusCode == 401)
                 return ProviderSnapshot.Error(Provider, rejectedKey);
@@ -155,11 +167,12 @@ public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
                 return ProviderSnapshot.Error(Provider, rejectedKey);
 
             JsonObject? subscription = null;
-            try { subscription = (await GetAsync(SubscriptionUrl, key, cancellationToken)).Json; }
+            try { subscription = (await GetAsync(_http, SubscriptionUrl, key, cancellationToken)).Json; }
             catch (Exception ex) { AppLog.Warn("zai", $"subscription fetch failed: {ex.Message}"); }
 
             var mapped = ZaiUsageMapper.Map(quotaBody, subscription);
             var lines = mapped.Lines.ToList();
+            if (await resetBalance.ReadAsync(key, cancellationToken) is { } resets) lines.Add(resets);
             MetricLine.AppendNoDataIfNeeded(lines);
             return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
         }
@@ -169,8 +182,8 @@ public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
         }
     }
 
-    private Task<AppHttpResponse> GetAsync(Uri url, string apiKey, CancellationToken ct) =>
-        _http.SendAsync(new AppHttpRequest(
+    internal static Task<AppHttpResponse> GetAsync(AppHttp http, Uri url, string apiKey, CancellationToken ct) =>
+        http.SendAsync(new AppHttpRequest(
             "GET", url,
             new Dictionary<string, string>
             {
