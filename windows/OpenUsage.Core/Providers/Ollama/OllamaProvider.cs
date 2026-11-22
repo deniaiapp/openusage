@@ -1,97 +1,9 @@
-using System.Buffers.Binary;
 using System.Globalization;
-using System.Text;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Support;
-using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Crypto.Signers;
 
 namespace OpenUsage.Core.Providers.Ollama;
-
-public sealed class OllamaSigningKey
-{
-    public required string PublicKeyBase64 { get; init; }
-    public required byte[] Seed { get; init; }
-}
-
-public static class OpenSshEd25519Key
-{
-    private static readonly byte[] Magic = "openssh-key-v1\0"u8.ToArray();
-    private static readonly byte[] KeyType = "ssh-ed25519"u8.ToArray();
-
-    public static OllamaSigningKey? Parse(string pem)
-    {
-        var blob = Base64Body(pem);
-        if (blob is null || blob.Length < Magic.Length || !blob.AsSpan(0, Magic.Length).SequenceEqual(Magic))
-            return null;
-        var reader = new ByteReader(blob, Magic.Length);
-        if (!reader.String().SequenceEqual("none"u8.ToArray())) return null;
-        if (!reader.String().SequenceEqual("none"u8.ToArray())) return null;
-        reader.String();
-        if (reader.UInt32() != 1) return null;
-        var publicKeyBlob = reader.String();
-        var privateSection = reader.String();
-        var privateReader = new ByteReader(privateSection.ToArray(), 0);
-        privateReader.UInt32();
-        privateReader.UInt32();
-        if (!privateReader.String().SequenceEqual(KeyType.AsSpan())) return null;
-        privateReader.String();
-        var privateKey = privateReader.String();
-        if (privateKey.Length != 64) return null;
-        var seed = privateKey[..32];
-        return new OllamaSigningKey
-        {
-            PublicKeyBase64 = Convert.ToBase64String(publicKeyBlob.ToArray()),
-            Seed = seed.ToArray()
-        };
-    }
-
-    public static string Authorization(OllamaSigningKey key, string method, string requestUri)
-    {
-        var message = Encoding.UTF8.GetBytes($"{method},{requestUri}");
-        var signer = new Ed25519Signer();
-        signer.Init(true, new Ed25519PrivateKeyParameters(key.Seed, 0));
-        signer.BlockUpdate(message, 0, message.Length);
-        var signature = signer.GenerateSignature();
-        return $"{key.PublicKeyBase64}:{Convert.ToBase64String(signature)}";
-    }
-
-    private static byte[]? Base64Body(string pem)
-    {
-        var body = string.Join("", pem.Split('\n', '\r')
-            .Select(l => l.Trim())
-            .Where(l => l.Length > 0 && !l.StartsWith("-----", StringComparison.Ordinal)));
-        try { return Convert.FromBase64String(body); }
-        catch { return null; }
-    }
-
-    private ref struct ByteReader
-    {
-        private readonly ReadOnlySpan<byte> _data;
-        private int _offset;
-        public ByteReader(byte[] data, int offset)
-        {
-            _data = data;
-            _offset = offset;
-        }
-        public uint UInt32()
-        {
-            if (_offset + 4 > _data.Length) return 0;
-            var value = BinaryPrimitives.ReadUInt32BigEndian(_data[_offset..]);
-            _offset += 4;
-            return value;
-        }
-        public ReadOnlySpan<byte> String()
-        {
-            var length = (int)UInt32();
-            if (length < 0 || _offset + length > _data.Length) return [];
-            var slice = _data.Slice(_offset, length);
-            _offset += length;
-            return slice;
-        }
-    }
-}
 
 /// <summary>
 /// What an account response said about the plan. "No badge" has two causes: an account with no plan
@@ -189,8 +101,9 @@ public static class OllamaUsageMapper
     }
 }
 
-public sealed class OllamaProvider : IProviderRuntime
+public sealed class OllamaProvider(AppHttp http) : IProviderRuntime
 {
+    internal const string Id = "ollama";
     public const string Host = "https://ollama.com";
     public const string BalancePath = "/api/balance";
     public const string AccountPath = "/api/me";
@@ -201,21 +114,13 @@ public sealed class OllamaProvider : IProviderRuntime
     /// </summary>
     public const string PlanWarning = "Couldn't read your Ollama plan. Usage below is still up to date.";
 
-    private readonly AppHttp _http;
-    private readonly Func<OllamaSigningKey?> _loadKey;
-
-    public OllamaProvider(AppHttp http, Func<OllamaSigningKey?>? loadKey = null)
-    {
-        _http = http;
-        _loadKey = loadKey ?? LoadKey;
-    }
-
     public Provider Provider { get; } = new(
-        "ollama", "Ollama", "ollama",
+        Id, "Ollama", "ollama",
         [
             new ProviderLink("Usage", "https://ollama.com/settings"),
             new ProviderLink("API Keys", "https://ollama.com/settings/keys")
         ]);
+    public bool IsAccountTemplate => true;
 
     // Session and Weekly exist only on legacy plans; current plans get monthly credits instead.
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
@@ -229,38 +134,20 @@ public sealed class OllamaProvider : IProviderRuntime
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(false);
 
-    public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
-    {
-        OllamaSigningKey? key;
-        try { key = _loadKey(); }
-        catch (Exception ex) { return ProviderSnapshot.Error(Provider, ex); }
-        if (key is null)
-            return ProviderSnapshot.Error(Provider, "No Ollama key found. Install Ollama and run `ollama signin` to track cloud usage.");
+    public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ProviderSnapshot.Error(Provider, "Add an Ollama Cloud API key in Customize to see usage."));
 
-        return await RefreshUsingAsync(
-            (method, path, ct) => SendSigned(method, path, key, ct),
-            "Not signed in to Ollama Cloud. Run `ollama signin` to see usage.",
-            cancellationToken);
-    }
-
-    internal Task<ProviderSnapshot> RefreshWithApiKeyAsync(string key, CancellationToken ct) =>
-        RefreshUsingAsync((method, path, token) => _http.SendAsync(ApiKeyRequest(method, path, key), token),
-            "Ollama rejected this API key. Replace it in Customize.", ct);
-
-    private async Task<ProviderSnapshot> RefreshUsingAsync(
-        Func<string, string, CancellationToken, Task<AppHttpResponse>> send,
-        string authError,
-        CancellationToken ct)
+    internal async Task<ProviderSnapshot> RefreshWithApiKeyAsync(string key, CancellationToken ct)
     {
         AppHttpResponse balance;
-        try { balance = await send("GET", BalancePath, ct); }
+        try { balance = await http.SendAsync(ApiKeyRequest("GET", BalancePath, key), ct); }
         catch (Exception ex)
         {
             AppLog.Warn("ollama", $"balance request failed: {ex.Message}");
             return ProviderSnapshot.Error(Provider, ProviderErrors.ConnectionFailed);
         }
         if (balance.StatusCode is 401 or 403)
-            return ProviderSnapshot.Error(Provider, authError);
+            return ProviderSnapshot.Error(Provider, "Ollama rejected this API key. Replace it in Customize.");
         if (!balance.IsSuccess)
             return ProviderSnapshot.Error(Provider, ProviderErrors.RequestFailed(balance.StatusCode));
 
@@ -270,7 +157,7 @@ public sealed class OllamaProvider : IProviderRuntime
         string? warning = null;
         try
         {
-            var account = await send("POST", AccountPath, ct);
+            var account = await http.SendAsync(ApiKeyRequest("POST", AccountPath, key), ct);
             if (account.IsSuccess)
             {
                 accountBody = account.Text;
@@ -303,23 +190,6 @@ public sealed class OllamaProvider : IProviderRuntime
         }
     }
 
-    private static OllamaSigningKey? LoadKey()
-    {
-        var path = AppPaths.Expand("~/.ollama/id_ed25519");
-        if (!File.Exists(path)) return null;
-        try
-        {
-            var key = OpenSshEd25519Key.Parse(File.ReadAllText(path));
-            if (key is null) throw new InvalidOperationException("~/.ollama/id_ed25519 isn't a usable Ollama signing key.");
-            return key;
-        }
-        catch (InvalidOperationException) { throw; }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException("Couldn't read ~/.ollama/id_ed25519. Check the file's permissions.", ex);
-        }
-    }
-
     internal static AppHttpRequest ApiKeyRequest(string method, string path, string key) =>
         new(method, new Uri(Host + path), new Dictionary<string, string>
         {
@@ -327,19 +197,4 @@ public sealed class OllamaProvider : IProviderRuntime
             ["Accept"] = "application/json"
         }, TimeoutSeconds: 15);
 
-    private Task<AppHttpResponse> SendSigned(string method, string path, OllamaSigningKey key, CancellationToken ct)
-    {
-        // The signature covers the exact URI that goes on the wire, so the header and URL share one string.
-        var requestUri = $"{path}?ts={DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
-        var authorization = OpenSshEd25519Key.Authorization(key, method, requestUri);
-        return _http.SendAsync(new AppHttpRequest(
-            method,
-            new Uri(Host + requestUri),
-            new Dictionary<string, string>
-            {
-                ["Authorization"] = authorization,
-                ["Accept"] = "application/json"
-            },
-            TimeoutSeconds: 15), ct);
-    }
 }
