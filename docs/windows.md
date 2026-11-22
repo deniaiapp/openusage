@@ -25,7 +25,9 @@ If Windows reports that there is no network path, OpenUsage retries that refresh
 
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
 
-Enable **Usage Notifications** in Settings to get a Windows notification before a limit runs out at its current pace, or before a multi-day limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit. Click the banner while it is visible to open the dashboard. If it has moved to Notification Center, use the OpenUsage tray icon instead.
+Enable **Usage Notifications** in Settings to get a Windows notification before a limit runs out at its current pace, or before a multi-day limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit.
+
+Click the banner or the saved notification in Notification Center to open the dashboard. If Notification Center stays in front, close it to see the dashboard. OpenUsage registers a Start menu shortcut and a dashboard link for the current Windows user while usage notifications are enabled. If Windows can't show an OpenUsage toast, or if OpenUsage runs as administrator but the Windows shell does not, the app falls back to a tray balloon. Click that banner while it's visible, or use the tray icon after it moves to Notification Center.
 
 OpenRouter and Z.ai only use API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY` or `ZAI_API_KEY`, enter the key for that provider in **Customize**. Already saved keys keep working.
 
