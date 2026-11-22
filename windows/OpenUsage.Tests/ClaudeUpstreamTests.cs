@@ -76,6 +76,16 @@ public class ClaudeUpstreamTests
 
     // MARK: - Live plan badge
 
+    [Theory]
+    [InlineData("max", null, "Max")]
+    [InlineData("max", "default_claude_max_5x", "Max")]
+    [InlineData("max", "default_claude_max_20x", "Ultra")]
+    [InlineData("max", "default_claude_ultra", "Ultra")]
+    [InlineData("ultra", "default_claude_max_20x", "Ultra")]
+    [InlineData("team", "default_claude_team_5x", "Team 5x")]
+    public void PlanBadgeUsesCurrentMaxAndUltraNames(string plan, string? tier, string expected) =>
+        Assert.Equal(expected, ClaudeUsageMapper.FormatPlan(plan, tier));
+
     [Fact]
     public void LivePlan_ReadsOrganizationTypeAndTier()
     {
@@ -84,7 +94,7 @@ public class ClaudeUpstreamTests
             { "account": { "uuid": "a" },
               "organization": { "uuid": "o", "organization_type": "claude_max", "rate_limit_tier": "default_claude_max_20x" } }
             """)!;
-        Assert.Equal("Max 20x", ClaudeUsageMapper.FormatLivePlan(profile, stored));
+        Assert.Equal("Ultra", ClaudeUsageMapper.FormatLivePlan(profile, stored));
 
         var partial = JsonUtil.ParseObject("""{ "organization": { "uuid": "o", "organization_type": "claude_pro" } }""")!;
         Assert.Equal("Pro 5x", ClaudeUsageMapper.FormatLivePlan(partial, stored));
@@ -222,7 +232,7 @@ public class ClaudeUpstreamTests
         var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), store, () => clock);
 
         var first = await provider.RefreshAsync();
-        Assert.Equal("Max 20x", first.Plan);
+        Assert.Equal("Ultra", first.Plan);
         Assert.Equal(1, Assert.IsType<MetricLine.ValuesLine>(first.Line("Rate Limit Resets")).Items[0].Number);
         Assert.Equal(1, handler.ResetGrantCalls);
         Assert.Equal(1, handler.ProfileCalls);
@@ -233,7 +243,7 @@ public class ClaudeUpstreamTests
         handler.FailResetGrants = true;
         var second = await provider.RefreshAsync();
         Assert.NotNull(second.Line("Rate Limit Resets"));
-        Assert.Equal("Max 20x", second.Plan);
+        Assert.Equal("Ultra", second.Plan);
         Assert.Equal(1, handler.ResetGrantCalls);
         Assert.Equal(1, handler.ProfileCalls);
         Assert.Equal(2, handler.PlainUsageCalls);
