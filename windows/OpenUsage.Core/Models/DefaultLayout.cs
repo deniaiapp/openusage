@@ -35,7 +35,7 @@ public static class DefaultLayout
         "opencode.today", "opencode.yesterday", "opencode.last30",
 
         "openrouter.balance",
-        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
+        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.yesterday", "openrouter.prior30", "openrouter.keyLimit",
 
         "zai.session", "zai.weekly", "zai.webSearches", ZaiProvider.ResetsMetricId
     ];
@@ -67,19 +67,21 @@ public static class DefaultLayout
         "grok.payAsYouGo",
         "ollama.purchasedCredits",
         "opencode.today", "opencode.yesterday", "opencode.last30",
-        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
+        "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.yesterday", "openrouter.prior30", "openrouter.keyLimit",
         "zai.webSearches", ZaiProvider.ResetsMetricId
     ];
 
     public static readonly string[] StarterProviders = ["claude", "codex", "cursor"];
+
+    internal static readonly string[] NewAccountMetricIds = ["openrouter.yesterday", "openrouter.prior30", ZaiProvider.ResetsMetricId];
 
     /// <summary>
     /// Defaults that layouts saved before seeding was tracked already had. Anything in
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
-        .Except(["antigravity.argonWeekly", "claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly", "amp.agent", "amp.orbHours", "amp.free", "amp.credits", ZaiProvider.ResetsMetricId])
+        .Except(["antigravity.argonWeekly", "claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly", "amp.agent", "amp.orbHours", "amp.free", "amp.credits"])
+        .Except(NewAccountMetricIds)
         .ToArray();
 
-    internal static readonly string[] NewAccountMetricIds = [ZaiProvider.ResetsMetricId];
 }

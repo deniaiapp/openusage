@@ -154,6 +154,10 @@ public sealed class LayoutStore
     public IReadOnlyList<IProviderRuntime> VisibleProviders =>
         OrderedProviders().Where(p => IsProviderEnabled(p.Provider.Id)).ToList();
 
+    public bool HasVisibleMetrics =>
+        Providers.Any(p => IsProviderEnabled(p.Provider.Id) &&
+            p.WidgetDescriptors.Any(d => IsMetricEnabled(d.Id)));
+
     public IGrouping<string, IProviderRuntime>[] ProviderGroups()
     {
         var order = OrderedProviders().ToList();
@@ -290,6 +294,7 @@ public sealed class LayoutStore
             _settings.EnabledProviders.Add(runtime.Provider.Id);
             var providerId = runtime.Provider.Id.Split('@')[0];
             SeedAccountLayout(runtime, providerId, IsAccountTemplate(providerId) && templatesWithPins.Add(providerId));
+            SeedNewAccountMetrics(runtime, providerId);
         }
         _settings.OpenCards.Clear();
         _settings.Save();

@@ -100,4 +100,22 @@ public sealed class LayoutSeedingTests : IDisposable
         Assert.True(layout.IsMetricEnabled("claude.rateLimitResets"));
         Assert.False(File.Exists(SettingsPath));
     }
+
+    [Fact]
+    public void DashboardCountsOnlyEnabledMetricsOnEnabledProvidersIncludingOnDemandRows()
+    {
+        var layout = new LayoutStore(AppSettings.Load(SettingsPath), _providers);
+        Assert.False(layout.HasVisibleMetrics);
+
+        layout.SetProviderEnabled("zai", true);
+        Assert.True(layout.HasVisibleMetrics);
+        foreach (var metric in layout.VisibleMetrics("zai", includeOnDemand: true))
+            layout.SetMetricEnabled(metric.Id, false);
+        Assert.False(layout.HasVisibleMetrics);
+
+        layout.SetOnDemand("zai.session", true);
+        layout.SetMetricEnabled("zai.session", true);
+        Assert.True(layout.HasVisibleMetrics);
+        Assert.Empty(layout.VisibleMetrics("zai", includeOnDemand: false));
+    }
 }

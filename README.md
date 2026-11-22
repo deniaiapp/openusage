@@ -40,7 +40,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[OpenCode](docs/providers.md#opencode)**: session, weekly, monthly
 - **[OpenRouter](docs/providers.md#openrouter)**: balance, spend, key limit, budget
 - **[Z.ai](docs/providers.md#zai)**: session, weekly, web searches, rate-limit resets. On Windows, longer token windows use the Weekly row with the reset time Z.ai reports.
-- **[CLIProxyAPI hubs](docs/cliproxyapi.md)**: every Claude, ChatGPT, Antigravity, Devin, and Grok login on
+- **[CLIProxyAPI hubs](docs/cliproxyapi.md) (macOS only)**: every Claude, ChatGPT, Antigravity, Devin, and Grok login on
   a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server
 
 Add your accounts from the app's Accounts screen. OpenUsage never reads other tools' credentials,
@@ -93,6 +93,8 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 
+On Windows, OpenCode shows live Go limits instead of totaling local session history.
+
 Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
 
 Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
@@ -101,6 +103,7 @@ Windows reset countdowns show calendar months and years for longer waits.
 
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known. Priority also shows which accounts are waiting for their first reading.
 Priority also lists unpinned limits you can use before they reset.
+If you hide every metric on Windows, the dashboard points you back to Customize to restore them.
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 
@@ -119,13 +122,15 @@ On Windows, Copilot and Antigravity distinguish provider throttling from sign-in
 
 If Claude's first check for rate limit resets can't connect, the next refresh tries again.
 
+The Windows CLI marks saved limits stale after two refresh intervals.
+
 Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
 
 Cursor's usage history shows actual on-demand charges and reported tokens, not estimated spend.
 
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
-On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
+On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment. Management keys also show Yesterday and Prior 30 Days spend.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
@@ -133,11 +138,15 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 
 Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
+Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
+
 To connect Antigravity on Windows, choose **Sign In with Google** in Customize.
 
 Windows shows available Z.ai Limit Resets when you expand the account card.
 
 OpenUsage encrypts its Antigravity sign-in cache for your Windows user.
+
+Grok on Windows keeps using a still-valid sign-in if an early renewal fails.
 
 Saved Windows API-key accounts that this version cannot read stay encrypted when you edit other accounts.
 
