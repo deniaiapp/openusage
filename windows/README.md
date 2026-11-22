@@ -95,7 +95,8 @@ macOS-only pieces left out on purpose:
 - Share-screenshot cards
 
 CLIProxyAPI hubs are not yet available in Customize. The Windows core can validate hub addresses
-and read a login list, but saving hubs and mirroring their accounts are not implemented.
+and read a login list. It can also plan account updates from that list, but hub accounts are not
+saved or shown yet.
 The core uses HTTPS, or HTTP for loopback, local network, and Tailscale addresses, without
 following redirects on management requests.
 
