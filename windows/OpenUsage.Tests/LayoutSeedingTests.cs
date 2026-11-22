@@ -62,6 +62,35 @@ public sealed class LayoutSeedingTests : IDisposable
     }
 
     [Fact]
+    public void EmptyMetricPreferencesStayEmptyAfterRestart()
+    {
+        var settings = AppSettings.Load(SettingsPath);
+        settings.EnabledMetrics.Clear();
+        settings.ExpandedMetrics.Clear();
+        settings.PinnedMetrics.Clear();
+        settings.Save();
+
+        var restored = AppSettings.Load(SettingsPath);
+        _ = new LayoutStore(restored, _providers);
+
+        Assert.Empty(restored.EnabledMetrics);
+        Assert.Empty(restored.ExpandedMetrics);
+        Assert.Empty(restored.PinnedMetrics);
+    }
+
+    [Fact]
+    public void MissingMetricPreferencesUseDefaults()
+    {
+        File.WriteAllText(SettingsPath, """{"enabledProviders":["claude"],"pinnedMetrics":null}""");
+        var settings = AppSettings.Load(SettingsPath);
+        _ = new LayoutStore(settings, _providers);
+
+        Assert.True(settings.EnabledMetrics.SetEquals(DefaultLayout.MetricIds));
+        Assert.True(settings.ExpandedMetrics.SetEquals(DefaultLayout.ExpandedMetricIds));
+        Assert.True(settings.PinnedMetrics.SetEquals(DefaultLayout.PinnedMetricIds));
+    }
+
+    [Fact]
     public void FreshInstall_RecordsEveryDefaultAsSeeded()
     {
         var settings = AppSettings.Load(SettingsPath);

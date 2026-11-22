@@ -40,6 +40,7 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
     private DeviceLoginView? _deviceLoginEditor;
@@ -70,7 +71,7 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_copilotLoginEditor?.ResumeIfPending() == true)
+        if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
         else
         {
@@ -186,8 +187,9 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null)) return;
         _accountEditor = null;
+        _codexLoginEditor = null;
         _copilotLoginEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
@@ -478,6 +480,13 @@ public partial class DashboardWindow : Window
             Grid.SetColumn(value, 1);
             unbounded.Children.Add(value);
             panel.Children.Add(unbounded);
+            foreach (var expiry in data.ResetExpiryLabels(now))
+                panel.Children.Add(new TextBlock
+                {
+                    Text = expiry,
+                    Style = (Style)FindResource("MutedText"),
+                    Margin = new Thickness(0, 2, 0, 0)
+                });
         }
 
         return panel;
@@ -585,6 +594,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is OpenUsage.Core.Providers.Codex.CodexProvider codex)
+        {
+            ContentHost.Children.Add(SectionTitle("ChatGPT Sign-In"));
+            _codexLoginEditor = new CodexLoginView(_container, codex, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_codexLoginEditor);
+        }
         if (runtime is OpenUsage.Core.Providers.Copilot.CopilotProvider copilot)
         {
             ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
