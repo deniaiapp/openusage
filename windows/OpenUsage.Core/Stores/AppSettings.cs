@@ -14,6 +14,7 @@ public sealed class AppSettings
     public bool AlwaysShowPacing { get; set; }
     public bool PrivacyMode { get; set; }
     public PriorityLimits PriorityLimits { get; set; } = PriorityLimits.Default;
+    public bool ShowUnusedQuotaInPriority { get; set; } = true;
     public bool LaunchAtLogin { get; set; }
     public string? GlobalHotkey { get; set; }
     public int RefreshIntervalSeconds { get; set; } = 300;
