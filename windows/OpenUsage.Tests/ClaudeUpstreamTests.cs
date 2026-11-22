@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Claude;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 using Xunit;
 
@@ -138,6 +139,48 @@ public class ClaudeUpstreamTests
         var partial = JsonUtil.ParseObject("""{ "organization": { "uuid": "o", "organization_type": "claude_pro" } }""")!;
         Assert.Equal("Pro 5x", ClaudeUsageMapper.FormatLivePlan(partial, stored));
         Assert.Null(ClaudeUsageMapper.FormatLivePlan(JsonUtil.ParseObject("""{ "account": { "uuid": "a" } }""")!, stored));
+    }
+
+    [Theory]
+    [InlineData("claude_enterprise", null, true, "Spend")]
+    [InlineData("claude_enterprise", "default_claude_enterprise_5x", false, "Spend")]
+    [InlineData("claude_max", "default_claude_max_5x", true, "Extra Usage")]
+    [InlineData(null, null, true, "Extra Usage")]
+    public void SpendTitleUsesTheCachedPlanWithoutChangingThePin(
+        string? organizationType, string? tier, bool bounded, string title)
+    {
+        using var dir = new TempDir();
+        using var http = new AppHttp(new HttpClient());
+        var provider = new ClaudeProvider(http, new ClaudeAuthStore(dir.Path, readCredentialManager: false));
+        var settings = AppSettings.Load(Path.Combine(dir.Path, "settings.json"));
+        settings.EnabledProviders.Add("claude");
+        settings.EnabledMetrics.Add("claude.extra");
+        settings.PinnedMetrics.Add("claude.extra");
+        var layout = new LayoutStore(settings, [provider]);
+        var descriptor = Assert.IsType<WidgetDescriptor>(layout.Descriptor("claude.extra"));
+        var data = new WidgetDataStore(layout, settings, dir.Path);
+        Assert.Equal("Extra Usage", data.Resolve(descriptor).Title);
+        var oauth = new ClaudeOAuth();
+        var profile = new JsonObject
+        {
+            ["organization"] = new JsonObject { ["organization_type"] = organizationType, ["rate_limit_tier"] = tier }
+        };
+        var usage = new JsonObject
+        {
+            ["extra_usage"] = new JsonObject { ["is_enabled"] = true, ["used_credits"] = 1234 }
+        };
+        if (bounded) usage["extra_usage"]!["monthly_limit"] = 5000;
+        var lines = ClaudeUsageMapper.Map(usage, oauth).Lines;
+        data.ReplaceAccountSnapshot(ProviderSnapshot.Make(provider.Provider,
+            ClaudeUsageMapper.FormatLivePlan(profile, oauth), lines, Now));
+
+        var restored = new WidgetDataStore(layout, settings, dir.Path);
+        var pin = Assert.Single(restored.PinnedTiles());
+        Assert.Equal("claude.extra", pin.Descriptor.Id);
+        Assert.Equal("Extra usage spent", pin.Descriptor.MetricLabel);
+        Assert.Equal(title, data.Resolve(descriptor).Title);
+        Assert.Equal(title, pin.Data.Title);
+        Assert.Equal(bounded, pin.Data.IsBounded);
     }
 
     // MARK: - Credential document preservation

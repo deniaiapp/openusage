@@ -233,11 +233,16 @@ public sealed class OpenCodeProvider : IProviderRuntime
         "opencode", "OpenCode", "opencode",
         [new ProviderLink("Zen", "https://opencode.ai/")]);
 
-    public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
+    internal IReadOnlyList<WidgetDescriptor> GoWidgetDescriptors =>
     [
         WidgetDescriptor.Percent("opencode.session", Provider, "Session", sessionStartSignal: SessionStartSignal.MissingResetDate),
         WidgetDescriptor.Percent("opencode.weekly", Provider, "Weekly"),
-        WidgetDescriptor.Percent("opencode.monthly", Provider, "Monthly"),
+        WidgetDescriptor.Percent("opencode.monthly", Provider, "Monthly")
+    ];
+
+    public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
+    [
+        ..GoWidgetDescriptors,
         ..SpendTileMapper.HistoryWidgets(Provider)
     ];
 
@@ -307,20 +312,34 @@ public sealed class OpenCodeProvider : IProviderRuntime
         return ProviderSnapshot.Make(Provider, plan, lines, refreshedAt);
     }
 
+    internal async Task<ProviderSnapshot> RefreshWithApiKeyAsync(string key, CancellationToken ct)
+    {
+        var (meters, error) = await FetchGoMeters(key, ct);
+        if (meters is not null) return ProviderSnapshot.Make(Provider, null, meters, DateTimeOffset.Now);
+        return ProviderSnapshot.Error(Provider, error == OpenCodeErrors.Unauthorized
+            ? "OpenCode Go rejected this API key. Replace it in Customize."
+            : error ?? OpenCodeErrors.NoGoSubscription);
+    }
+
+    internal static AppHttpRequest UsageRequest(string key) =>
+        new("GET", UsageUrl,
+            new Dictionary<string, string>
+            {
+                ["Authorization"] = $"Bearer {key}",
+                ["Accept"] = "application/json"
+            },
+            TimeoutSeconds: 15);
+
+    internal static bool IsNoGoSubscription(AppHttpResponse response) =>
+        response.StatusCode == 403 && OpenCodeUsageMapper.ErrorType(response) == "EntitlementError";
+
     /// <summary>The Go meters, or null with an error (null error = no Go subscription on this key).</summary>
     private async Task<(List<MetricLine>? Meters, string? Error)> FetchGoMeters(string key, CancellationToken ct)
     {
         AppHttpResponse response;
         try
         {
-            response = await _http.SendAsync(new AppHttpRequest(
-                "GET", UsageUrl,
-                new Dictionary<string, string>
-                {
-                    ["Authorization"] = $"Bearer {key}",
-                    ["Accept"] = "application/json"
-                },
-                TimeoutSeconds: 15), ct);
+            response = await _http.SendAsync(UsageRequest(key), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
@@ -328,7 +347,7 @@ public sealed class OpenCodeProvider : IProviderRuntime
             return (null, ProviderErrors.ConnectionFailed);
         }
         if (response.StatusCode == 401) return (null, OpenCodeErrors.Unauthorized);
-        if (response.StatusCode == 403 && OpenCodeUsageMapper.ErrorType(response) == "EntitlementError")
+        if (IsNoGoSubscription(response))
         {
             AppLog.Info("opencode", "Go usage endpoint: no active subscription");
             return (null, null);
