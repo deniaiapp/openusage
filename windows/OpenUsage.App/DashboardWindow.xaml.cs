@@ -198,6 +198,7 @@ public partial class DashboardWindow : Window
         _copilotLoginEditor = null;
         _claudeSignInEditor = null;
         ContentHost.Children.Clear();
+        if (ShowPrivacyPlaceholder()) return;
         switch (_screen)
         {
             case DashboardScreen.Dashboard:
@@ -331,7 +332,7 @@ public partial class DashboardWindow : Window
         {
             Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4),
             Background = Brushes.Transparent,
-            ContextMenu = MetricContextMenu(descriptor)
+            ContextMenu = _container.Settings.PrivacyMode ? null : MetricContextMenu(descriptor)
         };
 
         var labelLine = new Grid();
@@ -736,6 +737,8 @@ public partial class DashboardWindow : Window
                 _container.Settings.Save();
             }));
 
+        RenderPrivacySettings();
+
         ContentHost.Children.Add(SectionTitle("Usage Notifications"));
         ContentHost.Children.Add(SettingToggle("Burning Fast", _container.Settings.NotifyBurningFast, value =>
         {
@@ -759,7 +762,7 @@ public partial class DashboardWindow : Window
             }
         };
         ContentHost.Children.Add(reset);
-        ContentHost.Children.Add(new TextBlock
+        if (!_container.Settings.PrivacyMode) ContentHost.Children.Add(new TextBlock
         {
             Text = $"Logs: {AppPaths.LogFile}",
             Style = (Style)FindResource("MutedText"),

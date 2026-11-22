@@ -86,7 +86,7 @@ How everything works, in [docs/](docs/README.md):
 
 ## Windows
 
-A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). It is not a substitute for the macOS app; see [OpenUsage on Windows](docs/windows.md).
+A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). See [OpenUsage on Windows](docs/windows.md) and its [Privacy Mode](docs/windows.md#privacy-mode).
 
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
@@ -105,6 +105,8 @@ Priority also lists unpinned limits you can use before they reset.
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 
 OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
+
+Copilot sign-in keeps the same GitHub device code through a brief network interruption.
 
 ```powershell
 cd windows

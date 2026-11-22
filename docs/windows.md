@@ -67,6 +67,8 @@ Z.ai shows token windows of a day or longer on the **Weekly** row, with the rese
 
 For Copilot, open **Customize → Copilot**. Leave the address as `github.com`, or enter your organization's GitHub Enterprise Cloud address (for example, `octocorp.ghe.com`). Choose **Sign In with GitHub** and enter the code on the matching site. Turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. **Sign In Again** replaces the connection without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
 
+If the connection briefly drops while OpenUsage waits for GitHub, it retries with the same code until the code expires or you cancel.
+
 To connect Claude, go to **Customize → Claude → Sign In with Claude**. Finish in the browser, or return to the Claude settings page and paste the code the browser gives you. A failed sign-in leaves your existing connection in place. OpenUsage saves verified sign-ins with Windows user encryption.
 
 Existing Claude CLI credentials still work until you connect in Customize. Claude and Codex logins stored in Credential Manager are left for their respective CLIs to refresh.
@@ -82,6 +84,14 @@ See the [Windows README](../windows/README.md) for how to build it and which pro
 
 For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when available, including zero.
 The CLI lists expiries from the usage response if the separate reset list disagrees.
+
+## Privacy Mode
+
+Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.
+
+Privacy Mode pauses new usage notifications. It does not remove notifications Windows already saved.
+
+This is off by default and stays set after a restart. Not every capture method honors Windows' protection. Check your capture preview before sharing; other apps, the CLI and saved data are unchanged.
 
 ## Priority Limits
 
