@@ -43,6 +43,7 @@ public sealed record WidgetData
     public string? ChartNote { get; init; }
 
     public bool IsBounded => Limit is not null;
+    internal bool IsSpent => HasData && Limit is > 0 and var limit && RoundedAtDisplayPrecision(limit - Used) <= 0;
     public IReadOnlyList<MetricValue> SelectedValues => Selection.Apply(Values);
     public double DisplayedValue => DisplayMode == WidgetDisplayMode.Remaining && Limit is { } limit
         ? Math.Max(0, limit - Used)
@@ -205,7 +206,7 @@ public sealed record WidgetData
     {
         if (!HasData || Limit is not { } limit || limit <= 0)
             return HasData ? MeterState.Level(MeterSeverity.Normal) : MeterState.NoData;
-        if (RoundedAtDisplayPrecision(limit - Used) <= 0) return MeterState.Spent;
+        if (IsSpent) return MeterState.Spent;
         var severity = PriorityLimits.Severity((limit - Used) / limit);
         if (IsFreshSessionWindow(now)) return MeterState.Level(severity);
 
