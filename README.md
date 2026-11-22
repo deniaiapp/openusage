@@ -131,6 +131,8 @@ Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
 Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
 
+Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
+
 Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
 
 To connect Antigravity on Windows, choose **Sign In with Google** in Customize.
