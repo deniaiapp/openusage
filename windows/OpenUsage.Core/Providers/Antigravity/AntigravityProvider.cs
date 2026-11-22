@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
-using OpenUsage.Core.Providers;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
@@ -246,8 +245,7 @@ public sealed partial class AntigravityProvider : IProviderRuntime
         WidgetDescriptor.Percent(AntigravityMetric.GeminiId, Provider, AntigravityMetric.SessionLabel, sessionStartSignal: SessionStartSignal.ZeroUsage),
         WidgetDescriptor.Percent(AntigravityMetric.GeminiWeeklyId, Provider, AntigravityMetric.WeeklyLabel),
         WidgetDescriptor.Percent(AntigravityMetric.ClaudeId, Provider, AntigravityMetric.ClaudeLabel, sessionStartSignal: SessionStartSignal.ZeroUsage),
-        WidgetDescriptor.Percent(AntigravityMetric.ClaudeWeeklyId, Provider, AntigravityMetric.ClaudeWeeklyLabel),
-        ..SpendTileMapper.HistoryWidgets(Provider)
+        WidgetDescriptor.Percent(AntigravityMetric.ClaudeWeeklyId, Provider, AntigravityMetric.ClaudeWeeklyLabel)
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
@@ -279,12 +277,6 @@ public sealed partial class AntigravityProvider : IProviderRuntime
             var (lines, plan) = await _usage.QuotaAsync(access!, cancellationToken);
             if (lines.Count == 0)
                 plan ??= await _usage.FallbackPlanAsync(access!, cancellationToken);
-            await SpendTileMapper.AppendScanAsync(
-                lines,
-                () => AntigravityDbUsageScanner.Scan(),
-                "From your Antigravity conversations (estimated)",
-                "antigravity",
-                cancellationToken);
             MetricLine.AppendNoDataIfNeeded(lines);
             return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);
         }
