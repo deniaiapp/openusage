@@ -4,7 +4,7 @@ Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tra
 
 The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, and global shortcut. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
 
-The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Both tabs respect which providers and metrics you have turned on.
+The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Accounts without a saved reading appear under **Waiting for Usage** until their first refresh finishes; failures are reported separately. Both tabs respect which providers and metrics you have turned on.
 
 **Running Out** puts the shortest projected time to exhaustion first. Limits without a usable pace follow, with the lowest remaining percentage first.
 
@@ -67,6 +67,8 @@ Z.ai shows token windows of a day or longer on the **Weekly** row, with the rese
 
 For Copilot, open **Customize → Copilot**. Leave the address as `github.com`, or enter your organization's GitHub Enterprise Cloud address (for example, `octocorp.ghe.com`). Choose **Sign In with GitHub** and enter the code on the matching site. Turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. **Sign In Again** replaces the connection without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
 
+If the connection briefly drops while OpenUsage waits for GitHub, it retries with the same code until the code expires or you cancel.
+
 For Cursor, choose **Customize → Cursor → Sign In with Cursor** and finish signing in in your browser. OpenUsage verifies usage before saving the sign-in with Windows user encryption. **Sign In Again** replaces it without changing your card settings. Existing local Cursor sign-ins still work if you haven't connected Cursor in OpenUsage.
 
 For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing Codex CLI logins still work if you haven't connected ChatGPT in OpenUsage.
@@ -80,6 +82,14 @@ See the [Windows README](../windows/README.md) for how to build it and which pro
 
 For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when available, including zero.
 The CLI lists expiries from the usage response if the separate reset list disagrees.
+
+## Privacy Mode
+
+Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.
+
+Privacy Mode pauses new usage notifications. It does not remove notifications Windows already saved.
+
+This is off by default and stays set after a restart. Not every capture method honors Windows' protection. Check your capture preview before sharing; other apps, the CLI and saved data are unchanged.
 
 ## Priority Limits
 
