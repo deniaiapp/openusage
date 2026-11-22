@@ -105,8 +105,7 @@ public class MiscProvidersUpstreamTests
             request.RequestUri!.AbsolutePath == OllamaProvider.BalancePath
                 ? (HttpStatusCode.OK, """{"included":{"balance_usd":50,"allowance_usd":60}}""")
                 : (accountStatus, accountBody))));
-        var key = new OllamaSigningKey { PublicKeyBase64 = "cHVi", Seed = new byte[32] };
-        var snapshot = await new OllamaProvider(http, () => key).RefreshAsync();
+        var snapshot = await new OllamaProvider(http).RefreshWithApiKeyAsync("fixture-key", default);
         Assert.False(snapshot.IsError);
         Assert.Null(snapshot.Plan);
         Assert.Equal(OllamaProvider.PlanWarning, snapshot.Warning);
