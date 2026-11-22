@@ -93,6 +93,8 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 
+Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
+
 Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
 
 Windows reset countdowns show calendar months and years for longer waits.
