@@ -85,4 +85,9 @@ macOS-only pieces left out on purpose:
 - Sparkle auto-update
 - Share-screenshot cards
 
+CLIProxyAPI hubs are not yet available in Customize. The Windows core can validate hub addresses
+and read a login list, but saving hubs and mirroring their accounts are not implemented.
+The core uses HTTPS, or HTTP for loopback, local network, and Tailscale addresses, without
+following redirects on management requests.
+
 Proxy support still honors `~\.openusage\config.json` (or `%APPDATA%\OpenUsage\config.json`) with a `proxy` URL.
