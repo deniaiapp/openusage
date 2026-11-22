@@ -12,65 +12,6 @@ public sealed class CursorAuthState
 {
     public string? AccessToken { get; set; }
     public string? RefreshToken { get; set; }
-    public string Source { get; set; } = "sqlite";
-}
-
-public sealed class CursorAuthStore
-{
-    public const string AccessTokenKey = "cursorAuth/accessToken";
-    public const string RefreshTokenKey = "cursorAuth/refreshToken";
-    public const string MembershipTypeKey = "cursorAuth/stripeMembershipType";
-    public const string ClientId = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB";
-
-    public static IEnumerable<string> StateDbPaths()
-    {
-        yield return Path.Combine(AppPaths.AppData, "Cursor", "User", "globalStorage", "state.vscdb");
-        yield return AppPaths.Expand("~/Library/Application Support/Cursor/User/globalStorage/state.vscdb");
-    }
-
-    public string? StateDbPath => StateDbPaths().FirstOrDefault(File.Exists);
-
-    public CursorAuthState? Load()
-    {
-        string? sqliteAccess = null, sqliteRefresh = null, membership = null;
-        if (StateDbPath is { } db)
-        {
-            sqliteAccess = ReadState(db, AccessTokenKey);
-            sqliteRefresh = ReadState(db, RefreshTokenKey);
-            membership = ReadState(db, MembershipTypeKey)?.Trim().ToLowerInvariant();
-        }
-        var keychainAccess = WindowsCredentialStore.Read("cursor-access-token");
-        var keychainRefresh = WindowsCredentialStore.Read("cursor-refresh-token");
-
-        if (sqliteAccess is not null || sqliteRefresh is not null)
-        {
-            if ((keychainAccess is not null || keychainRefresh is not null) &&
-                membership == "free" &&
-                Jwt.Subject(sqliteAccess) is { } sqliteSub &&
-                Jwt.Subject(keychainAccess) is { } keySub &&
-                sqliteSub != keySub)
-            {
-                return new CursorAuthState { AccessToken = keychainAccess, RefreshToken = keychainRefresh, Source = "keychain" };
-            }
-            return new CursorAuthState { AccessToken = sqliteAccess, RefreshToken = sqliteRefresh, Source = "sqlite" };
-        }
-        if (keychainAccess is not null || keychainRefresh is not null)
-            return new CursorAuthState { AccessToken = keychainAccess, RefreshToken = keychainRefresh, Source = "keychain" };
-        return null;
-    }
-
-    public void SaveAccessToken(string token, CursorAuthState state)
-    {
-        if (state.Source == "sqlite" && StateDbPath is { } db)
-        {
-            SqliteReader.Execute(db,
-                $"INSERT OR REPLACE INTO ItemTable (key, value) VALUES ('{SqliteReader.Escape(AccessTokenKey)}', '{SqliteReader.Escape(token)}');");
-        }
-        state.AccessToken = token;
-    }
-
-    private static string? ReadState(string db, string key) =>
-        SqliteReader.QueryValue(db, $"SELECT value FROM ItemTable WHERE key = '{SqliteReader.Escape(key)}' LIMIT 1;");
 }
 
 public static class CursorUsageMapper
@@ -284,7 +225,6 @@ public sealed partial class CursorProvider : IProviderRuntime
     private static readonly Uri UsageStatusUrl = new("https://cursor.com/api/dashboard/v2/usage-status?scope=user");
     private static readonly Uri RequestUsageUrl = new("https://cursor.com/api/usage");
 
-    private readonly CursorAuthStore _auth = new();
     private readonly AppHttp _http;
     private readonly CursorUsageHistoryStore _historyStore;
     private readonly TimeSpan _spendHistoryBudget;
@@ -327,7 +267,7 @@ public sealed partial class CursorProvider : IProviderRuntime
     public const string CursorUsageHistoryNote = "From your Cursor usage history.";
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(HasAppCredential || _auth.Load() is not null);
+        Task.FromResult(HasAppCredential);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
@@ -335,10 +275,7 @@ public sealed partial class CursorProvider : IProviderRuntime
         {
             if (_keys?.Get(BrowserCredentialKey) is { } saved)
                 return await RefreshBrowserAccountAsync(saved, cancellationToken);
-            var state = _auth.Load();
-            if (state is null)
-                return ProviderSnapshot.Error(Provider, "Sign in to Cursor in Customize.");
-            return await ProbeAsync(state, cancellationToken);
+            return ProviderSnapshot.Error(Provider, "Sign in to Cursor in Customize.");
         }
         catch (Exception ex)
         {
@@ -350,13 +287,13 @@ public sealed partial class CursorProvider : IProviderRuntime
         Action<CursorAuthState>? saveRenewal = null, bool includeHistory = true)
     {
         var access = state.AccessToken?.Trim();
-        if (string.IsNullOrEmpty(access) || NeedsRefresh(access, state.Source == BrowserCredentialSource))
+        if (string.IsNullOrEmpty(access) || NeedsRefresh(access))
         {
             if (string.IsNullOrEmpty(state.RefreshToken))
-                throw SignInExpired(state);
+                throw SignInExpired();
             try { access = await RefreshTokenAsync(state, saveRenewal, ct); }
-            catch (ProviderRequestException ex) when (state.Source == BrowserCredentialSource &&
-                !ct.IsCancellationRequested && access is not null && Jwt.Expiration(access) > DateTimeOffset.UtcNow)
+            catch (ProviderRequestException ex) when (!ct.IsCancellationRequested &&
+                access is not null && Jwt.Expiration(access) > DateTimeOffset.UtcNow)
             {
                 AppLog.Warn("cursor", $"early token renewal failed; keeping the current token: {ex.Message}");
             }
@@ -369,7 +306,7 @@ public sealed partial class CursorProvider : IProviderRuntime
             usageResponse = await ConnectPost(UsageUrl, access, ct);
         }
         if (usageResponse.StatusCode is 401 or 403)
-            throw SignInExpired(state);
+            throw SignInExpired();
         if (!usageResponse.IsSuccess)
             throw new InvalidOperationException(ProviderErrors.RequestFailed(usageResponse.StatusCode));
         var usage = usageResponse.Json ?? throw new InvalidOperationException(ProviderErrors.InvalidResponse);
@@ -482,11 +419,10 @@ public sealed partial class CursorProvider : IProviderRuntime
         }
     }
 
-    private static bool NeedsRefresh(string accessToken, bool appCredential)
+    private static bool NeedsRefresh(string accessToken)
     {
         var exp = Jwt.Expiration(accessToken);
-        var lead = appCredential ? BrowserRenewalLead : TimeSpan.FromMinutes(5);
-        return exp is null || exp.Value - DateTimeOffset.UtcNow <= lead;
+        return exp is null || exp.Value - DateTimeOffset.UtcNow <= BrowserRenewalLead;
     }
 
     private async Task<string> RefreshTokenAsync(CursorAuthState state, Action<CursorAuthState>? saveRenewal, CancellationToken ct)
@@ -494,7 +430,7 @@ public sealed partial class CursorProvider : IProviderRuntime
         var payload = JsonSerializer.Serialize(new
         {
             grant_type = "refresh_token",
-            client_id = CursorAuthStore.ClientId,
+            client_id = CursorBrowserLogin.ClientId,
             refresh_token = state.RefreshToken
         });
         var response = await _http.SendAsync(new AppHttpRequest(
@@ -502,27 +438,18 @@ public sealed partial class CursorProvider : IProviderRuntime
             new Dictionary<string, string> { ["Content-Type"] = "application/json" },
             Encoding.UTF8.GetBytes(payload), 15), ct);
         var json = response.Json;
-        if (state.Source == BrowserCredentialSource)
-        {
-            ct.ThrowIfCancellationRequested();
-            if (JsonUtil.Bool(json?["shouldLogout"]) == true ||
-                response.StatusCode is 400 or 401 or 403 && JsonUtil.String(json?["error"]) == "invalid_grant")
-                throw SignInExpired(state);
-            if (!response.IsSuccess)
-                throw new ProviderRequestException($"Cursor token renewal failed (HTTP {response.StatusCode}). Try again later.");
-            if (CursorBrowserLogin.Token(json?["access_token"]) is not { } renewed)
-                throw new ProviderRequestException("Cursor returned an invalid sign-in response. Try again later.");
-            state.AccessToken = renewed;
-            state.RefreshToken = CursorBrowserLogin.Token(json?["refresh_token"]) ?? renewed;
-            saveRenewal?.Invoke(state);
-            return renewed;
-        }
-        if (!response.IsSuccess || JsonUtil.String(json?["access_token"]) is not { } access)
-            throw SignInExpired(state);
-        try { _auth.SaveAccessToken(access, state); }
-        catch (Exception ex) { AppLog.Warn("cursor", $"could not persist rotated token: {ex.Message}"); }
-        state.AccessToken = access;
-        return access;
+        ct.ThrowIfCancellationRequested();
+        if (JsonUtil.Bool(json?["shouldLogout"]) == true ||
+            response.StatusCode is 400 or 401 or 403 && JsonUtil.String(json?["error"]) == "invalid_grant")
+            throw SignInExpired();
+        if (!response.IsSuccess)
+            throw new ProviderRequestException($"Cursor token renewal failed (HTTP {response.StatusCode}). Try again later.");
+        if (CursorBrowserLogin.Token(json?["access_token"]) is not { } renewed)
+            throw new ProviderRequestException("Cursor returned an invalid sign-in response. Try again later.");
+        state.AccessToken = renewed;
+        state.RefreshToken = CursorBrowserLogin.Token(json?["refresh_token"]) ?? renewed;
+        saveRenewal?.Invoke(state);
+        return renewed;
     }
 
     private Task<AppHttpResponse> ConnectPost(Uri url, string accessToken, CancellationToken ct) =>

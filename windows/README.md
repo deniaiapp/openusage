@@ -33,7 +33,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Amp | Device-code sign-in in Customize (Windows user encryption); does not read the Amp CLI credentials |
 | Claude | **Customize → Claude → Sign In with Claude**; CLI files, Credential Manager items, and environment tokens are not read |
 | Codex | **Customize → Codex → Sign In with ChatGPT** (requires device code authorization enabled in ChatGPT); CLI files and Credential Manager items are not read |
-| Cursor | **Customize → Cursor → Sign In with Cursor**, or existing Cursor sign-ins in `%APPDATA%\Cursor\User\globalStorage\state.vscdb` or Credential Manager (`cursor-access-token`) |
+| Cursor | **Customize → Cursor → Sign In with Cursor**; the Cursor app's SQLite database and Credential Manager tokens are not read or changed |
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com) |
 | Grok | **Customize → Grok → Sign In with Grok**, or an existing Grok CLI sign-in |
 | Muse Code | **Customize → Muse Code → Sign In with Meta** |

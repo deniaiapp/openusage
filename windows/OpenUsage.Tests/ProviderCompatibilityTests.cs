@@ -148,7 +148,7 @@ public class ProviderCompatibilityTests
     [InlineData("""{"planUsage":{"totalPercentUsed":42}}""", false)]
     public async Task CursorReadsTheRequestCapWithTheCurrentDashboardSession(string usage, bool needsFallback)
     {
-        var expires = DateTimeOffset.UtcNow.AddHours(1).ToUnixTimeSeconds();
+        var expires = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds();
         var token = "fixture." + Convert.ToBase64String(Encoding.UTF8.GetBytes(
             $$"""{"sub":"auth0|test+user","exp":{{expires}}}""")).TrimEnd('=') + ".fixture";
         var dashboardCalls = 0;
