@@ -94,6 +94,8 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 Expand the Codex card to see ChatGPT's reported tokens for Today, Yesterday, and Last 30 Days, using UTC dates.
 
+Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
+
 Windows reset countdowns show calendar months and years for longer waits.
 
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
@@ -121,6 +123,10 @@ On Windows, connect ChatGPT for Codex in Customize using a device code. Add Open
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
 Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
+
+Windows shows available Z.ai Limit Resets when you expand the account card.
+
+OpenUsage encrypts its Antigravity sign-in cache for your Windows user.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 

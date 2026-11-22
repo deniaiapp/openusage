@@ -1,3 +1,5 @@
+using OpenUsage.Core.Providers.Zai;
+
 namespace OpenUsage.Core.Models;
 
 public static class DefaultLayout
@@ -36,7 +38,7 @@ public static class DefaultLayout
         "openrouter.balance",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
 
-        "zai.session", "zai.weekly", "zai.webSearches"
+        "zai.session", "zai.weekly", "zai.webSearches", ZaiProvider.ResetsMetricId
     ];
 
     public static readonly string[] PinnedMetricIds =
@@ -68,7 +70,7 @@ public static class DefaultLayout
         "ollama.purchasedCredits",
         "opencode.today", "opencode.yesterday", "opencode.last30",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
-        "zai.webSearches"
+        "zai.webSearches", ZaiProvider.ResetsMetricId
     ];
 
     public static readonly string[] StarterProviders = ["claude", "codex", "cursor"];
@@ -80,6 +82,8 @@ public static class DefaultLayout
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
         .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly",
             "amp.agent", "amp.orbHours", "amp.free", "amp.credits",
-            "codex.tokensToday", "codex.tokensYesterday", "codex.tokensLast30"])
+            "codex.tokensToday", "codex.tokensYesterday", "codex.tokensLast30", ZaiProvider.ResetsMetricId])
         .ToArray();
+
+    internal static readonly string[] NewAccountMetricIds = [ZaiProvider.ResetsMetricId];
 }
