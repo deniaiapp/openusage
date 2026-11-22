@@ -1,8 +1,10 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Antigravity;
+using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Copilot;
+using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
@@ -77,6 +79,14 @@ public sealed class AppContainer : IDisposable
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
 
+    public async Task ConnectClaudeAsync(Action<Uri> openBrowser, Task<string> pastedCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var claude = Providers.OfType<ClaudeProvider>().Single();
+        var snapshot = await claude.ConnectAsync(openBrowser, pastedCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
+
     public async Task ConnectAntigravityAsync(AntigravityProvider provider, Action<Uri> openBrowser, CancellationToken ct)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
@@ -114,6 +124,14 @@ public sealed class AppContainer : IDisposable
         var account = await _apiKeyAccounts.ConnectAsync(providerId, label, key, _cts.Token);
         RegisterAccount(account);
         _ = Data.RefreshProviderAsync(account.CardId, _cts.Token);
+    }
+
+    public async Task ConnectCursorAsync(Action<Uri> openBrowser, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var cursor = Providers.OfType<CursorProvider>().Single();
+        var snapshot = await cursor.ConnectAsync(openBrowser, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
     }
 
     public void RenameAccount(ApiKeyAccount account, string label)

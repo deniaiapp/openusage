@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using OpenUsage.Core.Services;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 using Xunit;
 
@@ -112,6 +113,97 @@ public sealed class CliProxyHubClientTests
         Assert.DoesNotContain("fixture", failure.Message);
     }
 
+    [WindowsFact]
+    public async Task ConnectsToTheNormalizedAddressAndDoesNotContactItAgainForADuplicate()
+    {
+        var directory = Directory.CreateTempSubdirectory("openusage-hub-connect-tests-");
+        try
+        {
+            var path = Path.Combine(directory.FullName, "hubs.bin");
+            var calls = 0;
+            using var client = MakeClient(request =>
+            {
+                Assert.Equal("https://hub.example/proxy/v0/management/auth-files", request.RequestUri?.AbsoluteUri);
+                Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+                Assert.False(File.Exists(path));
+                calls++;
+                return Reply(HttpStatusCode.OK, """{"files":[{"id":"one","provider":"codex"}]}""");
+            });
+            var service = new CliProxyHubConnections(client, new CliProxyHubStore(path));
+            var (hub, logins) = await service.ConnectAsync(" hub.example/proxy/management.html ", " fixture-key ", default);
+
+            Assert.Equal("codex", Assert.Single(logins).ProviderId);
+            Assert.Equal("https://hub.example/proxy/", hub.Address.AbsoluteUri);
+            var reopened = new CliProxyHubStore(path);
+            Assert.Equal(hub, Assert.Single(reopened.List()));
+            Assert.Equal("fixture-key", reopened.KeyFor(hub));
+            await Assert.ThrowsAsync<ProviderRequestException>(() =>
+                service.ConnectAsync("https://HUB.example:443/proxy/v1", "duplicate-fixture", default));
+            Assert.Equal(1, calls);
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
+    [Fact]
+    public async Task RejectedOrCanceledConnectionsDoNotPersistKeys()
+    {
+        var directory = Directory.CreateTempSubdirectory("openusage-hub-connect-tests-");
+        try
+        {
+            var path = Path.Combine(directory.FullName, "hubs.bin");
+            using var canceled = new CancellationTokenSource();
+            using var client = MakeClient(request =>
+            {
+                if (request.Headers.Authorization?.Parameter == "rejected-fixture")
+                    return Reply(HttpStatusCode.Unauthorized, "{}");
+                canceled.Cancel();
+                return Reply(HttpStatusCode.OK, """{"files":[]}""");
+            });
+            var service = new CliProxyHubConnections(client, new CliProxyHubStore(path));
+            await Assert.ThrowsAsync<ProviderRequestException>(() =>
+                service.ConnectAsync("hub.example", "rejected-fixture", default));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                service.ConnectAsync("hub.example", "canceled-fixture", canceled.Token));
+            Assert.False(File.Exists(path));
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
+    [WindowsFact]
+    public async Task VerifiesReplacementOnTheSavedHubAndRemovesOnlyLocalState()
+    {
+        var directory = Directory.CreateTempSubdirectory("openusage-hub-connect-tests-");
+        try
+        {
+            var store = new CliProxyHubStore(Path.Combine(directory.FullName, "hubs.bin"));
+            var hub = store.Add(new Uri("https://hub.example/prefix/"), "initial-fixture");
+            var requests = new List<string>();
+            using var client = MakeClient(request =>
+            {
+                Assert.Equal(HttpMethod.Get, request.Method);
+                Assert.Equal("https://hub.example/prefix/v0/management/auth-files", request.RequestUri?.AbsoluteUri);
+                var key = request.Headers.Authorization!.Parameter!;
+                requests.Add(key);
+                return key == "replacement-fixture"
+                    ? Reply(HttpStatusCode.OK, """{"files":[]}""")
+                    : Reply(HttpStatusCode.Forbidden, "{}");
+            });
+            var service = new CliProxyHubConnections(client, store);
+            await Assert.ThrowsAsync<ProviderRequestException>(() =>
+                service.ReplaceKeyAsync(hub.Id, "rejected-fixture", default));
+            Assert.Equal("initial-fixture", store.KeyFor(hub));
+            Assert.Empty(await service.ReplaceKeyAsync(hub.Id, "replacement-fixture", default));
+            Assert.Equal(hub, Assert.Single(service.List()));
+            Assert.Equal("replacement-fixture", store.KeyFor(hub));
+            Assert.True(service.Remove(hub.Id));
+            Assert.Empty(service.List());
+            await Assert.ThrowsAsync<ProviderRequestException>(() =>
+                service.ReplaceKeyAsync(hub.Id, "stale-fixture", default));
+            Assert.Equal(new[] { "rejected-fixture", "replacement-fixture" }, requests);
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
     private static CliProxyHubClient MakeClient(Func<HttpRequestMessage, HttpResponseMessage> reply) =>
         new(new AppHttp(new HttpClient(new FixtureHandler(reply))));
 
@@ -122,5 +214,13 @@ public sealed class CliProxyHubClientTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(reply(request));
+    }
+
+    private sealed class WindowsFactAttribute : FactAttribute
+    {
+        public WindowsFactAttribute()
+        {
+            if (!OperatingSystem.IsWindows()) Skip = "Requires Windows DPAPI.";
+        }
     }
 }

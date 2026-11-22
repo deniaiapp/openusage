@@ -75,6 +75,12 @@ For Copilot, open **Customize → Copilot**. Leave the address as `github.com`, 
 
 If the connection briefly drops while OpenUsage waits for GitHub, it retries with the same code until the code expires or you cancel.
 
+To connect Claude, go to **Customize → Claude → Sign In with Claude**. Finish in the browser, or return to the Claude settings page and paste the code the browser gives you. A failed sign-in leaves your existing connection in place. OpenUsage saves verified sign-ins with Windows user encryption.
+
+Existing Claude CLI credentials still work until you connect in Customize.
+
+For Cursor, choose **Customize → Cursor → Sign In with Cursor** and finish signing in in your browser. OpenUsage verifies usage before saving the sign-in with Windows user encryption. **Sign In Again** replaces it without changing your card settings. Existing local Cursor sign-ins still work if you haven't connected Cursor in OpenUsage.
+
 For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing Codex CLI logins still work if you haven't connected ChatGPT in OpenUsage.
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage. If a CLI-based session expires, run the corresponding CLI once.
@@ -95,7 +101,7 @@ reported zeroes remain visible, and Last 30 Days adds the reported days in that 
 OpenUsage checks the report once an hour and on the first refresh of a new UTC day. A report error
 does not hide live limits. History rows are not pinned to the tray by default.
 
-CLIProxyAPI hub connections are not available in the Windows UI yet. The Windows storage layer keeps each hub's address and management key together, encrypted for the current Windows user.
+CLIProxyAPI hub connections are not available in the Windows UI yet. The connection service saves a new hub or replacement key only after the hub returns a valid login list. Saved addresses and keys are encrypted for the current Windows user.
 
 ## Privacy Mode
 

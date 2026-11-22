@@ -40,7 +40,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[OpenCode](docs/providers.md#opencode)**: session, weekly, monthly
 - **[OpenRouter](docs/providers.md#openrouter)**: balance, spend, key limit, budget
 - **[Z.ai](docs/providers.md#zai)**: session, weekly, web searches, rate-limit resets. On Windows, longer token windows use the Weekly row with the reset time Z.ai reports.
-- **[CLIProxyAPI hubs](docs/cliproxyapi.md) (macOS only)**: every Claude, ChatGPT, Antigravity, Devin, and Grok login on
+- **[CLIProxyAPI hubs](docs/cliproxyapi.md) (macOS UI only)**: every Claude, ChatGPT, Antigravity, Devin, and Grok login on
   a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server
 
 Add your accounts from the app's Accounts screen. OpenUsage never reads other tools' credentials,
@@ -133,7 +133,7 @@ Cursor's usage history shows actual on-demand charges and reported tokens, not e
 
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
-On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment. Management keys also show Yesterday and Prior 30 Days spend.
+On Windows, connect Claude in Customize using your browser, or connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment. OpenRouter management keys also show Yesterday and Prior 30 Days spend.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
@@ -141,7 +141,7 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 
 Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
-Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
+Connect Cursor from **Customize → Cursor → Sign In with Cursor**. Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
 
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 
