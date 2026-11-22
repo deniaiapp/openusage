@@ -96,6 +96,7 @@ macOS-only pieces left out on purpose:
 
 You can [connect and disconnect CLIProxyAPI hubs](../docs/windows.md#cliproxyapi-hubs) in Customize.
 Hub accounts are not yet mirrored. Management requests use HTTPS, or HTTP for loopback, local
-network, and Tailscale addresses, without following redirects.
+network, and Tailscale addresses, without following redirects. The core supports the hub's
+`api-call` transport, but provider refreshes do not use it yet.
 
 Proxy support still honors `~\.openusage\config.json` (or `%APPDATA%\OpenUsage\config.json`) with a `proxy` URL.
