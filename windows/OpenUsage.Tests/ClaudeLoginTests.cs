@@ -29,7 +29,7 @@ public sealed class ClaudeLoginTests
         using var http = MakeHttp((request, body) =>
         {
             Assert.Equal(HttpMethod.Post, request.Method);
-            Assert.Equal(ClaudeAuthStore.ProdRefreshUrl, request.RequestUri!.AbsoluteUri);
+            Assert.Equal(ClaudeLogin.TokenUrl, request.RequestUri!.AbsoluteUri);
             Assert.Equal("application/json", request.Content!.Headers.ContentType!.MediaType);
             var query = HttpUtility.ParseQueryString(authorization!.Query);
             var exchange = JsonNode.Parse(body)!;
@@ -162,19 +162,28 @@ public sealed class ClaudeLoginTests
     public async Task AppOwnedRenewalPersistsRotatedTokensWithoutEditingTheCliFile()
     {
         var dir = Directory.CreateTempSubdirectory();
+        string[] variables = ["CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_LOCAL_OAUTH_API_BASE",
+            "CLAUDE_LOCAL_OAUTH_CLIENT_ID"];
+        var previous = variables.Select(Environment.GetEnvironmentVariable).ToArray();
         try
         {
             var path = Path.Combine(dir.FullName, "keys.bin");
-            var auth = new ClaudeAuthStore(dir.FullName, readCredentialManager: false);
+            var cliPath = Path.Combine(dir.FullName, ".credentials.json");
             const string cli = """{"claudeAiOauth":{"accessToken":"fixture-cli"}}""";
-            File.WriteAllText(auth.CredentialsPath(), cli);
+            File.WriteAllText(cliPath, cli);
+            Environment.SetEnvironmentVariable(variables[0], dir.FullName);
+            Environment.SetEnvironmentVariable(variables[1], "fixture-environment");
+            Environment.SetEnvironmentVariable(variables[2], "http://127.0.0.1:1");
+            Environment.SetEnvironmentVariable(variables[3], "fixture-client");
             var now = Now;
             var renewalCount = 0;
             using var http = MakeHttp((request, body) =>
             {
+                Assert.Contains(request.RequestUri!.Host, new[] { "api.anthropic.com", "platform.claude.com" });
                 if (request.Method == HttpMethod.Post)
                 {
                     var grant = JsonNode.Parse(body)!;
+                    Assert.Equal(ClaudeLogin.ClientId, grant["client_id"]!.GetValue<string>());
                     if (grant["grant_type"]!.GetValue<string>() == "authorization_code") return (200, Token);
                     renewalCount++;
                     Assert.Equal("fixture-refresh", grant["refresh_token"]!.GetValue<string>());
@@ -184,38 +193,59 @@ public sealed class ClaudeLoginTests
                 Assert.Equal(now == Now ? "fixture-access" : "fixture-rotated", request.Headers.Authorization?.Parameter);
                 return request.RequestUri!.AbsolutePath.EndsWith("/profile") ? (200, Profile) : (200, Usage);
             });
-            var provider = new ClaudeProvider(http, auth, () => now, new ApiKeyStore(path));
+            var provider = new ClaudeProvider(http, now: () => now, keys: new ApiKeyStore(path));
             await Connect(provider);
             now = now.AddHours(2);
             Assert.False((await provider.RefreshAsync()).IsError);
-            var reopened = new ClaudeProvider(http, auth, () => now, new ApiKeyStore(path));
+            var reopened = new ClaudeProvider(http, now: () => now, keys: new ApiKeyStore(path));
             Assert.True(reopened.IsSignedIn);
             Assert.False((await reopened.RefreshAsync()).IsError);
             Assert.Equal(1, renewalCount);
-            Assert.Equal(cli, File.ReadAllText(auth.CredentialsPath()));
+            Assert.Equal(cli, File.ReadAllText(cliPath));
         }
-        finally { dir.Delete(recursive: true); }
+        finally
+        {
+            for (var i = 0; i < variables.Length; i++) Environment.SetEnvironmentVariable(variables[i], previous[i]);
+            dir.Delete(recursive: true);
+        }
     }
 
     [Fact]
-    public async Task ExistingCliCredentialsWorkUntilConnectingInCustomize()
+    public async Task ExternalCredentialsAndEndpointOverridesAreIgnored()
     {
         var dir = Directory.CreateTempSubdirectory();
+        string[] variables = ["CLAUDE_CONFIG_DIR", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_LOCAL_OAUTH_API_BASE",
+            "CLAUDE_LOCAL_OAUTH_CLIENT_ID"];
+        var previous = variables.Select(Environment.GetEnvironmentVariable).ToArray();
         try
         {
-            var auth = new ClaudeAuthStore(dir.FullName, readCredentialManager: false);
-            File.WriteAllText(auth.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-cli"}}""");
-            using var http = MakeHttp((request, _) =>
+            var cliPath = Path.Combine(dir.FullName, ".credentials.json");
+            const string cli = """{"claudeAiOauth":{"accessToken":"fixture-cli","refreshToken":"fixture-cli-refresh"}}""";
+            File.WriteAllText(cliPath, cli);
+            Environment.SetEnvironmentVariable(variables[0], dir.FullName);
+            Environment.SetEnvironmentVariable(variables[1], "fixture-environment-token");
+            Environment.SetEnvironmentVariable(variables[2], "http://127.0.0.1:1");
+            Environment.SetEnvironmentVariable(variables[3], "fixture-client");
+            var calls = 0;
+            using var http = MakeHttp((_, _) =>
             {
-                Assert.Equal("fixture-cli", request.Headers.Authorization?.Parameter);
-                return request.RequestUri!.AbsolutePath.EndsWith("/profile") ? (200, Profile) : (200, Usage);
+                calls++;
+                throw new InvalidOperationException("External credentials must not cause a request.");
             });
-            var provider = new ClaudeProvider(http, auth, () => Now, new ApiKeyStore(Path.Combine(dir.FullName, "keys.bin")));
+            var provider = new ClaudeProvider(http, now: () => Now, keys: new ApiKeyStore(Path.Combine(dir.FullName, "keys.bin")));
             Assert.False(provider.IsSignedIn);
-            Assert.True(await provider.HasLocalCredentialsAsync());
-            Assert.False((await provider.RefreshAsync()).IsError);
+            Assert.False(await provider.HasLocalCredentialsAsync());
+            var snapshot = await provider.RefreshAsync();
+            Assert.True(snapshot.IsError);
+            Assert.Contains("Customize", Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+            Assert.Equal(0, calls);
+            Assert.Equal(cli, File.ReadAllText(cliPath));
         }
-        finally { dir.Delete(recursive: true); }
+        finally
+        {
+            for (var i = 0; i < variables.Length; i++) Environment.SetEnvironmentVariable(variables[i], previous[i]);
+            dir.Delete(recursive: true);
+        }
     }
 
     private static Task<ProviderSnapshot> Connect(ClaudeProvider provider)

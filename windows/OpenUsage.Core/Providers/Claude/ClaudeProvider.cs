@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Stores;
@@ -20,7 +19,6 @@ public sealed partial class ClaudeProvider : IProviderRuntime
 
     private static readonly TimeSpan RateLimitCooldown = TimeSpan.FromMinutes(5);
 
-    private readonly ClaudeAuthStore _auth;
     private readonly AppHttp _http;
     private readonly Func<DateTimeOffset> _now;
     private (string Fingerprint, string? Plan, List<MetricLine> Lines)? _lastGood;
@@ -28,21 +26,21 @@ public sealed partial class ClaudeProvider : IProviderRuntime
     private (string AccessFingerprint, string? Plan)? _livePlan;
     private (string Fingerprint, DateTimeOffset CheckedAt, MetricLine? Line)? _resetGrantsCheck;
 
-    /// Rotated logins that could not be written back (they came from Credential Manager), keyed by the
-    /// refresh token they replaced, so the next refresh doesn't reuse the spent one.
-    private readonly Dictionary<string, ClaudeOAuth> _rotatedInMemory = new(StringComparer.Ordinal);
-
     public ClaudeProvider(
         AppHttp http,
-        ClaudeAuthStore? auth = null,
+        Func<DateTimeOffset>? now = null,
+        ApiKeyStore? keys = null) : this(http, LoadAppCredential(keys), now, keys) { }
+
+    internal ClaudeProvider(
+        AppHttp http,
+        ClaudeOAuth? credential,
         Func<DateTimeOffset>? now = null,
         ApiKeyStore? keys = null)
     {
         _http = http;
-        _auth = auth ?? new ClaudeAuthStore();
         _now = now ?? (() => DateTimeOffset.Now);
         _keys = keys;
-        _connected = LoadAppCredential(keys);
+        _connected = credential;
     }
 
     public Provider Provider { get; } = new(
@@ -69,15 +67,16 @@ public sealed partial class ClaudeProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(IsSignedIn || _auth.HasUsableCredentials());
+        Task.FromResult(IsSignedIn);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
         await _authGate.WaitAsync(cancellationToken);
         try
         {
-            if (_connected is not { } connected) return await RefreshCliAsync(cancellationToken);
-            try { return await ProbeAsync(connected, cancellationToken, appOwned: true); }
+            if (_connected is not { } connected)
+                return ProviderSnapshot.Error(Provider, "Sign in to Claude in Customize → Claude.");
+            try { return await ProbeAsync(connected, cancellationToken); }
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
             {
                 AppLog.Warn("claude", $"app sign-in refresh failed ({ex.GetType().Name})");
@@ -87,55 +86,21 @@ public sealed partial class ClaudeProvider : IProviderRuntime
         finally { _authGate.Release(); }
     }
 
-    private async Task<ProviderSnapshot> RefreshCliAsync(CancellationToken cancellationToken)
-    {
-        var candidates = _auth.LoadCandidates()
-            .Select(c => c.RefreshToken is { } r && _rotatedInMemory.TryGetValue(r, out var rotated) ? rotated : c)
-            .ToList();
-        if (candidates.Count == 0)
-            return ProviderSnapshot.Error(Provider, "Sign in to Claude in Customize → Claude.");
-
-        Exception? last = null;
-        foreach (var oauth in candidates)
-        {
-            try
-            {
-                return await ProbeAsync(oauth, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                last = ex;
-                AppLog.Warn("claude", $"candidate failed: {ex.Message}");
-            }
-        }
-        return ProviderSnapshot.Error(Provider, last ?? new InvalidOperationException("Claude refresh failed."));
-    }
-
-    private async Task<ProviderSnapshot> ProbeAsync(ClaudeOAuth oauth, CancellationToken ct, bool appOwned = false,
+    private async Task<ProviderSnapshot> ProbeAsync(ClaudeOAuth oauth, CancellationToken ct,
         bool validateReplacement = false, bool allowRenewal = true)
     {
         var fingerprint = CredentialFingerprint(oauth);
         if (!validateReplacement && _rateLimit is { } limit && limit.Fingerprint == fingerprint && _now() < limit.Until)
             return HeldUsage(fingerprint);
 
-        var config = appOwned ? AppOAuthConfig : _auth.OAuthConfig();
-        // Only file logins are refreshed: OpenUsage can't write Credential Manager items back, and
-        // rotating their refresh token would sign the Claude CLI out.
-        if (!appOwned && oauth.Source == ClaudeCredentialSource.File &&
-            _auth.NeedsRefresh(oauth) && !string.IsNullOrEmpty(oauth.RefreshToken))
-        {
-            await RefreshTokenAsync(oauth, config, ct);
-            fingerprint = CredentialFingerprint(oauth);
-        }
-
-        if (appOwned && allowRenewal && !validateReplacement && oauth.ExpiresAt is { } expiry &&
+        if (allowRenewal && !validateReplacement && oauth.ExpiresAt is { } expiry &&
             expiry - _now().ToUnixTimeMilliseconds() <= TimeSpan.FromMinutes(5).TotalMilliseconds)
         {
             oauth = await RenewAppCredentialAsync(oauth, ct);
-            return await ProbeAsync(oauth, ct, appOwned: true, allowRenewal: false);
+            return await ProbeAsync(oauth, ct, allowRenewal: false);
         }
 
-        var response = await _http.SendAsync(UsageRequest(new Uri(config.UsageUrl), oauth), ct);
+        var response = await _http.SendAsync(UsageRequest(new Uri(UsageUrl), oauth), ct);
 
         if (response.StatusCode == 429)
         {
@@ -150,16 +115,12 @@ public sealed partial class ClaudeProvider : IProviderRuntime
 
         if (response.StatusCode is 401 or 403)
         {
-            if (appOwned)
+            if (!validateReplacement && allowRenewal)
             {
-                if (!validateReplacement && allowRenewal)
-                {
-                    oauth = await RenewAppCredentialAsync(oauth, ct);
-                    return await ProbeAsync(oauth, ct, appOwned: true, allowRenewal: false);
-                }
-                throw new ProviderRequestException("Claude sign-in was not accepted. Sign in again in Customize → Claude.");
+                oauth = await RenewAppCredentialAsync(oauth, ct);
+                return await ProbeAsync(oauth, ct, allowRenewal: false);
             }
-            throw new InvalidOperationException("Session expired. Run `claude` to log in again.");
+            throw new ProviderRequestException("Claude sign-in was not accepted. Sign in again in Customize → Claude.");
         }
         if (!response.IsSuccess)
             throw new InvalidOperationException(ProviderErrors.RequestFailed(response.StatusCode));
@@ -169,13 +130,13 @@ public sealed partial class ClaudeProvider : IProviderRuntime
         var mapped = ClaudeUsageMapper.Map(body, oauth);
         var lines = mapped.Lines.ToList();
         var plan = validateReplacement
-            ? await ResolveLivePlanAsync(oauth, config.UsageUrl, ct, requireProfile: true) ?? mapped.Plan
+            ? await ResolveLivePlanAsync(oauth, UsageUrl, ct, requireProfile: true) ?? mapped.Plan
             : mapped.Plan;
         // Both run only after the usage call succeeded: the token is known-good, so a failure here costs
         // the resets row or the live plan label, never the bars.
-        if (await ResetGrantsLineAsync(oauth, config.UsageUrl, ct) is { } resets) lines.Add(resets);
+        if (await ResetGrantsLineAsync(oauth, UsageUrl, ct) is { } resets) lines.Add(resets);
         if (!validateReplacement)
-            plan = await ResolveLivePlanAsync(oauth, config.UsageUrl, ct) ?? mapped.Plan;
+            plan = await ResolveLivePlanAsync(oauth, UsageUrl, ct) ?? mapped.Plan;
         _lastGood = (fingerprint, plan, lines);
         _rateLimit = null;
         return MakeSnapshot(plan, lines.ToList(), mapped.Warning);
@@ -307,49 +268,4 @@ public sealed partial class ClaudeProvider : IProviderRuntime
     private static string Hash(string? value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? "")));
 
-    private async Task RefreshTokenAsync(ClaudeOAuth oauth, (string UsageUrl, string RefreshUrl, string ClientId) config, CancellationToken ct)
-    {
-        var payload = JsonSerializer.Serialize(new
-        {
-            grant_type = "refresh_token",
-            refresh_token = oauth.RefreshToken,
-            client_id = config.ClientId,
-            scope = "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
-        });
-        var response = await _http.SendAsync(new AppHttpRequest(
-            "POST",
-            new Uri(config.RefreshUrl),
-            new Dictionary<string, string> { ["Content-Type"] = "application/json" },
-            Encoding.UTF8.GetBytes(payload),
-            15), ct);
-        if (!response.IsSuccess || response.Json is not { } body) return;
-        var access = JsonUtil.String(body["access_token"]);
-        if (string.IsNullOrEmpty(access)) return;
-
-        var previousFingerprint = CredentialFingerprint(oauth);
-        var previousRefresh = oauth.RefreshToken;
-        oauth.AccessToken = access;
-        oauth.RefreshToken = JsonUtil.String(body["refresh_token"]) ?? oauth.RefreshToken;
-        if (JsonUtil.Number(body["expires_in"]) is { } expiresIn)
-            oauth.ExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + expiresIn * 1000;
-
-        CarryUsageAcrossRenewal(previousFingerprint, oauth);
-
-        try
-        {
-            if (_auth.SaveRotated(oauth, previousRefresh))
-            {
-                if (previousRefresh is not null) _rotatedInMemory.Remove(previousRefresh);
-            }
-            else if (oauth.Source != ClaudeCredentialSource.File && previousRefresh is not null)
-            {
-                _rotatedInMemory[previousRefresh] = oauth;
-            }
-            else
-            {
-                AppLog.Info("claude", "rotated token not saved: the credential file changed during refresh");
-            }
-        }
-        catch (Exception ex) { AppLog.Warn("claude", $"could not persist rotated credentials: {ex.Message}"); }
-    }
 }
