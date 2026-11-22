@@ -91,7 +91,7 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 Windows reset countdowns show calendar months and years for longer waits.
 
-Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
+Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
 Priority also lists unpinned limits you can use before they reset.
 
 ```powershell
@@ -106,6 +106,8 @@ On Windows, Copilot and Antigravity distinguish provider throttling from sign-in
 If Claude's first check for rate limit resets can't connect, the next refresh tries again.
 
 On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
+
+Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
