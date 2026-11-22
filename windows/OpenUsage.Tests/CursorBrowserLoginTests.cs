@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
