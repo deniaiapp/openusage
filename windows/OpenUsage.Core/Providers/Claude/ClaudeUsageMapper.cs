@@ -117,12 +117,16 @@ public static class ClaudeUsageMapper
     {
         if (JsonUtil.Object(value) is not { } obj) return;
         if (JsonUtil.Bool(obj["is_enabled"]) != true) return;
-        if (JsonUtil.Number(obj["used_credits"]) is not { } usedCents) return;
-        var used = JsonUtil.CentsToDollars(usedCents);
-        if (JsonUtil.Number(obj["monthly_limit"]) is { } limitCents && limitCents > 0)
-            lines.Add(MetricLine.Progress("Extra usage spent", used, JsonUtil.CentsToDollars(limitCents), ProgressFormat.Dollars));
+        var currency = JsonUtil.String(obj["currency"])?.Trim().ToUpperInvariant();
+        if (currency is not { Length: 3 } || !currency.All(char.IsAsciiLetterUpper)) currency = null;
+        var places = JsonUtil.Number(obj["decimal_places"]);
+        var scale = Math.Pow(10, places is >= 0 and <= 6 && places == Math.Truncate(places.Value) ? places.Value : 2);
+        var used = Math.Round(JsonUtil.Number(obj["used_credits"]) ?? 0, MidpointRounding.AwayFromZero) / scale;
+        var limit = Math.Round(JsonUtil.Number(obj["monthly_limit"]) ?? 0, MidpointRounding.AwayFromZero) / scale;
+        if (limit > 0)
+            lines.Add(MetricLine.Progress("Extra usage spent", used, limit, ProgressFormat.Currency(currency)));
         else if (used > 0)
-            lines.Add(MetricLine.Values("Extra usage spent", [new MetricValue(used, MetricKind.Dollars)]));
+            lines.Add(MetricLine.Values("Extra usage spent", [new MetricValue(used, MetricKind.Dollars, CurrencyCode: currency)]));
     }
 
     private static DateTimeOffset? ResetDate(JsonNode? value)

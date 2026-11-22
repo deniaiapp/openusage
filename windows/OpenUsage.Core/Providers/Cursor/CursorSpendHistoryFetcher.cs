@@ -2,7 +2,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using OpenUsage.Core.Models;
-using OpenUsage.Core.Pricing;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Cursor;
@@ -153,7 +152,7 @@ public sealed class CursorSpendHistoryFetcher
         var endMs = window.End.ToUnixTimeMilliseconds() - 1;
         var page = 1;
         int? expectedTotal = null;
-        var received = 0;
+        long received = 0;
         var day = new CursorUsageDay { IsComplete = window.IsComplete };
         while (true)
         {
@@ -173,18 +172,19 @@ public sealed class CursorSpendHistoryFetcher
 
             if (expectedTotal is { } total && parsed.TotalCount != total) return (null, "incomplete pages");
             expectedTotal = parsed.TotalCount;
-            var pageEvents = parsed.Events.Count + parsed.RejectedEventCount;
-            received += pageEvents;
             if (parsed.RejectedEventCount > 0)
-                AppLog.Warn("cursor", $"usage events: {parsed.RejectedEventCount} rejected event{(parsed.RejectedEventCount == 1 ? "" : "s")} on one page");
+                return (null, "invalid event");
+            var pageEvents = parsed.Events.Count;
+            received += pageEvents;
             if (parsed.TotalCount == 0)
                 return pageEvents == 0 ? (day, null) : (null, "incomplete pages");
             if (pageEvents == 0 && received < parsed.TotalCount) return (null, "incomplete pages");
             foreach (var item in parsed.Events)
             {
                 if (DailyUsageAccumulator.DayKey(item.Date) != window.Key) return (null, "invalid response");
-                day.Add(item.Tokens, item.Model);
+                day.Add(item);
             }
+            if (!double.IsFinite(day.ChargedCents)) return (null, "invalid daily charge");
             if (received == parsed.TotalCount) return (day, null);
             if (received > parsed.TotalCount) return (null, "incomplete pages");
             page++;
@@ -218,53 +218,14 @@ public static class CursorSpendMapper
 {
     public const string HistoryNote = "From your Cursor usage history";
 
-    public static List<CursorUsageRow> Rows(
-        IEnumerable<(DateTimeOffset DayStart, CursorUsageDay Day)> days, ModelPricing pricing) =>
-        days.SelectMany(entry => entry.Day.Models.Select(model => new CursorUsageRow(
-                entry.DayStart,
-                model.Key,
-                model.Value,
-                // A day row sums many requests; its size must not add a long-context surcharge.
-                pricing.EstimatedCost(model.Key, model.Value, applyLongContext: false))))
-            .ToList();
-
-    /// <summary>
-    /// Rows no pricing source can price are left out of every total (mixing their tokens with priced
-    /// dollars makes the figures incoherent) and only surface as unknown models on their day.
-    /// Each day's dollars are summed raw, then rounded to cents once.
-    /// </summary>
-    public static LogUsageScan BuildScan(IEnumerable<CursorUsageRow> rows)
+    public static void AppendSpendLines(
+        IEnumerable<(DateTimeOffset DayStart, CursorUsageDay Day)> days,
+        DateTimeOffset now,
+        List<MetricLine> lines)
     {
-        var cost = new Dictionary<string, double>(StringComparer.Ordinal);
-        var tokens = new Dictionary<string, long>(StringComparer.Ordinal);
-        var unknown = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        foreach (var row in rows)
-        {
-            var day = DailyUsageAccumulator.DayKey(row.Date);
-            var model = row.Model.Trim();
-            if (row.ImputedCostDollars is not { } dollars)
-            {
-                if (row.Tokens.TotalTokens > 0 && model.Length > 0)
-                {
-                    if (!unknown.TryGetValue(day, out var set))
-                        unknown[day] = set = new HashSet<string>(StringComparer.Ordinal);
-                    set.Add(model);
-                }
-                continue;
-            }
-            cost[day] = cost.GetValueOrDefault(day) + dollars;
-            tokens[day] = tokens.GetValueOrDefault(day) + row.Tokens.TotalTokens;
-        }
-        var daily = tokens.Keys
-            .OrderByDescending(k => k, StringComparer.Ordinal)
-            .Select(day => new DailyUsageEntry(
-                day,
-                tokens[day],
-                Math.Round(cost.GetValueOrDefault(day) * 100, MidpointRounding.AwayFromZero) / 100))
-            .ToList();
-        return new LogUsageScan { Series = new DailyUsageSeries { Daily = daily }, UnknownModelsByDay = unknown };
+        var totals = new DailyUsageAccumulator();
+        foreach (var (start, day) in days)
+            totals.Add(DailyUsageAccumulator.DayKey(start), day.TotalTokens, day.ChargedCents / 100);
+        SpendTileMapper.AppendAll(totals.Build(), lines, now, HistoryNote, estimated: false);
     }
-
-    public static void AppendSpendLines(IEnumerable<CursorUsageRow> rows, DateTimeOffset now, List<MetricLine> lines) =>
-        SpendTileMapper.AppendAll(BuildScan(rows), lines, now, HistoryNote);
 }
