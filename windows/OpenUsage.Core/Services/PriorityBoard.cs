@@ -12,7 +12,10 @@ public sealed record PriorityBoard(
     bool HasUsage,
     bool HasRefreshErrors)
 {
-    public static PriorityBoard Make(LayoutStore layout, WidgetDataStore store, DateTimeOffset now)
+    public IReadOnlyList<PriorityMetric> UseItOrLoseIt { get; init; } = [];
+
+    public static PriorityBoard Make(LayoutStore layout, WidgetDataStore store, DateTimeOffset now,
+        bool showUnusedQuota = true)
     {
         var providers = layout.VisibleProviders;
         var metrics = (from runtime in providers
@@ -23,6 +26,7 @@ public sealed record PriorityBoard(
         var pinned = new List<PriorityMetric>();
         var runningOut = new List<PriorityMetric>();
         var usedUp = new List<PriorityMetric>();
+        var unused = new List<PriorityMetric>();
         foreach (var metric in metrics)
         {
             var state = metric.Data.GetMeterState(now);
@@ -32,11 +36,22 @@ public sealed record PriorityBoard(
                 pinned.Add(metric);
             else if (metric.Data.Limit is > 0 && (state.Severity is MeterSeverity.Warning or MeterSeverity.Critical))
                 runningOut.Add(metric);
+            else if (showUnusedQuota && IsUnusedNearReset(metric.Data, now))
+                unused.Add(metric);
         }
         return new(pinned,
             runningOut.OrderBy(m => 1 - m.Data.Used / m.Data.Limit!.Value).ToList(),
             usedUp.OrderBy(m => m.Data.ResetsAt ?? DateTimeOffset.MaxValue).ToList(),
             metrics.Count > 0,
-            providers.Any(runtime => store.ProviderError(runtime.Provider.Id) is not null));
+            providers.Any(runtime => store.ProviderError(runtime.Provider.Id) is not null))
+        {
+            UseItOrLoseIt = unused.OrderBy(m => m.Data.ResetsAt).ToList()
+        };
     }
+
+    private static bool IsUnusedNearReset(WidgetData data, DateTimeOffset now) =>
+        data.Kind != MetricKind.Dollars && data.Limit is > 0 and var limit
+        && data.PeriodDurationMs > MetricPeriod.DayMs && data.ResetsAt is { } reset
+        && reset > now && reset - now <= TimeSpan.FromDays(1)
+        && Math.Round((1 - data.Used / limit) * 100, MidpointRounding.AwayFromZero) > 50;
 }

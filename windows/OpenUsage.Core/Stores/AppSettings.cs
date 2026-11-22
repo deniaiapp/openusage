@@ -15,6 +15,7 @@ public sealed class AppSettings
     public ResetDisplayMode ResetDisplay { get; set; } = ResetDisplayMode.Relative;
     public bool AlwaysShowPacing { get; set; }
     public PriorityLimits PriorityLimits { get; set; } = PriorityLimits.Default;
+    public bool ShowUnusedQuotaInPriority { get; set; } = true;
     public bool LaunchAtLogin { get; set; }
     public string? GlobalHotkey { get; set; }
     public int RefreshIntervalSeconds { get; set; } = DefaultRefreshIntervalSeconds;

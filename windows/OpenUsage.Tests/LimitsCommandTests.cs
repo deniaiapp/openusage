@@ -166,6 +166,28 @@ public sealed class LimitsCommandTests : IDisposable
         Assert.Equal(2, Run(FetchedAt, "openrouter@../account").Code);
     }
 
+    [Fact]
+    public void OllamaFilterIgnoresLegacyCacheAndReadsCloudAccountCache()
+    {
+        var account = new ApiKeyAccount(Guid.NewGuid(), "ollama", "Cloud");
+        var settings = AppSettings.Load(Settings);
+        settings.EnabledProviders.UnionWith(["ollama", account.CardId]);
+        settings.Save();
+        foreach (var id in settings.EnabledProviders)
+        {
+            File.WriteAllText(Path.Combine(Cache, id + ".json"), JsonSerializer.Serialize(new
+            {
+                ProviderId = id, DisplayName = "Ollama", RefreshedAt = FetchedAt,
+                Limits = new { monthly = new { Kind = "consumption", Unit = "usd", Used = 3 } }
+            }));
+        }
+
+        var (code, output, _) = Run(FetchedAt, "ollama");
+        Assert.Equal(0, code);
+        using var doc = JsonDocument.Parse(output);
+        Assert.Equal(account.CardId, Assert.Single(doc.RootElement.GetProperty("providers").EnumerateObject()).Name);
+    }
+
     private (int Code, string Output, string Error) Run(DateTimeOffset now, params string[] args)
     {
         using var output = new StringWriter();
