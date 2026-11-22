@@ -94,6 +94,12 @@ public sealed class WidgetDataStore
         return descriptor.PlanTitle?.Invoke(snapshot?.Plan) is { } title ? data with { Title = title } : data;
     }
 
+    public IReadOnlyList<(WidgetDescriptor Descriptor, WidgetData Data)> ResolveCardRows(
+        IEnumerable<WidgetDescriptor> descriptors) =>
+        descriptors.Select(descriptor => (Descriptor: descriptor, Data: Resolve(descriptor)))
+            .Where(row => !row.Descriptor.HideWhenMissing || row.Data.HasData)
+            .ToArray();
+
     public void NotifyPresentationChanged() => Raise();
 
     public IReadOnlyList<(WidgetDescriptor Descriptor, WidgetData Data)> PinnedTiles()
