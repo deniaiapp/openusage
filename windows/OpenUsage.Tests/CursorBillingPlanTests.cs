@@ -75,7 +75,7 @@ public sealed class CursorBillingPlanTests
     private static double Credits(ProviderSnapshot snapshot) =>
         Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("Credits")).Items).Number;
 
-    private static CursorAuthState Login(string subject, int minutesUntilExpiry = 60)
+    private static CursorAuthState Login(string subject, int minutesUntilExpiry = 43200)
     {
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -83,7 +83,7 @@ public sealed class CursorBillingPlanTests
             exp = DateTimeOffset.UtcNow.AddMinutes(minutesUntilExpiry).ToUnixTimeSeconds()
         });
         var base64 = Convert.ToBase64String(payload).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-        return new CursorAuthState { AccessToken = $"fixture.{base64}.signature", Source = "fixture" };
+        return new CursorAuthState { AccessToken = $"fixture.{base64}.signature" };
     }
 
     private sealed class CursorHandler : HttpMessageHandler

@@ -81,7 +81,7 @@ To connect Claude, go to **Customize → Claude → Sign In with Claude**. Finis
 
 Claude uses only verified OpenUsage sign-ins. It does not read Claude CLI files, Credential Manager items, environment tokens, or local OAuth endpoint overrides. If you previously used a CLI-only connection, sign in once in Customize. OpenUsage renews its own sign-in without changing the CLI's files.
 
-For Cursor, choose **Customize → Cursor → Sign In with Cursor** and finish signing in in your browser. OpenUsage verifies usage before saving the sign-in with Windows user encryption. **Sign In Again** replaces it without changing your card settings. Existing local Cursor sign-ins still work if you haven't connected Cursor in OpenUsage.
+For Cursor, choose **Customize → Cursor → Sign In with Cursor** and finish signing in in your browser. OpenUsage verifies usage before saving the sign-in with Windows user encryption. **Sign In Again** replaces it without changing your card settings. Existing local-only connections need to sign in once in Customize; OpenUsage no longer reads or changes the Cursor app's SQLite database or Credential Manager tokens.
 
 For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing CLI-only connections need to sign in once in Customize; OpenUsage no longer reads Codex CLI files or Credential Manager items.
 
