@@ -177,6 +177,38 @@ public class MapperTests
     }
 
     [Fact]
+    public void ZaiMapper_MonthlyTokenWindowKeepsItsDurationAndUsesTheLongWindowRow()
+    {
+        var quota = JsonUtil.ParseObject("""
+            {"data":{"limits":[
+                {"type":"TOKENS_LIMIT","unit":5,"number":1,"percentage":44,"resetAt":"2026-12-01T00:00:00Z"},
+                {"type":"CREDIT_LIMIT","unit":3,"number":5,"percentage":11}
+            ]}}
+            """)!;
+
+        Assert.Collection(ZaiUsageMapper.MapQuota(quota), longWindow =>
+        {
+            var line = Assert.IsType<MetricLine.ProgressLine>(longWindow);
+            Assert.Equal("Weekly", line.Label);
+            Assert.Equal(44, line.Used);
+            Assert.Equal(MetricPeriod.MonthMs, line.PeriodDurationMs);
+            Assert.Equal(DateTimeOffset.Parse("2026-12-01T00:00:00Z"), line.ResetsAt);
+        }, session => Assert.Equal("Session", session.Label));
+    }
+
+    [Theory]
+    [InlineData("0.00000000001")]
+    [InlineData("1e300")]
+    [InlineData("1000000")]
+    public void ZaiMapper_RejectsUnrepresentableTokenWindows(string number)
+    {
+        var quota = JsonUtil.ParseObject($$"""
+            {"limits":[{"type":"TOKENS_LIMIT","unit":5,"number":{{number}},"percentage":44,"nextResetTime":1796083200000}]}
+            """)!;
+        Assert.Throws<InvalidOperationException>(() => ZaiUsageMapper.MapQuota(quota));
+    }
+
+    [Fact]
     public void ZaiMapper_CodingProSearchLimitsDoNotHideTokenWindows()
     {
         var quota = JsonUtil.ParseObject("""

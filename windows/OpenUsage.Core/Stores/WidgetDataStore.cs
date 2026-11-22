@@ -88,9 +88,10 @@ public sealed class WidgetDataStore
 
     public WidgetData Resolve(WidgetDescriptor descriptor)
     {
-        var line = Snapshot(descriptor.ProviderId)?.Line(descriptor.MetricLabel);
-        return WidgetData.Resolve(descriptor, line, _settings.MeterStyle, _settings.ResetDisplay,
+        var snapshot = Snapshot(descriptor.ProviderId);
+        var data = WidgetData.Resolve(descriptor, snapshot?.Line(descriptor.MetricLabel), _settings.MeterStyle, _settings.ResetDisplay,
             _settings.AlwaysShowPacing, _settings.PriorityLimits);
+        return descriptor.PlanTitle?.Invoke(snapshot?.Plan) is { } title ? data with { Title = title } : data;
     }
 
     public IReadOnlyList<(WidgetDescriptor Descriptor, WidgetData Data)> ResolveCardRows(

@@ -55,7 +55,10 @@ public sealed class ClaudeProvider : IProviderRuntime
         WidgetDescriptor.Percent("claude.weekly", Provider, "Weekly"),
         WidgetDescriptor.Percent("claude.fable", Provider, "Fable"),
         WidgetDescriptor.Percent("claude.sonnet", Provider, "Sonnet"),
-        WidgetDescriptor.BoundedDollars("claude.extra", Provider, "Extra Usage", 100, "Extra usage spent", valueWord: "spent"),
+        WidgetDescriptor.BoundedDollars("claude.extra", Provider, "Extra Usage", 100, "Extra usage spent", valueWord: "spent") with
+        {
+            PlanTitle = ClaudeUsageMapper.ExtraUsageTitle
+        },
         WidgetDescriptor.Values("claude.rateLimitResets", Provider, ClaudeUsageMapper.RateLimitResetsLabel,
             valueWord: "available", traySuffix: "resets", showsResetExpiries: true)
     ];
