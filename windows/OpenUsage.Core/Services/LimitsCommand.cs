@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Services;
@@ -72,7 +73,7 @@ public static class LimitsCommand
 
         var enabled = Read<Settings>(Path.Combine(dataDirectory, "settings.json"), WireOptions, error)?.EnabledProviders
             ?? [];
-        var selected = enabled.Where(IsSupported)
+        var selected = enabled.Where(id => IsSupported(id) && id != OllamaProvider.Id)
             .Where(id => filter is null || id == filter || id.StartsWith(filter + "@", StringComparison.Ordinal))
             .ToArray();
         if (filter is not null && selected.Length == 0)
