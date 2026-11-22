@@ -16,23 +16,29 @@ internal sealed class CopilotLoginView : StackPanel
     private readonly CopilotProvider _copilot;
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 6) };
     private readonly TextBox _code = new() { IsReadOnly = true, Visibility = Visibility.Collapsed, Padding = new Thickness(6) };
+    private readonly TextBox _address = new() { Margin = new Thickness(0, 0, 0, 6), Padding = new Thickness(6) };
     private readonly Button _signIn;
     private readonly Button _openGitHub;
     private readonly Button _cancel;
     private CancellationTokenSource? _attempt;
     private bool _returnFromBrowser;
+    private Uri? _verificationUrl;
 
     public CopilotLoginView(AppContainer container, CopilotProvider copilot, Style buttonStyle)
     {
         _container = container;
         _copilot = copilot;
+        _address.Text = _copilot.ConnectedHost ?? "github.com";
         Margin = new Thickness(0, 0, 0, 10);
         _signIn = new Button { Content = SignInLabel, Style = buttonStyle };
         _openGitHub = new Button { Content = "Open GitHub", Style = buttonStyle, Visibility = Visibility.Collapsed };
         _cancel = new Button { Content = "Cancel", Style = buttonStyle, Visibility = Visibility.Collapsed };
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         AutomationProperties.SetName(_code, "GitHub device code");
+        AutomationProperties.SetName(_address, "GitHub address");
         Children.Add(_status);
+        Children.Add(new TextBlock { Text = "GitHub address (github.com or your GHE.com domain)", TextWrapping = TextWrapping.Wrap });
+        Children.Add(_address);
         Children.Add(_code);
         var controls = new StackPanel { Orientation = Orientation.Horizontal };
         controls.Children.Add(_signIn);
@@ -41,13 +47,14 @@ internal sealed class CopilotLoginView : StackPanel
         Children.Add(controls);
 
         _status.Text = _copilot.HasAppCredential
-            ? "GitHub is connected to OpenUsage."
+            ? $"GitHub is connected to OpenUsage ({_address.Text})."
             : "Connect a GitHub account with access to Copilot.";
         _signIn.Click += async (_, _) => await SignInAsync();
         _openGitHub.Click += (_, _) =>
         {
+            if (_verificationUrl is not { } url) return;
             _returnFromBrowser = true;
-            DashboardWindow.OpenUrl(CopilotProvider.VerificationUrl);
+            DashboardWindow.OpenUrl(url.AbsoluteUri);
         };
         _cancel.Click += (_, _) => _attempt?.Cancel();
         Unloaded += (_, _) => _attempt?.Cancel();
@@ -68,12 +75,14 @@ internal sealed class CopilotLoginView : StackPanel
         _attempt = attempt;
         _signIn.Visibility = Visibility.Collapsed;
         _cancel.Visibility = Visibility.Visible;
+        _address.IsEnabled = false;
         _status.Text = "Requesting a sign-in code…";
         try
         {
-            await _container.ConnectCopilotAsync(code =>
+            await _container.ConnectCopilotAsync(_address.Text, (code, url) =>
             {
-                _status.Text = "Copy this code, then enter it on GitHub.";
+                _verificationUrl = url;
+                _status.Text = $"Copy this code, then enter it on {url.Host}.";
                 _code.Text = code;
                 _code.Visibility = Visibility.Visible;
                 _openGitHub.Visibility = Visibility.Visible;
@@ -83,6 +92,7 @@ internal sealed class CopilotLoginView : StackPanel
             _status.Text = _container.Layout.IsProviderEnabled("copilot")
                 ? "GitHub is connected to OpenUsage."
                 : "GitHub is connected. Turn on Copilot in Customize to show its usage.";
+            _address.Text = _copilot.ConnectedHost ?? "github.com";
         }
         catch (OperationCanceledException)
         {
@@ -101,6 +111,8 @@ internal sealed class CopilotLoginView : StackPanel
         finally
         {
             _attempt = null;
+            _verificationUrl = null;
+            _address.IsEnabled = true;
             _code.Clear();
             _code.Visibility = Visibility.Collapsed;
             _openGitHub.Visibility = Visibility.Collapsed;

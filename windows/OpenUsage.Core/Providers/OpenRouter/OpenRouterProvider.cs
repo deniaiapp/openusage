@@ -12,17 +12,15 @@ public static class OpenRouterUsageMapper
 
     public static List<MetricLine> CreditsLines(JsonObject data)
     {
-        if (JsonUtil.Number(data["total_usage"]) is not { } totalUsage) return [];
-        var used = Math.Max(0, totalUsage);
-        var totalCredits = Math.Max(0, JsonUtil.Number(data["total_credits"]) ?? 0);
-        var lines = new List<MetricLine>();
-        if (totalCredits > 0)
-            lines.Add(MetricLine.Progress("Credits", used, totalCredits, ProgressFormat.Dollars));
-        lines.Add(MetricLine.Values("Balance", [new MetricValue(Math.Max(0, totalCredits - used), MetricKind.Dollars)]));
-        return lines;
+        if (JsonUtil.Number(data["total_usage"]) is not { } totalUsage ||
+            JsonUtil.Number(data["total_credits"]) is not { } totalCredits)
+            return [];
+        var balance = Math.Max(0, Math.Max(0, totalCredits) - Math.Max(0, totalUsage));
+        return [MetricLine.Values("Balance", [new MetricValue(balance, MetricKind.Dollars)])];
     }
 
-    public static (string? Plan, List<MetricLine> Lines) KeyMetrics(JsonObject data, bool includeSpend = true)
+    public static (string? Plan, List<MetricLine> Lines) KeyMetrics(
+        JsonObject data, bool includeSpend = true, DateTimeOffset? now = null)
     {
         var lines = new List<MetricLine>();
         if (includeSpend)
@@ -32,7 +30,9 @@ public static class OpenRouterUsageMapper
         if (JsonUtil.Number(data["limit"]) is { } limit && limit > 0)
         {
             var remaining = Math.Max(0, JsonUtil.Number(data["limit_remaining"]) ?? 0);
-            lines.Add(MetricLine.Progress("Key Limit", Math.Max(0, limit - remaining), limit, ProgressFormat.Dollars));
+            var (reset, period) = KeyLimitWindow(JsonUtil.String(data["limit_reset"]), now ?? DateTimeOffset.UtcNow);
+            lines.Add(MetricLine.Progress("Key Limit", Math.Max(0, limit - remaining), limit, ProgressFormat.Dollars,
+                reset, period));
         }
         var plan = JsonUtil.Bool(data["is_free_tier"]) switch
         {
@@ -41,6 +41,25 @@ public static class OpenRouterUsageMapper
             _ => null
         };
         return (plan, lines);
+    }
+
+    private static (DateTimeOffset? Reset, long? PeriodMs) KeyLimitWindow(string? interval, DateTimeOffset now)
+    {
+        var midnight = new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero);
+        switch (interval)
+        {
+            case "daily":
+                return (midnight.AddDays(1), MetricPeriod.DayMs);
+            case "weekly":
+                var monday = midnight.AddDays(-(((int)midnight.DayOfWeek + 6) % 7));
+                return (monday.AddDays(7), MetricPeriod.WeekMs);
+            case "monthly":
+                var first = midnight.AddDays(1 - midnight.Day);
+                var next = first.AddMonths(1);
+                return (next, (next - first).Ticks / TimeSpan.TicksPerMillisecond);
+            default:
+                return (null, null);
+        }
     }
 
     internal static MetricLine SpendLine(string label, double amount) =>
@@ -73,8 +92,7 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
 
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
     [
-        WidgetDescriptor.BoundedDollars("openrouter.credits", Provider, "Credits", 100, limitNoun: "purchased"),
-        WidgetDescriptor.DollarBalance("openrouter.balance", Provider, "Balance", "left"),
+        WidgetDescriptor.DollarBalance("openrouter.balance", Provider, "Balance", "left") with { HideWhenMissing = true },
         WidgetDescriptor.Values("openrouter.today", Provider, "Today", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.week", Provider, "This Week", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.month", Provider, "This Month", isUsagePeriod: true),

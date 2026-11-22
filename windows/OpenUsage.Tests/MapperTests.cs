@@ -8,6 +8,7 @@ using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Providers.Grok;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Tests;
@@ -78,19 +79,73 @@ public class MapperTests
         Assert.Contains(mapped.Lines, l => l is MetricLine.ProgressLine p && p.Label == "Session" && p.Used == 8);
     }
 
-    [Fact]
-    public void OpenRouterMapper_CreditsAndKeySpend()
+    [Theory]
+    [InlineData(50, 12.5, 37.5)]
+    [InlineData(10, 12.5, 0)]
+    [InlineData(0, 0, 0)]
+    [InlineData(50, -1, 50)]
+    public void OpenRouterMapper_PurchasedCreditsAreNotALimit(double credits, double usage, double expected)
     {
-        var credits = JsonUtil.ParseObject("""{ "total_usage": 12.5, "total_credits": 50 }""")!;
-        var lines = OpenRouterUsageMapper.CreditsLines(credits);
-        Assert.Contains(lines, l => l is MetricLine.ProgressLine p && p.Label == "Credits" && p.Used == 12.5 && p.Limit == 50);
-        Assert.Contains(lines, l => l is MetricLine.ValuesLine v && v.Label == "Balance" && v.Items[0].Number == 37.5);
+        var line = Assert.IsType<MetricLine.ValuesLine>(Assert.Single(
+            OpenRouterUsageMapper.CreditsLines(new JsonObject
+            {
+                ["total_credits"] = credits,
+                ["total_usage"] = usage
+            })));
+        Assert.Equal("Balance", line.Label);
+        var value = Assert.Single(line.Items);
+        Assert.Equal(MetricKind.Dollars, value.Kind);
+        Assert.Equal(expected, value.Number);
+    }
 
+    [Theory]
+    [InlineData("""{"total_usage":0}""")]
+    [InlineData("""{"total_credits":5}""")]
+    public void OpenRouterMapper_DoesNotShowABalanceWithIncompleteTotals(string body) =>
+        Assert.Empty(OpenRouterUsageMapper.CreditsLines(JsonUtil.ParseObject(body)!));
+
+    [Fact]
+    public void OpenRouterLayout_RemovesOnlyThePurchasedCreditsMeter()
+    {
+        using var http = new AppHttp(new HttpClient());
+        var provider = new OpenRouterProvider(http, new ApiKeyStore());
+        string[] retained = ["openrouter.balance", "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit"];
+        var ids = provider.WidgetDescriptors.Select(d => d.Id).ToArray();
+        Assert.Equal(retained, ids.Where(retained.Contains));
+        Assert.DoesNotContain("openrouter.credits", ids);
+        Assert.DoesNotContain("openrouter.credits", DefaultLayout.MetricIds);
+        Assert.DoesNotContain("openrouter.credits", DefaultLayout.PinnedMetricIds);
+    }
+
+    [Fact]
+    public void OpenRouterMapper_KeySpendAndLimit()
+    {
         var key = JsonUtil.ParseObject("""{ "usage_daily": 1.25, "is_free_tier": false, "limit": 10, "limit_remaining": 4 }""")!;
         var metrics = OpenRouterUsageMapper.KeyMetrics(key);
         Assert.Equal("Pay as you go", metrics.Plan);
         Assert.Contains(metrics.Lines, l => l is MetricLine.ValuesLine v && v.Label == "Today");
         Assert.Contains(metrics.Lines, l => l is MetricLine.ProgressLine p && p.Label == "Key Limit" && p.Used == 6);
+    }
+
+    [Theory]
+    [InlineData("daily", "2028-02-29T07:30:00+09:00", "2028-02-29T00:00:00Z", 1)]
+    [InlineData("weekly", "2028-02-27T18:30:00Z", "2028-02-28T00:00:00Z", 7)]
+    [InlineData("monthly", "2028-02-29T23:30:00Z", "2028-03-01T00:00:00Z", 29)]
+    [InlineData("monthly", "2028-03-01T00:00:00Z", "2028-04-01T00:00:00Z", 31)]
+    [InlineData("unknown", "2028-02-29T00:00:00Z", null, null)]
+    [InlineData(null, "2028-02-29T00:00:00Z", null, null)]
+    public void OpenRouterMapper_UsesUtcCalendarWindowsForKeyLimits(
+        string? reset, string now, string? nextReset, int? days)
+    {
+        var key = JsonUtil.ParseObject("""{ "limit": 10, "limit_remaining": 4 }""")!;
+        key["limit_reset"] = reset;
+        var mapped = OpenRouterUsageMapper.KeyMetrics(key, now: DateTimeOffset.Parse(now));
+
+        var line = Assert.IsType<MetricLine.ProgressLine>(Assert.Single(mapped.Lines));
+        Assert.Equal("Key Limit", line.Label);
+        Assert.Equal(6, line.Used);
+        Assert.Equal(nextReset is null ? (DateTimeOffset?)null : DateTimeOffset.Parse(nextReset), line.ResetsAt);
+        Assert.Equal(days * 86_400_000L, line.PeriodDurationMs);
     }
 
     [Fact]

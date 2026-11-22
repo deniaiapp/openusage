@@ -44,6 +44,8 @@ public sealed class AntigravityQuotaClientTests
         Assert.Equal(MetricPeriod.WeekMs, argon.PeriodDurationMs);
         Assert.Equal(DateTimeOffset.Parse("2026-11-27T03:00:00Z"), argon.ResetsAt);
         var provider = new AntigravityProvider(http);
+        Assert.Equal(["Session", "Weekly", "Argon Weekly", "Claude", "Claude Weekly"],
+            provider.WidgetDescriptors.Select(d => d.MetricLabel));
         var snapshot = ProviderSnapshot.Make(provider.Provider, null, lines, DateTimeOffset.UnixEpoch);
         var limit = LimitsProjection.Project(snapshot, provider.WidgetDescriptors)["argonWeekly"];
         Assert.Equal("percent", limit.Unit);
