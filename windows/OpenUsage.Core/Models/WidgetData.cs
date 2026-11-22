@@ -177,6 +177,17 @@ public sealed record WidgetData
         };
     }
 
+    public IEnumerable<string> ResetExpiryLabels(DateTimeOffset now)
+    {
+        if (!HasData || !ShowsResetExpiries) yield break;
+        foreach (var group in ExpiriesAt.Where(expiry => expiry > now).Order().GroupBy(expiry => expiry))
+        {
+            var deadline = Formatters.DeadlineLabel("Expires", group.Key, ResetDisplayMode, now);
+            if (deadline is not null)
+                yield return group.Count() == 1 ? deadline : $"{group.Count()} × {deadline}";
+        }
+    }
+
     public string? ResetTooltip(DateTimeOffset now)
     {
         if (IsFreshSessionWindow(now)) return FreshSessionTooltip;
@@ -266,6 +277,7 @@ public sealed record WidgetData
     {
         var sample = descriptor.Sample with
         {
+            Title = line?.Title ?? descriptor.Sample.Title,
             DisplayMode = displayMode,
             ResetDisplayMode = resetDisplayMode,
             AlwaysShowPacing = alwaysShowPacing,
