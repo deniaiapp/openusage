@@ -30,7 +30,7 @@ public sealed class CodexProvider : IProviderRuntime
         WidgetDescriptor.Percent("codex.weekly", Provider, "Weekly"),
         WidgetDescriptor.Percent("codex.spark", Provider, "Spark"),
         WidgetDescriptor.Percent("codex.sparkWeekly", Provider, "Spark Weekly"),
-        WidgetDescriptor.Values("codex.credits", Provider, "Credits"),
+        WidgetDescriptor.Values("codex.credits", Provider, "Credits") with { HideWhenMissing = true },
         WidgetDescriptor.Values("codex.rateLimitResets", Provider, "Rate Limit Resets",
             valueWord: "available", traySuffix: "resets", showsResetExpiries: true)
     ];
