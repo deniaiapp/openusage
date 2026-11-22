@@ -60,7 +60,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** Add a Go API key in **Customize → OpenCode → Additional Accounts** to see live Session, Weekly, and Monthly limits without a local OpenCode install. Existing local connections still work.
 - **OpenRouter:** Management keys show spend across the keys they can list, on both the main card and additional accounts. Workspace keys can show workspace spend even when they can't read the account balance. Key Limit shows the next reset if OpenRouter reports a daily, weekly, or monthly interval. Limits reset at midnight UTC; weeks start on Monday.
-- **Z.ai:** A rejected API key prompts you to replace it in Customize.
+- **Z.ai:** Expand an account card to see available Limit Resets and their expiries. OpenUsage checks the balance hourly and does not spend resets. A rejected API key prompts you to replace it in Customize.
 
 Z.ai shows token windows of a day or longer on the **Weekly** row, with the reset time it reports.
 
