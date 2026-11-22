@@ -1,4 +1,5 @@
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
@@ -73,6 +74,14 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public async Task ConnectCodexAsync(Action<string> showCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var codex = Providers.OfType<CodexProvider>().Single();
+        var snapshot = await codex.ConnectAsync(showCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
 
     public async Task ConnectCopilotAsync(string address, Action<string, Uri> showCode, CancellationToken cancellationToken)
     {
