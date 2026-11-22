@@ -27,11 +27,11 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 
 ## Supported Providers
 
-- **[Claude](docs/providers.md#claude)**: session, weekly, model limits, extra usage (Enterprise spend), rate-limit resets
+- **[Claude](docs/providers.md#claude)**: session, weekly, model limits, extra usage (Enterprise spend), rate-limit resets, Max and Ultra plan names
 - **[ChatGPT](docs/providers.md#chatgpt)**: session, weekly, Spark, extra usage, credit limit, rate-limit resets, daily tokens
 - **[Cursor](docs/providers.md#cursor)**: total usage, model usage, extra usage, requests, credits, daily spend and tokens
 - **[Amp](docs/providers.md#amp)**: agent usage, orb hours, Amp Free, credits; on Windows, [connect in Customize](docs/windows.md#amp-on-windows)
-- **[Antigravity](docs/providers.md#antigravity)**: Gemini, Argon, and Claude quotas
+- **[Antigravity](docs/providers.md#antigravity)**: Gemini, Argon, and Claude quotas; Windows no longer reads local conversation history
 - **[Copilot](docs/providers.md#copilot)**: credits, extra usage, chat, completions, organization billing, GitHub Enterprise on GHE.com
 - **[Devin](docs/providers.md#devin)**: daily and weekly quota, extra usage
 - **[Grok](docs/providers.md#grok)**: weekly limit, extra usage
@@ -59,7 +59,8 @@ files, or logs. See [Accounts](docs/accounts.md). Coming from 0.7.x? See
 - **Rate-limit resets.** See and spend Claude and ChatGPT resets.
 - **Share.** Copy a picture of your usage to the clipboard.
 - **Notifications.** A heads-up before a limit runs out, or before a weekly limit resets with most of
-  it unused.
+  it unused. On Windows, [usage notifications](docs/windows.md) can open the dashboard from
+  a banner or Notification Center.
 - **Priority limits.** Choose how much left turns a limit orange or red, see limits you're burning
   through too fast while they still have plenty left, and see limits about to reset mostly unused.
 - **Global shortcut.** Toggle the panel from anywhere.
@@ -89,8 +90,19 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
+
+On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
+
+Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
+
+Windows reset countdowns show calendar months and years for longer waits.
+
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
 Priority also lists unpinned limits you can use before they reset.
+
+On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
+
+OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
 
 ```powershell
 cd windows
@@ -103,9 +115,17 @@ On Windows, Copilot and Antigravity distinguish provider throttling from sign-in
 
 If Claude's first check for rate limit resets can't connect, the next refresh tries again.
 
-On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
+Windows keeps your metric choices across restarts, even if you unpin every metric.
+
+On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
+
+Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
+
+Windows shows available Z.ai Limit Resets when you expand the account card.
+
+OpenUsage encrypts its Antigravity sign-in cache for your Windows user.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
@@ -135,8 +155,10 @@ To learn the code, read the [architecture overview](docs/architecture.md),
 <details>
 <summary><strong>Releasing</strong></summary>
 
-Create the GitHub Release for the tag as a draft with its notes, then push a `v*` tag on `main` to
-build, sign, notarize, and publish it. A tag without a release that has notes fails before the build.
+Create the GitHub Release for the tag as a draft with its notes, then push a `v*` tag on `main` and
+run the Release workflow manually with that tag to build, sign, notarize, and publish it (macOS
+workflows no longer start on push, pull request, or tag). A tag without a release that has notes
+fails before the build.
 
 - A plain tag (`v0.8.0`) ships to everyone.
 - A pre-release tag (`v0.8.0-beta.1`) ships to the beta channel.

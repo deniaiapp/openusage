@@ -1,3 +1,5 @@
+using OpenUsage.Core.Providers.Zai;
+
 namespace OpenUsage.Core.Models;
 
 public static class DefaultLayout
@@ -32,10 +34,10 @@ public static class DefaultLayout
         "opencode.session", "opencode.weekly", "opencode.monthly", "opencode.trend",
         "opencode.today", "opencode.yesterday", "opencode.last30",
 
-        "openrouter.credits", "openrouter.balance",
+        "openrouter.balance",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
 
-        "zai.session", "zai.weekly", "zai.webSearches"
+        "zai.session", "zai.weekly", "zai.webSearches", ZaiProvider.ResetsMetricId
     ];
 
     public static readonly string[] PinnedMetricIds =
@@ -47,7 +49,6 @@ public static class DefaultLayout
         "copilot.premium",
         "muse.session",
         "ollama.monthly",
-        "openrouter.credits",
         "zai.session", "zai.weekly"
     ];
 
@@ -67,7 +68,7 @@ public static class DefaultLayout
         "ollama.purchasedCredits",
         "opencode.today", "opencode.yesterday", "opencode.last30",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
-        "zai.webSearches"
+        "zai.webSearches", ZaiProvider.ResetsMetricId
     ];
 
     public static readonly string[] StarterProviders = ["claude", "codex", "cursor"];
@@ -77,6 +78,8 @@ public static class DefaultLayout
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
-        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly", "amp.agent", "amp.orbHours", "amp.free", "amp.credits"])
+        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly", "amp.agent", "amp.orbHours", "amp.free", "amp.credits", ZaiProvider.ResetsMetricId])
         .ToArray();
+
+    internal static readonly string[] NewAccountMetricIds = [ZaiProvider.ResetsMetricId];
 }

@@ -97,6 +97,12 @@ public sealed class WidgetDataStore
         return descriptor.PlanTitle?.Invoke(snapshot?.Plan) is { } title ? data with { Title = title } : data;
     }
 
+    public IReadOnlyList<(WidgetDescriptor Descriptor, WidgetData Data)> ResolveCardRows(
+        IEnumerable<WidgetDescriptor> descriptors) =>
+        descriptors.Select(descriptor => (Descriptor: descriptor, Data: Resolve(descriptor)))
+            .Where(row => !row.Descriptor.HideWhenMissing || row.Data.HasData)
+            .ToArray();
+
     public void NotifyPresentationChanged() => Raise();
 
     public IReadOnlyList<(WidgetDescriptor Descriptor, WidgetData Data)> PinnedTiles()
@@ -347,6 +353,8 @@ public sealed class WidgetDataStore
     {
         public string Type { get; set; } = "";
         public string Label { get; set; } = "";
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? Title { get; set; }
         public string? Value { get; set; }
         public string? Text { get; set; }
         public double Used { get; set; }
@@ -360,7 +368,14 @@ public sealed class WidgetDataStore
         public List<CachedValue> Values { get; set; } = [];
         public List<DateTimeOffset> ExpiriesAt { get; set; } = [];
 
-        public static CachedLine FromMetric(MetricLine line) => line switch
+        public static CachedLine FromMetric(MetricLine line)
+        {
+            var cached = Encode(line);
+            cached.Title = line.Title;
+            return cached;
+        }
+
+        private static CachedLine Encode(MetricLine line) => line switch
         {
             MetricLine.ProgressLine p => new CachedLine
             {
@@ -401,7 +416,11 @@ public sealed class WidgetDataStore
             _ => new CachedLine { Type = "text", Label = line.Label, Value = "" }
         };
 
-        public static MetricLine? ToMetric(CachedLine line) => line.Type switch
+        public static MetricLine? ToMetric(CachedLine line) => Decode(line) is { } metric
+            ? metric with { Title = line.Title }
+            : null;
+
+        private static MetricLine? Decode(CachedLine line) => line.Type switch
         {
             "progress" => MetricLine.Progress(
                 line.Label, line.Used, line.Limit,

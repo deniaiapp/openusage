@@ -159,8 +159,10 @@ public static class CopilotUsageMapper
 public sealed class CopilotProvider : IProviderRuntime
 {
     public static readonly Uri UsageUrl = new("https://api.github.com/copilot_internal/user");
-    public const string VerificationUrl = CopilotDeviceLogin.VerificationUrl;
     private const string CredentialKey = "copilot.oauth";
+    private static readonly Provider PublicProvider = new(
+        "copilot", "Copilot", "copilot",
+        [new ProviderLink("Dashboard", "https://github.com/settings/copilot")]);
     private readonly CopilotAuthStore _auth = new();
     private readonly AppHttp _http;
     private readonly ApiKeyStore? _keys;
@@ -176,25 +178,29 @@ public sealed class CopilotProvider : IProviderRuntime
     }
 
     public bool HasAppCredential => _keys?.Get(CredentialKey) is not null;
+    public string? ConnectedHost =>
+        _keys?.Get(CredentialKey) is { } credential ? ReadDomain(credential)?.Host : null;
 
-    internal async Task<ProviderSnapshot> ConnectAsync(Action<string> showCode, CancellationToken ct)
+    internal async Task<ProviderSnapshot> ConnectAsync(string address, Action<string, Uri> showCode, CancellationToken ct)
     {
+        var domain = CopilotDomain.Parse(address) ?? throw new ProviderRequestException(CopilotDomain.InvalidMessage);
         var keys = _keys ?? throw new InvalidOperationException("OpenUsage could not open its credentials store.");
-        var token = await _signIn.AuthorizeAsync(showCode, ct);
+        var token = await _signIn.AuthorizeAsync(code => showCode(code, domain.WebUrl("/login/device")), ct, domain);
         ProviderSnapshot snapshot;
-        try { snapshot = await FetchUsageAsync(token, true, ct); }
+        try { snapshot = await FetchUsageAsync(token, domain, true, ct); }
         catch (ProviderRequestException) when (ct.IsCancellationRequested)
         {
             throw new OperationCanceledException(ct);
         }
         ct.ThrowIfCancellationRequested();
-        keys.Set(CredentialKey, token);
+        keys.Set(CredentialKey, domain == CopilotDomain.Public ? token : $"{domain.Host}\n{token}");
         return snapshot;
     }
 
-    public Provider Provider { get; } = new(
-        "copilot", "Copilot", "copilot",
-        [new ProviderLink("Dashboard", "https://github.com/settings/copilot")]);
+    public Provider Provider =>
+        ReadDomain(_keys?.Get(CredentialKey)) is { } domain && domain != CopilotDomain.Public
+            ? PublicProvider with { Links = [new ProviderLink("Dashboard", domain.WebUrl("/settings/copilot").AbsoluteUri)] }
+            : PublicProvider;
 
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
     [
@@ -213,9 +219,14 @@ public sealed class CopilotProvider : IProviderRuntime
         var token = connectedToken ?? _auth.LoadToken();
         if (token is null)
             return ProviderSnapshot.Error(Provider, "Sign in to GitHub in Customize → Copilot.");
+        var separator = connectedToken?.IndexOf('\n') ?? -1;
+        var domain = ReadDomain(connectedToken);
+        if (domain is null)
+            return ProviderSnapshot.Error(Provider, "GitHub address invalid. Sign in again in Customize → Copilot.");
+
         try
         {
-            return await FetchUsageAsync(token, connectedToken is not null, cancellationToken);
+            return await FetchUsageAsync(token[(separator + 1)..], domain, connectedToken is not null, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -223,10 +234,18 @@ public sealed class CopilotProvider : IProviderRuntime
         }
     }
 
-    private async Task<ProviderSnapshot> FetchUsageAsync(string token, bool appCredential, CancellationToken cancellationToken)
+    private static CopilotDomain? ReadDomain(string? credential)
+    {
+        var separator = credential?.IndexOf('\n') ?? -1;
+        if (separator < 0) return CopilotDomain.Public;
+        var host = credential![..separator];
+        return CopilotDomain.Parse(host) is { } domain && domain.Host == host ? domain : null;
+    }
+
+    private async Task<ProviderSnapshot> FetchUsageAsync(string token, CopilotDomain domain, bool appCredential, CancellationToken cancellationToken)
     {
         var response = await _http.SendAsync(new AppHttpRequest(
-            "GET", UsageUrl,
+            "GET", domain.ApiUrl("/copilot_internal/user"),
             new Dictionary<string, string>
             {
                 ["Authorization"] = $"token {token}",
@@ -239,6 +258,8 @@ public sealed class CopilotProvider : IProviderRuntime
             TimeoutSeconds: 15), cancellationToken);
         if (ProviderErrors.IsRateLimited(response))
             throw new ProviderRequestException(ProviderErrors.RateLimited);
+        if (appCredential && domain != CopilotDomain.Public && response.StatusCode is (401 or 403 or 404))
+            throw new ProviderRequestException($"GitHub did not confirm a Copilot seat on {domain.Host}. Check your account or ask your GitHub admin.");
         if (response.StatusCode is 401 or 403)
             throw new ProviderRequestException(appCredential
                 ? "GitHub rejected this sign-in. Verify that the account has a Copilot seat and sign in again in Customize."
