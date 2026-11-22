@@ -109,6 +109,8 @@ If you hide every metric on Windows, the dashboard points you back to Customize 
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 
+On Windows, a Codex account shows **Credit Limit** when its ChatGPT workspace reports a member limit.
+
 OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
 
 Copilot sign-in keeps the same GitHub device code through a brief network interruption.
