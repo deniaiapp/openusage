@@ -11,16 +11,19 @@ namespace OpenUsage.App;
 
 public partial class DashboardWindow
 {
-    private void AddUnifiedAccountsSetting(string providerId)
+    private void AddUnifiedAccountsSetting(string accountId)
     {
+        var providerId = accountId.Split('@', 2)[0];
+        var unified = _container.Layout.UnifiesAccounts(providerId);
         if (!LayoutStore.CanUnifyAccounts(providerId) ||
-            _container.Layout.ProviderGroups().FirstOrDefault(group => group.Key == providerId)?.Count() is not >= 2)
+            (!unified && _container.Layout.VisibleProviders.Count(account =>
+                account.Provider.Id.Split('@', 2)[0] == providerId) < 2))
             return;
 
         var toggle = new CheckBox
         {
             Content = "Unify Multiple Accounts",
-            IsChecked = _container.Layout.UnifiesAccounts(providerId),
+            IsChecked = unified,
             Margin = new Thickness(0, 0, 0, 8)
         };
         toggle.Checked += (_, _) => SetUnified(true);
