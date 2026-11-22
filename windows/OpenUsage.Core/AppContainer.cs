@@ -22,12 +22,15 @@ public sealed class AppContainer : IDisposable
     private readonly AppHttp _http;
     private readonly CliProxyHubClient _hubClient = new();
     private readonly CliProxyHubConnections _hubConnections;
+    private readonly CliProxyHubSync _hubSync;
     private readonly CancellationTokenSource _cts = new();
     private Task? _refreshLoop;
 
     public AppContainer()
     {
-        _hubConnections = new CliProxyHubConnections(_hubClient, new CliProxyHubStore());
+        var hubs = new CliProxyHubStore();
+        _hubConnections = new CliProxyHubConnections(_hubClient, hubs);
+        _hubSync = new CliProxyHubSync(_hubClient, hubs);
         Settings = AppSettings.Load();
         Keys = new ApiKeyStore();
         _http = new AppHttp();
@@ -84,7 +87,16 @@ public sealed class AppContainer : IDisposable
         _refreshLoop = Task.Run(() => RefreshLoopAsync(_cts.Token));
     }
 
-    public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+    public Task RefreshNowAsync() => RefreshAsync(true, _cts.Token);
+
+    private Task RefreshAsync(bool force, CancellationToken ct) =>
+        Task.WhenAll(Data.RefreshAllAsync(force, ct), RefreshCliProxyHubsAsync(force, ct));
+
+    private async Task RefreshCliProxyHubsAsync(bool force, CancellationToken ct)
+    {
+        await _hubSync.RefreshAsync(force, ct);
+        CliProxyHubSyncFinished?.Invoke();
+    }
 
     public async Task ConnectClaudeAsync(Action<Uri> openBrowser, Task<string> pastedCode, CancellationToken cancellationToken)
     {
@@ -179,14 +191,14 @@ public sealed class AppContainer : IDisposable
 
     private async Task RefreshLoopAsync(CancellationToken ct)
     {
-        await Data.RefreshAllAsync(false, ct);
+        await RefreshAsync(false, ct);
         while (!ct.IsCancellationRequested)
         {
             var delay = Data.NextRefresh - DateTimeOffset.Now;
             if (delay < TimeSpan.FromSeconds(1)) delay = TimeSpan.FromSeconds(1);
             try { await Task.Delay(delay, ct); }
             catch (OperationCanceledException) { break; }
-            await Data.RefreshAllAsync(false, ct);
+            await RefreshAsync(false, ct);
         }
     }
 
@@ -199,6 +211,10 @@ public sealed class AppContainer : IDisposable
 
     public IReadOnlyList<CliProxyHubSummary> CliProxyHubs() =>
         _hubConnections.List().Select(hub => new CliProxyHubSummary(hub.Id, hub.Address)).ToArray();
+
+    public event Action? CliProxyHubSyncFinished;
+
+    public string? CliProxyHubSyncError(Guid hubId) => _hubConnections.SyncError(hubId);
 
     public async Task ConnectCliProxyHubAsync(string address, string key, CancellationToken ct)
     {

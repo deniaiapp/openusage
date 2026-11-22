@@ -153,45 +153,63 @@ internal static class CliProxyHubRefusal
 internal sealed class CliProxyHubGate
 {
     private readonly object _lock = new();
-    private readonly Dictionary<Guid, SemaphoreSlim> _turns = [];
-    private readonly Dictionary<Guid, (string Key, string Message)> _refused = [];
+    private readonly Dictionary<Guid, HubState> _hubs = [];
 
     public async Task<AppHttpResponse> SendAsync(
         Guid hubId, string key, string host, Func<Task<AppHttpResponse>> send, CancellationToken ct)
     {
-        ThrowIfRefused(hubId, key);
-        SemaphoreSlim turn;
+        HubState state;
+        long generation;
         lock (_lock)
         {
-            if (!_turns.TryGetValue(hubId, out turn!)) _turns[hubId] = turn = new SemaphoreSlim(1, 1);
+            if (!_hubs.TryGetValue(hubId, out state!)) _hubs[hubId] = state = new HubState();
+            generation = state.Generation;
+            state.ThrowIfRefused(key);
         }
-        await turn.WaitAsync(ct);
+        await state.Turn.WaitAsync(ct);
         try
         {
-            ThrowIfRefused(hubId, key);
+            lock (_lock)
+            {
+                if (generation != state.Generation)
+                    throw new ProviderRequestException($"The CLIProxyAPI connection at {host} changed. Refresh to try again.");
+                state.ThrowIfRefused(key);
+            }
             var response = await send();
             if (CliProxyHubRefusal.From(response) is { } kind && CliProxyHubRefusal.ClosesGate(kind))
             {
                 var message = CliProxyHubRefusal.Message(kind, host);
-                lock (_lock) _refused[hubId] = (key, message);
-                AppLog.Error("cliproxy", $"{host} {kind}; not calling it again until its key is replaced");
+                lock (_lock)
+                {
+                    if (generation == state.Generation) state.Refused = (key, message);
+                }
+                AppLog.Error("cliproxy", $"{host} refused a management call ({kind})");
                 throw new ProviderRequestException(message);
             }
             return response;
         }
-        finally { turn.Release(); }
+        finally { state.Turn.Release(); }
     }
 
     public void Reopen(Guid hubId)
     {
-        lock (_lock) _refused.Remove(hubId);
-    }
-
-    private void ThrowIfRefused(Guid hubId, string key)
-    {
         lock (_lock)
         {
-            if (_refused.TryGetValue(hubId, out var refused) && refused.Key == key)
+            if (!_hubs.TryGetValue(hubId, out var state)) return;
+            state.Generation++;
+            state.Refused = null;
+        }
+    }
+
+    private sealed class HubState
+    {
+        public SemaphoreSlim Turn { get; } = new(1, 1);
+        public long Generation { get; set; }
+        public (string Key, string Message)? Refused { get; set; }
+
+        public void ThrowIfRefused(string key)
+        {
+            if (Refused is { } refused && refused.Key == key)
                 throw new ProviderRequestException(refused.Message);
         }
     }
