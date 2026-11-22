@@ -132,6 +132,11 @@ public static class ClaudeUsageMapper
     {
         if (string.IsNullOrWhiteSpace(subscriptionType)) return null;
         var baseName = JsonUtil.TitleCase(subscriptionType);
+        if (baseName == "Ultra" || (baseName == "Max" &&
+            (rateLimitTier?.Contains("ultra", StringComparison.OrdinalIgnoreCase) == true ||
+             rateLimitTier?.Contains("20x", StringComparison.OrdinalIgnoreCase) == true)))
+            return "Ultra";
+        if (baseName == "Max") return baseName;
         if (rateLimitTier is not null)
         {
             var match = System.Text.RegularExpressions.Regex.Match(rateLimitTier, @"\d+x");
