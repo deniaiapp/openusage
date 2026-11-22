@@ -361,6 +361,7 @@ public sealed class WidgetDataStore
         public double Limit { get; set; }
         public string? Format { get; set; }
         public string? Suffix { get; set; }
+        public string? CurrencyCode { get; set; }
         public DateTimeOffset? ResetsAt { get; set; }
         public long? PeriodDurationMs { get; set; }
         public string? ColorHex { get; set; }
@@ -385,6 +386,7 @@ public sealed class WidgetDataStore
                 Limit = p.Limit,
                 Format = p.Format.FormatKind.ToString().ToLowerInvariant(),
                 Suffix = p.Format.Suffix,
+                CurrencyCode = p.Format.CurrencyCode,
                 ResetsAt = p.ResetsAt,
                 PeriodDurationMs = p.PeriodDurationMs,
                 ColorHex = p.ColorHex
@@ -393,7 +395,8 @@ public sealed class WidgetDataStore
             {
                 Type = "values",
                 Label = v.Label,
-                Values = v.Items.Select(x => new CachedValue { Number = x.Number, Kind = x.Kind.ToString(), Label = x.Label }).ToList(),
+                Values = v.Items.Select(x => new CachedValue
+                    { Number = x.Number, Kind = x.Kind.ToString(), Label = x.Label, CurrencyCode = x.CurrencyCode }).ToList(),
                 ColorHex = v.ColorHex,
                 ExpiriesAt = v.ExpiriesAt?.ToList() ?? []
             },
@@ -424,13 +427,13 @@ public sealed class WidgetDataStore
         {
             "progress" => MetricLine.Progress(
                 line.Label, line.Used, line.Limit,
-                line.Format == "dollars" ? ProgressFormat.Dollars
+                line.Format == "dollars" ? ProgressFormat.Currency(line.CurrencyCode)
                     : line.Format == "count" ? ProgressFormat.Count(line.Suffix ?? "")
                     : ProgressFormat.Percent,
                 line.ResetsAt, line.PeriodDurationMs, line.ColorHex),
             "values" => MetricLine.Values(
                 line.Label,
-                line.Values.Select(v => new MetricValue(v.Number, Enum.Parse<MetricKind>(v.Kind, true), v.Label)).ToList(),
+                line.Values.Select(v => new MetricValue(v.Number, Enum.Parse<MetricKind>(v.Kind, true), v.Label, v.CurrencyCode)).ToList(),
                 line.ColorHex,
                 line.ExpiriesAt),
             "badge" => MetricLine.Badge(line.Label, line.Text ?? "", line.ColorHex, line.Subtitle),
@@ -444,5 +447,6 @@ public sealed class WidgetDataStore
         public double Number { get; set; }
         public string Kind { get; set; } = "Dollars";
         public string? Label { get; set; }
+        public string? CurrencyCode { get; set; }
     }
 }
