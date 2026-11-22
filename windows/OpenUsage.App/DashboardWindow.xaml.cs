@@ -711,6 +711,18 @@ public partial class DashboardWindow : Window
                 _container.Settings.Save();
             }));
 
+        ContentHost.Children.Add(SectionTitle("Usage Notifications"));
+        ContentHost.Children.Add(SettingToggle("Burning Fast", _container.Settings.NotifyBurningFast, value =>
+        {
+            _container.Settings.NotifyBurningFast = value;
+            _container.Settings.Save();
+        }));
+        ContentHost.Children.Add(SettingToggle("Use It or Lose It", _container.Settings.NotifyUseItOrLoseIt, value =>
+        {
+            _container.Settings.NotifyUseItOrLoseIt = value;
+            _container.Settings.Save();
+        }));
+
         var reset = new Button { Content = "Reset Layout to Default", Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 12, 0, 0) };
         reset.Click += (_, _) =>
         {
