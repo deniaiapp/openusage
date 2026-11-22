@@ -40,7 +40,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[OpenCode](docs/providers.md#opencode)**: session, weekly, monthly
 - **[OpenRouter](docs/providers.md#openrouter)**: balance, spend, key limit, budget
 - **[Z.ai](docs/providers.md#zai)**: session, weekly, web searches, rate-limit resets. On Windows, longer token windows use the Weekly row with the reset time Z.ai reports.
-- **[CLIProxyAPI hubs](docs/cliproxyapi.md) (macOS only)**: every Claude, ChatGPT, Antigravity, Devin, and Grok login on
+- **[CLIProxyAPI hubs](docs/cliproxyapi.md) (macOS UI only)**: every Claude, ChatGPT, Antigravity, Devin, and Grok login on
   a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server
 
 Add your accounts from the app's Accounts screen. OpenUsage never reads other tools' credentials,
