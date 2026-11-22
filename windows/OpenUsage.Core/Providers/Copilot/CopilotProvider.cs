@@ -165,6 +165,8 @@ public sealed class CopilotProvider : IProviderRuntime
                 ["X-Github-Api-Version"] = "2025-04-01"
             },
             TimeoutSeconds: 15), cancellationToken);
+        if (ProviderErrors.IsRateLimited(response))
+            throw new ProviderRequestException(ProviderErrors.RateLimited);
         if (response.StatusCode is 401 or 403)
             throw new ProviderRequestException("GitHub rejected this sign-in. Verify that the account has a Copilot seat and sign in again in Customize.");
         if (!response.IsSuccess)
