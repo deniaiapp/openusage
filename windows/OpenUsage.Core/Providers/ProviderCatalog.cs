@@ -1,4 +1,5 @@
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers.Amp;
 using OpenUsage.Core.Providers.Antigravity;
 using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Codex;
@@ -6,6 +7,7 @@ using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Grok;
+using OpenUsage.Core.Providers.Muse;
 using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Providers.OpenCode;
 using OpenUsage.Core.Providers.OpenRouter;
@@ -20,12 +22,14 @@ public static class ProviderCatalog
     public static IReadOnlyList<IProviderRuntime> Make(AppHttp http, ApiKeyStore keys) =>
     [
         new ClaudeProvider(http),
-        new CodexProvider(http),
+        new CodexProvider(http, keys),
         new CursorProvider(http),
+        new AmpProvider(http, keys),
         new AntigravityProvider(http),
         new CopilotProvider(http, keys),
         new DevinProvider(http),
         new GrokProvider(http),
+        new MuseProvider(http, keys),
         new OllamaProvider(http),
         new OpenCodeProvider(http),
         new OpenRouterProvider(http, keys),

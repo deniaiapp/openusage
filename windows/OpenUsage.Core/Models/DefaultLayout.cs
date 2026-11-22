@@ -1,9 +1,13 @@
+using OpenUsage.Core.Providers.Zai;
+
 namespace OpenUsage.Core.Models;
 
 public static class DefaultLayout
 {
     public static readonly string[] MetricIds =
     [
+        "amp.agent", "amp.orbHours", "amp.free", "amp.credits",
+
         "antigravity.geminiPro", "antigravity.geminiWeekly", "antigravity.claude", "antigravity.claudeWeekly",
         "antigravity.trend", "antigravity.today", "antigravity.yesterday", "antigravity.last30",
 
@@ -23,15 +27,17 @@ public static class DefaultLayout
 
         "grok.weekly", "grok.payAsYouGo",
 
+        "muse.session", "muse.weekly",
+
         "ollama.session", "ollama.weekly", "ollama.monthly", "ollama.purchasedCredits",
 
         "opencode.session", "opencode.weekly", "opencode.monthly", "opencode.trend",
         "opencode.today", "opencode.yesterday", "opencode.last30",
 
-        "openrouter.credits", "openrouter.balance",
+        "openrouter.balance",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
 
-        "zai.session", "zai.weekly", "zai.webSearches"
+        "zai.session", "zai.weekly", "zai.webSearches", ZaiProvider.ResetsMetricId
     ];
 
     public static readonly string[] PinnedMetricIds =
@@ -41,13 +47,14 @@ public static class DefaultLayout
         "codex.session", "codex.weekly",
         "cursor.auto", "cursor.api",
         "copilot.premium",
+        "muse.session",
         "ollama.monthly",
-        "openrouter.credits",
         "zai.session", "zai.weekly"
     ];
 
     public static readonly string[] ExpandedMetricIds =
     [
+        "amp.orbHours", "amp.credits",
         "antigravity.claude", "antigravity.claudeWeekly",
         "antigravity.today", "antigravity.yesterday", "antigravity.last30",
         "claude.sonnet", "claude.rateLimitResets",
@@ -61,7 +68,7 @@ public static class DefaultLayout
         "ollama.purchasedCredits",
         "opencode.today", "opencode.yesterday", "opencode.last30",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
-        "zai.webSearches"
+        "zai.webSearches", ZaiProvider.ResetsMetricId
     ];
 
     public static readonly string[] StarterProviders = ["claude", "codex", "cursor"];
@@ -71,6 +78,8 @@ public static class DefaultLayout
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
-        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits"])
+        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly", "amp.agent", "amp.orbHours", "amp.free", "amp.credits", ZaiProvider.ResetsMetricId])
         .ToArray();
+
+    internal static readonly string[] NewAccountMetricIds = [ZaiProvider.ResetsMetricId];
 }

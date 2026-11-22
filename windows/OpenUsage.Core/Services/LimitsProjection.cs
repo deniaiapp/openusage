@@ -1,4 +1,5 @@
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers.Zai;
 
 namespace OpenUsage.Core.Services;
 
@@ -33,6 +34,10 @@ internal static class LimitsProjection
         ["cursor.onDemand"] = new("onDemand", "usd", ValueKind: MetricKind.Dollars),
         ["cursor.requests"] = new("requests", "requests"),
         ["cursor.credits"] = DollarBalance("credits"),
+        ["amp.agent"] = new("agentUsage", "usd"),
+        ["amp.orbHours"] = new("orbHours", "hours"),
+        ["amp.free"] = new("free", "percent"),
+        ["amp.credits"] = DollarBalance("credits"),
         ["antigravity.geminiPro"] = new("geminiSession", "percent"),
         ["antigravity.geminiWeekly"] = new("geminiWeekly", "percent"),
         ["antigravity.claude"] = new("nonGeminiSession", "percent"),
@@ -45,6 +50,8 @@ internal static class LimitsProjection
         ["devin.weekly"] = new("weekly", "percent"),
         ["devin.extra"] = DollarBalance("extraUsageBalance"),
         ["grok.weekly"] = new("weekly", "percent"),
+        ["muse.session"] = new("session", "percent"),
+        ["muse.weekly"] = new("weekly", "percent"),
         ["ollama.session"] = new("session", "percent"),
         ["ollama.weekly"] = new("weekly", "percent"),
         ["ollama.monthly"] = new("monthly", "usd"),
@@ -56,7 +63,8 @@ internal static class LimitsProjection
         ["openrouter.keyLimit"] = new("keyLimit", "usd"),
         ["zai.session"] = new("session", "percent"),
         ["zai.weekly"] = new("weekly", "percent"),
-        ["zai.webSearches"] = new("webSearches", "searches")
+        ["zai.webSearches"] = new("webSearches", "searches"),
+        [ZaiProvider.ResetsMetricId] = ResetSpec
     };
 
     private static Spec ResetSpec => new("rateLimitResets", "resets", false, MetricKind.Count, "available", true);
