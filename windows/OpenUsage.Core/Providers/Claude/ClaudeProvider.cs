@@ -86,8 +86,11 @@ public sealed partial class ClaudeProvider : IProviderRuntime
         finally { _authGate.Release(); }
     }
 
+    internal Task<ProviderSnapshot> RefreshWithHubTokenAsync(string token, string expiredMessage, CancellationToken ct) =>
+        ProbeAsync(new ClaudeOAuth { AccessToken = token }, ct, allowRenewal: false, expiredMessage: expiredMessage);
+
     private async Task<ProviderSnapshot> ProbeAsync(ClaudeOAuth oauth, CancellationToken ct,
-        bool validateReplacement = false, bool allowRenewal = true)
+        bool validateReplacement = false, bool allowRenewal = true, string? expiredMessage = null)
     {
         var fingerprint = CredentialFingerprint(oauth);
         if (!validateReplacement && _rateLimit is { } limit && limit.Fingerprint == fingerprint && _now() < limit.Until)
@@ -120,7 +123,7 @@ public sealed partial class ClaudeProvider : IProviderRuntime
                 oauth = await RenewAppCredentialAsync(oauth, ct);
                 return await ProbeAsync(oauth, ct, allowRenewal: false);
             }
-            throw new ProviderRequestException("Claude sign-in was not accepted. Sign in again in Customize → Claude.");
+            throw new ProviderRequestException(expiredMessage ?? "Claude sign-in was not accepted. Sign in again in Customize → Claude.");
         }
         if (!response.IsSuccess)
             throw new InvalidOperationException(ProviderErrors.RequestFailed(response.StatusCode));

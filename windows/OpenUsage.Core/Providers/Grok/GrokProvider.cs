@@ -114,6 +114,9 @@ public sealed partial class GrokProvider : IProviderRuntime
     private Task<AppHttpResponse> ReadCreditsAsync(string token, CancellationToken ct) =>
         _http.SendAsync(new AppHttpRequest("GET", CreditsConfigUrl, AuthHeaders(token), TimeoutSeconds: 10), ct);
 
+    internal async Task<ProviderSnapshot> RefreshWithHubTokenAsync(string token, string expiredMessage, CancellationToken ct) =>
+        await MapUsageAsync(await ReadCreditsAsync(token, ct), token, expiredMessage, ct);
+
     private async Task<ProviderSnapshot> MapUsageAsync(AppHttpResponse credits, string token, string expiredMessage, CancellationToken ct)
     {
         List<MetricLine> lines;
