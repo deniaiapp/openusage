@@ -31,10 +31,16 @@ internal sealed class CliProxyHubConnections(CliProxyHubClient client, CliProxyH
         var logins = await client.ListAsync(address, key, ct);
         ct.ThrowIfCancellationRequested();
         if (!store.ReplaceKey(hub, key, logins)) throw HubNotConnected();
+        client.Reopen(id);
         return logins;
     }
 
-    public bool Remove(Guid id) => store.Remove(id);
+    public bool Remove(Guid id)
+    {
+        if (!store.Remove(id)) return false;
+        client.Reopen(id);
+        return true;
+    }
 
     private static ProviderRequestException HubNotConnected() => new("This CLIProxyAPI hub is no longer connected.");
 }
