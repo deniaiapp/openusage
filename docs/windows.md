@@ -20,6 +20,8 @@ Right-click a dashboard metric or usage chart and choose **Hide** to remove it f
 
 Reset countdowns show calendar months and years for long waits and omit zero units, such as `17d`, `3mo 17d`, or `1y 2mo`.
 
+Your metric choices are saved even if you clear an entire group of settings, such as unpinning every metric. New metrics can still appear with their defaults after an update.
+
 If Windows reports that there is no network path, OpenUsage retries that refresh for about a minute before showing an error. Other refresh failures keep the usual backoff.
 
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
