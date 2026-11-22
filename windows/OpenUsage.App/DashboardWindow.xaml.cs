@@ -238,9 +238,11 @@ public partial class DashboardWindow : Window
         var provider = runtime.Provider;
         var snapshot = _container.Data.Snapshot(provider.Id);
         var open = _container.Layout.IsCardOpen(provider.Id);
-        var metrics = _container.Layout.VisibleMetrics(provider.Id, includeOnDemand: open);
+        var metrics = _container.Data.ResolveCardRows(_container.Layout.VisibleMetrics(provider.Id, includeOnDemand: open));
         var links = provider.VisibleLinks;
-        var hasExpandedContent = links.Count > 0 || _container.Layout.OnDemandMetrics(provider.Id).Count > 0;
+        var hasExpandedContent = links.Count > 0 || (open
+            ? metrics.Any(row => _container.Layout.IsOnDemand(row.Descriptor.Id))
+            : _container.Data.ResolveCardRows(_container.Layout.OnDemandMetrics(provider.Id)).Count > 0);
         var card = Card();
         var stack = new StackPanel();
 
@@ -286,8 +288,8 @@ public partial class DashboardWindow : Window
 
         stack.Children.Add(header);
 
-        foreach (var descriptor in metrics)
-            stack.Children.Add(MetricRow(descriptor));
+        foreach (var (descriptor, data) in metrics)
+            stack.Children.Add(MetricRow(descriptor, data));
 
         if (open && links.Count > 0)
         {
