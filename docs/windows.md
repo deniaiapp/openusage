@@ -99,3 +99,8 @@ This is off by default and stays set after a restart. Not every capture method h
 In **Settings → Priority Limits**, choose when the dashboard and tray icon warn about low limits. The defaults are 30% left for orange and 10% left for red. A limit that's on pace to run out can still turn red earlier.
 
 **Show Use It or Lose It** is on by default. It lists unpinned limits with more than half left that reset within 24 hours, soonest first. Sessions and spending caps are excluded. This controls only the Priority list.
+
+
+## Refreshing
+
+Each provider has two minutes to refresh. If it times out, OpenUsage keeps its last reading and other providers can keep updating.
