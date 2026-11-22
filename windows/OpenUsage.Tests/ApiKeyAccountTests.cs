@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text.Json;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
@@ -26,6 +27,55 @@ public sealed class ApiKeyAccountTests : IDisposable
     private string AccountFile => Path.Combine(_directory, "accounts.bin");
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
+
+    [WindowsFact]
+    public void UnreadableAccountSurvivesEditsAlongsideReadableAccounts()
+    {
+        var firstId = Guid.NewGuid();
+        var lastId = Guid.NewGuid();
+        const string unreadable = """{"Account":{"Id":"new-format-id","ProviderId":"future","Label":"Future"},"Credential":{"Version":2,"Value":"fixture"}}""";
+        var fixture = $$"""
+            [
+                {"Account":{"Id":"{{firstId}}","ProviderId":"zai","Label":"First"},"Key":"fixture-first"},
+                {{unreadable}},
+                {"Account":{"Id":"{{lastId}}","ProviderId":"openrouter","Label":"Last"},"Key":"fixture-last"}
+            ]
+            """;
+        File.WriteAllBytes(AccountFile, ProtectedData.Protect(System.Text.Encoding.UTF8.GetBytes(fixture), null,
+            DataProtectionScope.CurrentUser));
+
+        var store = new ApiKeyAccountStore(AccountFile);
+        Assert.Equal(new[] { firstId, lastId }, store.List().Select(account => account.Id));
+        Assert.True(store.HasUnreadableAccounts);
+        var newAccount = store.Add("openrouter", "New", "fixture-new");
+        Assert.True(store.Rename(lastId, "Renamed"));
+        store.ReplaceKey(store.List()[1], "fixture-replacement");
+        Assert.True(store.Remove(firstId));
+
+        var reopened = new ApiKeyAccountStore(AccountFile);
+        Assert.Equal(new[] { lastId, newAccount.Id }, reopened.List().Select(account => account.Id));
+        Assert.True(reopened.HasUnreadableAccounts);
+        Assert.Equal("Renamed", reopened.List()[0].Label);
+        Assert.Equal("fixture-replacement", reopened.Key(lastId));
+        using var contents = JsonDocument.Parse(ProtectedData.Unprotect(File.ReadAllBytes(AccountFile), null,
+            DataProtectionScope.CurrentUser));
+        Assert.Equal(unreadable, contents.RootElement[0].GetRawText());
+
+        File.Delete(AccountFile);
+        Assert.Empty(reopened.List());
+        Assert.False(reopened.HasUnreadableAccounts);
+    }
+
+    [WindowsFact]
+    public void InvalidAccountFileIsNotOverwritten()
+    {
+        var invalid = ProtectedData.Protect("{}"u8.ToArray(), null, DataProtectionScope.CurrentUser);
+        File.WriteAllBytes(AccountFile, invalid);
+        var store = new ApiKeyAccountStore(AccountFile);
+
+        Assert.Throws<InvalidDataException>(() => store.Add("zai", "New", "fixture-key"));
+        Assert.Equal(invalid, File.ReadAllBytes(AccountFile));
+    }
 
     [Fact]
     public void ZaiLimitResetsSeedInOrderWithoutOverwritingAnExistingAccountsPreferences()

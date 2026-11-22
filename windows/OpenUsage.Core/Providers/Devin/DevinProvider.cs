@@ -1,87 +1,10 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Devin;
-
-public sealed class DevinAuth
-{
-    public string ApiKey { get; set; } = "";
-    public string? ApiServerUrl { get; set; }
-}
-
-public sealed class DevinAuthStore
-{
-    public static readonly string DefaultApiServerUrl = "https://server.codeium.com";
-
-    public static IEnumerable<string> CredentialPaths()
-    {
-        yield return AppPaths.Expand("~/.local/share/devin/credentials.toml");
-        yield return Path.Combine(AppPaths.LocalAppData, "devin", "credentials.toml");
-        yield return Path.Combine(AppPaths.Home, ".devin", "credentials.toml");
-    }
-
-    public static IEnumerable<string> StateDbPaths()
-    {
-        yield return Path.Combine(AppPaths.AppData, "Devin", "User", "globalStorage", "state.vscdb");
-        yield return Path.Combine(AppPaths.AppData, "Windsurf", "User", "globalStorage", "state.vscdb");
-        yield return AppPaths.Expand("~/Library/Application Support/Devin/User/globalStorage/state.vscdb");
-    }
-
-    public DevinAuth? Load() => LoadCredentialsFile() ?? LoadAppAuth();
-
-    private static DevinAuth? LoadCredentialsFile()
-    {
-        foreach (var path in CredentialPaths())
-        {
-            if (!File.Exists(path)) continue;
-            try
-            {
-                var text = File.ReadAllText(path);
-                var apiKey = ReadToml(text, "windsurf_api_key") ?? ReadToml(text, "api_key");
-                if (string.IsNullOrEmpty(apiKey)) continue;
-                return new DevinAuth
-                {
-                    ApiKey = apiKey,
-                    ApiServerUrl = ReadToml(text, "api_server_url")
-                };
-            }
-            catch (Exception ex) { AppLog.Warn("devin", $"credentials unreadable: {ex.Message}"); }
-        }
-        return null;
-    }
-
-    private static DevinAuth? LoadAppAuth()
-    {
-        foreach (var db in StateDbPaths())
-        {
-            var value = SqliteReader.QueryValue(db, "SELECT value FROM ItemTable WHERE key = 'windsurfAuthStatus' LIMIT 1");
-            if (value is null) continue;
-            var obj = JsonUtil.ParseObject(value);
-            var apiKey = JsonUtil.String(obj?["apiKey"]);
-            if (string.IsNullOrEmpty(apiKey)) continue;
-            return new DevinAuth { ApiKey = apiKey };
-        }
-        return null;
-    }
-
-    private static string? ReadToml(string text, string key)
-    {
-        foreach (var line in text.Split('\n'))
-        {
-            var trimmed = line.Trim();
-            if (!trimmed.StartsWith(key + " ", StringComparison.Ordinal) &&
-                !trimmed.StartsWith(key + "=", StringComparison.Ordinal))
-                continue;
-            var idx = trimmed.IndexOf('=');
-            if (idx < 0) continue;
-            return trimmed[(idx + 1)..].Trim().Trim('"', '\'');
-        }
-        return null;
-    }
-}
 
 public static class DevinUsageMapper
 {
@@ -124,10 +47,23 @@ public static class DevinUsageMapper
 
 public sealed class DevinProvider : IProviderRuntime
 {
-    private readonly DevinAuthStore _auth = new();
+    private const string StoreKey = "devin.session";
+    internal static readonly Uri StatusUrl = new(
+        "https://server.codeium.com/exa.seat_management_pb.SeatManagementService/GetUserStatus");
     private readonly AppHttp _http;
+    private readonly Func<string?> _readToken;
+    private readonly Action<string> _saveToken;
+    private readonly SemaphoreSlim _credentialGate = new(1);
 
-    public DevinProvider(AppHttp http) => _http = http;
+    public DevinProvider(AppHttp http, ApiKeyStore keys)
+        : this(http, () => keys.Get(StoreKey), token => keys.Set(StoreKey, token)) { }
+
+    internal DevinProvider(AppHttp http, Func<string?> readToken, Action<string> saveToken)
+    {
+        _http = http;
+        _readToken = readToken;
+        _saveToken = saveToken;
+    }
 
     public Provider Provider { get; } = new(
         "devin", "Devin", "devin",
@@ -140,53 +76,68 @@ public sealed class DevinProvider : IProviderRuntime
         WidgetDescriptor.DollarBalance("devin.extra", Provider, "Extra Usage", "left", "Extra usage balance")
     ];
 
+    public bool IsSignedIn => _readToken() is not null;
+
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_auth.Load() is not null);
+        Task.FromResult(IsSignedIn);
+
+    public async Task<ProviderSnapshot> ConnectAsync(Action<Uri> openBrowser, CancellationToken ct)
+    {
+        var token = await new DevinLogin(_http).SignInAsync(openBrowser, ct);
+        await _credentialGate.WaitAsync(ct);
+        try
+        {
+            var snapshot = await ReadUsageAsync(token, ct);
+            ct.ThrowIfCancellationRequested();
+            _saveToken(token);
+            return snapshot;
+        }
+        finally { _credentialGate.Release(); }
+    }
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var auth = _auth.Load();
-        if (auth is null)
-            return ProviderSnapshot.Error(Provider, "Run devin auth login or sign in to Devin and try again.");
+        await _credentialGate.WaitAsync(cancellationToken);
         try
         {
-            var server = string.IsNullOrWhiteSpace(auth.ApiServerUrl)
-                ? DevinAuthStore.DefaultApiServerUrl
-                : auth.ApiServerUrl.TrimEnd('/');
-            var url = new Uri($"{server}/exa.seat_management_pb.SeatManagementService/GetUserStatus");
-            var payload = JsonSerializer.Serialize(new
-            {
-                metadata = new
-                {
-                    apiKey = auth.ApiKey,
-                    ideName = "devin",
-                    ideVersion = "1.108.2",
-                    extensionName = "devin",
-                    extensionVersion = "1.108.2",
-                    locale = "en"
-                }
-            });
-            var response = await _http.SendAsync(new AppHttpRequest(
-                "POST", url,
-                new Dictionary<string, string>
-                {
-                    ["Content-Type"] = "application/json",
-                    ["Connect-Protocol-Version"] = "1"
-                },
-                Encoding.UTF8.GetBytes(payload),
-                15), cancellationToken);
-            if (!response.IsSuccess)
-                return ProviderSnapshot.Error(Provider, ProviderErrors.RequestFailed(response.StatusCode));
-            if (response.Json is not { } body)
-                return ProviderSnapshot.Error(Provider, ProviderErrors.InvalidResponse);
-            var mapped = DevinUsageMapper.Map(body);
-            var lines = mapped.Lines.ToList();
-            MetricLine.AppendNoDataIfNeeded(lines);
-            return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
+            return _readToken() is { } token
+                ? await ReadUsageAsync(token, cancellationToken)
+                : ProviderSnapshot.Error(Provider, "Sign in to Devin from Customize.");
         }
-        catch (Exception ex)
+        catch (ProviderRequestException) when (cancellationToken.IsCancellationRequested)
         {
-            return ProviderSnapshot.Error(Provider, ex);
+            throw new OperationCanceledException(cancellationToken);
         }
+        catch (Exception ex) { return ProviderSnapshot.Error(Provider, ex); }
+        finally { _credentialGate.Release(); }
+    }
+
+    private async Task<ProviderSnapshot> ReadUsageAsync(string token, CancellationToken ct)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            metadata = new
+            {
+                apiKey = token,
+                ideName = "devin",
+                ideVersion = "1.108.2",
+                extensionName = "devin",
+                extensionVersion = "1.108.2",
+                locale = "en"
+            }
+        });
+        var response = await _http.SendAsync(new AppHttpRequest(
+            "POST", StatusUrl,
+            new Dictionary<string, string>
+            {
+                ["Content-Type"] = "application/json",
+                ["Connect-Protocol-Version"] = "1"
+            }, payload), ct);
+        AuthRetry.RequireSuccess(response, new ProviderRequestException("Devin sign-in expired. Sign in again from Customize."),
+            status => new ProviderRequestException(ProviderErrors.RequestFailed(status)));
+        if (response.Json is not { } body)
+            throw new ProviderRequestException(ProviderErrors.InvalidResponse);
+        var mapped = DevinUsageMapper.Map(body);
+        return ProviderSnapshot.Make(Provider, mapped.Plan, mapped.Lines, DateTimeOffset.Now);
     }
 }
