@@ -627,7 +627,7 @@ public partial class DashboardWindow : Window
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        row.Children.Add(new TextBlock { Text = descriptor.Title, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new TextBlock { Text = _container.Data.Resolve(descriptor).Title, VerticalAlignment = VerticalAlignment.Center });
         var onDemand = new Button
         {
             Content = _container.Layout.IsOnDemand(descriptor.Id) ? "On Demand" : "Always",
