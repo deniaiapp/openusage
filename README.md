@@ -142,6 +142,8 @@ Claude Extra Usage uses the account's billing currency on Windows, including in 
 
 Connect Cursor from **Customize → Cursor → Sign In with Cursor**. Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
 
+Connect Grok from Customize without installing the Grok CLI.
+
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 
 To connect Antigravity on Windows, choose **Sign In with Google** in Customize.

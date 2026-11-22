@@ -85,6 +85,8 @@ For Codex, enable device code authorization in ChatGPT's security settings, then
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage. If a CLI-based session expires, run the corresponding CLI once.
 
+For Grok, choose **Customize → Grok → Sign In with Grok**, then open xAI to confirm the device code. **Sign In Again** replaces the encrypted OpenUsage connection only after usage is verified. Existing Grok CLI sign-ins still work if you haven't connected Grok in OpenUsage.
+
 Antigravity, Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown.
 
 Cursor history shows the on-demand charges and tokens Cursor reports, not a model-price estimate. Included and nonbillable requests contribute tokens but no charge.
