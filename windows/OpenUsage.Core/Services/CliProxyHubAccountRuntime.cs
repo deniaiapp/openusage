@@ -26,6 +26,7 @@ internal sealed class CliProxyHubAccountRuntime : IProviderRuntime, IDisposable
     {
         if (account.Link.HubId != hub.Id)
             throw new ArgumentException("The account does not belong to this hub.", nameof(account));
+        HubId = hub.Id;
         var address = CliProxyHubAddress.Parse(hub.Address.AbsoluteUri);
         if (address is null || address.BaseUrl.AbsoluteUri != hub.Address.AbsoluteUri)
             throw new ArgumentException("The saved CLIProxyAPI hub address is invalid.", nameof(hub));
@@ -40,6 +41,7 @@ internal sealed class CliProxyHubAccountRuntime : IProviderRuntime, IDisposable
             _ => throw new ArgumentException("The account provider is not supported through a hub.", nameof(account))
         };
         var expired = CliProxyHubRefusal.Message(CliProxyHubRefusalKind.NoToken, hub.Address.Host);
+        RefreshTurn = client.AccountRefreshTurn(hub.Id);
         _key = key;
         _http = new AppHttp(new HttpClient(new CliProxyHubTunnel(
             client, hub.Id, address, key, account.Link.AuthIndex, displayName)));
@@ -71,6 +73,8 @@ internal sealed class CliProxyHubAccountRuntime : IProviderRuntime, IDisposable
     }
 
     public Provider Provider { get; }
+    internal Guid HubId { get; }
+    internal SemaphoreSlim RefreshTurn { get; }
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors { get; }
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>

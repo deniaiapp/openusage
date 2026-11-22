@@ -62,17 +62,26 @@ public sealed class WidgetDataStore
 
     internal void ForgetAccount(string cardId)
     {
-        lock (_gate)
-        {
-            _providerRefreshes.TryRemove(cardId, out _);
-            _snapshots.TryRemove(cardId, out _);
-            _errors.TryRemove(cardId, out _);
-            _backoffs.Remove(cardId);
-            try { File.Delete(Path.Combine(CacheDir, $"{cardId}.json")); }
-            catch (IOException ex) { AppLog.Warn("cache", $"could not remove account snapshot: {ex.Message}"); }
-            catch (UnauthorizedAccessException ex) { AppLog.Warn("cache", $"could not remove account snapshot: {ex.Message}"); }
-        }
+        lock (_gate) ForgetAccountLocked(cardId);
         Raise();
+    }
+
+    internal void UpdateAccountRuntimes(Func<IEnumerable<string>> update)
+    {
+        lock (_gate)
+            foreach (var id in update()) ForgetAccountLocked(id);
+        Raise();
+    }
+
+    private void ForgetAccountLocked(string cardId)
+    {
+        _providerRefreshes.TryRemove(cardId, out _);
+        _snapshots.TryRemove(cardId, out _);
+        _errors.TryRemove(cardId, out _);
+        _backoffs.Remove(cardId);
+        try { File.Delete(Path.Combine(CacheDir, $"{cardId}.json")); }
+        catch (IOException ex) { AppLog.Warn("cache", $"could not remove account snapshot: {ex.Message}"); }
+        catch (UnauthorizedAccessException ex) { AppLog.Warn("cache", $"could not remove account snapshot: {ex.Message}"); }
     }
 
     internal void RenameAccount(string cardId, string displayName)
@@ -117,7 +126,10 @@ public sealed class WidgetDataStore
         return tiles;
     }
 
-    public async Task RefreshAllAsync(bool force, CancellationToken cancellationToken = default)
+    public Task RefreshAllAsync(bool force, CancellationToken cancellationToken = default) =>
+        RefreshAllAsync(force, null, cancellationToken);
+
+    internal async Task RefreshAllAsync(bool force, Func<CancellationToken, Task>? syncHubs, CancellationToken cancellationToken)
     {
         lock (_gate)
         {
@@ -127,7 +139,15 @@ public sealed class WidgetDataStore
         Raise();
         try
         {
-            await Task.WhenAll(_layout.VisibleProviders.Select(provider => RefreshAsync(provider, force, cancellationToken)));
+            var providers = _layout.VisibleProviders;
+            if (syncHubs is null)
+                await Task.WhenAll(providers.Select(provider => RefreshAsync(provider, force, cancellationToken)));
+            else
+            {
+                var localUsage = Task.WhenAll(providers.Where(provider => provider is not CliProxyHubAccountRuntime)
+                    .Select(provider => RefreshAsync(provider, force, cancellationToken)));
+                await Task.WhenAll(localUsage, RefreshHubUsageAsync());
+            }
             _lastRefresh = DateTimeOffset.Now;
             _nextRefresh = _lastRefresh.AddSeconds(Math.Max(30, _settings.RefreshIntervalSeconds));
         }
@@ -135,6 +155,13 @@ public sealed class WidgetDataStore
         {
             lock (_gate) _refreshing = false;
             Raise();
+        }
+
+        async Task RefreshHubUsageAsync()
+        {
+            await syncHubs!(cancellationToken);
+            await Task.WhenAll(_layout.VisibleProviders.OfType<CliProxyHubAccountRuntime>()
+                .Select(provider => RefreshAsync(provider, force, cancellationToken)));
         }
     }
 
@@ -152,6 +179,8 @@ public sealed class WidgetDataStore
         Lazy<Task> refresh;
         lock (_gate)
         {
+            if (provider is CliProxyHubAccountRuntime && !_layout.Providers.Contains(provider))
+                return Task.CompletedTask;
             if (_providerRefreshes.TryGetValue(id, out var active))
                 refresh = active;
             else
@@ -175,6 +204,23 @@ public sealed class WidgetDataStore
     {
         var providerId = provider.Provider.Id;
         bool IsCurrent() => _providerRefreshes.TryGetValue(providerId, out var active) && active == refresh;
+        // Waiting for another account on the hub is not part of this provider's timeout.
+        var refreshTurn = (provider as CliProxyHubAccountRuntime)?.RefreshTurn;
+        if (refreshTurn is not null)
+        {
+            try { await refreshTurn.WaitAsync(cancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            {
+                _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
+                return;
+            }
+            if (!IsCurrent() || cancellationToken.IsCancellationRequested)
+            {
+                _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
+                refreshTurn.Release();
+                return;
+            }
+        }
         var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var work = Task.Run(() => ReadWithOfflineRetriesAsync(provider, IsCurrent, attempt.Token), attempt.Token);
         try
@@ -204,7 +250,7 @@ public sealed class WidgetDataStore
         }
         finally
         {
-            _ = RetireRefreshAsync(providerId, refresh, work, attempt);
+            _ = RetireRefreshAsync(providerId, refresh, work, attempt, refreshTurn);
         }
     }
 
@@ -226,7 +272,8 @@ public sealed class WidgetDataStore
         return null;
     }
 
-    private async Task RetireRefreshAsync(string providerId, Lazy<Task> refresh, Task work, CancellationTokenSource attempt)
+    private async Task RetireRefreshAsync(string providerId, Lazy<Task> refresh, Task work,
+        CancellationTokenSource attempt, SemaphoreSlim? refreshTurn)
     {
         using (attempt)
         {
@@ -239,6 +286,7 @@ public sealed class WidgetDataStore
             // Don't start a second read while the first can still rotate credentials.
             await work.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
+            refreshTurn?.Release();
         }
     }
 
@@ -306,6 +354,8 @@ public sealed class WidgetDataStore
     private void SaveCache(ProviderSnapshot snapshot)
     {
         if (snapshot.IsError) return;
+        var runtime = _layout.Providers.FirstOrDefault(p => p.Provider.Id == snapshot.ProviderId);
+        if (runtime is CliProxyHubAccountRuntime) return;
         try
         {
             var cached = new CachedSnapshot
@@ -318,8 +368,7 @@ public sealed class WidgetDataStore
                 Lines = snapshot.Lines.Select(CachedLine.FromMetric).ToList()
             };
             var path = Path.Combine(CacheDir, $"{snapshot.ProviderId}.json");
-            var descriptors = _layout.Providers.FirstOrDefault(p => p.Provider.Id == snapshot.ProviderId)?.WidgetDescriptors;
-            cached.Limits = LimitsProjection.Project(snapshot, descriptors ?? []);
+            cached.Limits = LimitsProjection.Project(snapshot, runtime?.WidgetDescriptors ?? []);
             AtomicFile.WriteAllText(path, JsonSerializer.Serialize(cached, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (Exception ex)

@@ -164,8 +164,12 @@ macOS-only pieces left out on purpose:
 - Share-screenshot cards
 
 You can [connect and disconnect CLIProxyAPI hubs](../docs/windows.md#cliproxyapi-hubs) in Customize.
-The app keeps supported hub logins in sync at startup, on demand, and on scheduled refreshes.
-Failed checks appear next to the hub in Customize. The core can read usage through the hub, but provider refreshes and the dashboard do not use it yet.
-Management requests use HTTPS, or HTTP for loopback, local network, and Tailscale addresses, without following redirects.
+The app syncs supported hub logins at startup, on demand, and on scheduled refreshes.
+It checks for login changes before reading hub usage, so relinked accounts keep their cards and settings.
+Failed checks appear next to the hub in Customize. Each enabled hub login has its own dashboard card
+and refreshes usage through its hub. Hub metrics aren't pinned to the tray by default.
+Cards on the same hub refresh one at a time.
+Management requests use HTTPS, or HTTP for loopback, local network, and Tailscale addresses,
+without following redirects.
 
 Proxy support still honors `~\.openusage\config.json` (or `%APPDATA%\OpenUsage\config.json`) with a `proxy` URL.

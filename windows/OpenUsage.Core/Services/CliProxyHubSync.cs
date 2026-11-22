@@ -10,9 +10,10 @@ internal sealed class CliProxyHubSync(CliProxyHubClient client, CliProxyHubStore
     private readonly SemaphoreSlim _refresh = new(1);
     private readonly Dictionary<Guid, DateTimeOffset> _lastSuccess = [];
 
-    public async Task RefreshAsync(bool force, CancellationToken ct)
+    public async Task RefreshAsync(bool force, CancellationToken ct, IReadOnlySet<Guid>? beforeUsage = null)
     {
-        if (!await _refresh.WaitAsync(0, ct)) return;
+        if (beforeUsage is not null) await _refresh.WaitAsync(ct);
+        else if (!await _refresh.WaitAsync(0, ct)) return;
         try
         {
             var hubs = store.List();
@@ -22,19 +23,37 @@ internal sealed class CliProxyHubSync(CliProxyHubClient client, CliProxyHubStore
 
             var now = _clock.GetUtcNow();
             var results = await Task.WhenAll(hubs
-                .Where(hub => force || !_lastSuccess.TryGetValue(hub.Id, out var last) || now - last >= ScheduledInterval)
+                .Where(hub => force || beforeUsage?.Contains(hub.Id) == true ||
+                    !_lastSuccess.TryGetValue(hub.Id, out var last) || now - last >= ScheduledInterval)
                 .Select(hub => ReadAsync(hub, ct)));
-            foreach (var (id, readAt) in results)
-            {
-                if (readAt is { } time) _lastSuccess[id] = time;
-                else _lastSuccess.Remove(id);
-            }
+            foreach (var result in results) Track(result);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             AppLog.Warn("cliproxy", $"Could not read saved hubs ({ex.GetType().Name}).");
         }
         finally { _refresh.Release(); }
+    }
+
+    public async Task RefreshHubAsync(Guid id, CancellationToken ct)
+    {
+        await _refresh.WaitAsync(ct);
+        try
+        {
+            if (store.List().FirstOrDefault(hub => hub.Id == id) is { } hub)
+                Track(await ReadAsync(hub, ct));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            AppLog.Warn("cliproxy", $"Could not read saved hub ({ex.GetType().Name}).");
+        }
+        finally { _refresh.Release(); }
+    }
+
+    private void Track((Guid Id, DateTimeOffset? ReadAt) result)
+    {
+        if (result.ReadAt is { } time) _lastSuccess[result.Id] = time;
+        else _lastSuccess.Remove(result.Id);
     }
 
     private async Task<(Guid Id, DateTimeOffset? ReadAt)> ReadAsync(CliProxyHub hub, CancellationToken ct)

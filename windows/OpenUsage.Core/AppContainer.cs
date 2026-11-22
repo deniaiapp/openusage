@@ -21,16 +21,19 @@ public sealed class AppContainer : IDisposable
 
     private readonly AppHttp _http;
     private readonly CliProxyHubClient _hubClient = new();
+    private readonly CliProxyHubStore _hubStore = new();
     private readonly CliProxyHubConnections _hubConnections;
     private readonly CliProxyHubSync _hubSync;
+    private readonly CliProxyHubRuntimes _hubRuntimes;
+    private readonly Action<Action> _dispatchLayout;
     private readonly CancellationTokenSource _cts = new();
     private Task? _refreshLoop;
 
-    public AppContainer()
+    public AppContainer(Action<Action>? dispatchLayout = null)
     {
-        var hubs = new CliProxyHubStore();
-        _hubConnections = new CliProxyHubConnections(_hubClient, hubs);
-        _hubSync = new CliProxyHubSync(_hubClient, hubs);
+        _dispatchLayout = dispatchLayout ?? (action => action());
+        _hubConnections = new CliProxyHubConnections(_hubClient, _hubStore);
+        _hubSync = new CliProxyHubSync(_hubClient, _hubStore);
         Settings = AppSettings.Load();
         Keys = new ApiKeyStore();
         _http = new AppHttp();
@@ -49,6 +52,9 @@ public sealed class AppContainer : IDisposable
             AppLog.Error("accounts", "could not restore API key accounts", ex);
         }
         Data = new WidgetDataStore(Layout, Settings);
+        _hubRuntimes = new CliProxyHubRuntimes(Layout, Data,
+            item => new CliProxyHubAccountRuntime(_hubClient, _hubStore, item.Hub, item.Account));
+        ReconcileHubAccounts();
         foreach (var muse in Providers.OfType<OpenUsage.Core.Providers.Muse.MuseProvider>())
             muse.AttachSnapshots(() => Data.Snapshot(muse.Provider.Id));
     }
@@ -89,14 +95,51 @@ public sealed class AppContainer : IDisposable
 
     public Task RefreshNowAsync() => RefreshAsync(true, _cts.Token);
 
+    public async Task RefreshProviderNowAsync(string providerId)
+    {
+        var ct = _cts.Token;
+        if (Layout.VisibleProviders.OfType<CliProxyHubAccountRuntime>()
+            .FirstOrDefault(runtime => runtime.Provider.Id == providerId) is { } account)
+        {
+            await _hubSync.RefreshHubAsync(account.HubId, ct);
+            OnCliProxyHubsRefreshed();
+        }
+        await Data.RefreshProviderAsync(providerId, ct);
+    }
+
     private Task RefreshAsync(bool force, CancellationToken ct) =>
-        Task.WhenAll(Data.RefreshAllAsync(force, ct), RefreshCliProxyHubsAsync(force, ct));
+        Data.RefreshAllAsync(force, token => RefreshCliProxyHubsAsync(force, token), ct);
 
     private async Task RefreshCliProxyHubsAsync(bool force, CancellationToken ct)
     {
-        await _hubSync.RefreshAsync(force, ct);
+        var activeHubs = Layout.VisibleProviders.OfType<CliProxyHubAccountRuntime>()
+            .Select(runtime => runtime.HubId).ToHashSet();
+        await _hubSync.RefreshAsync(force, ct, activeHubs);
+        OnCliProxyHubsRefreshed();
+    }
+
+    private void OnCliProxyHubsRefreshed()
+    {
+        ReconcileHubAccounts();
         CliProxyHubSyncFinished?.Invoke();
     }
+
+    private void ReconcileHubAccounts(bool refreshChanged = false) => _dispatchLayout(() =>
+    {
+        if (_cts.IsCancellationRequested) return;
+        IReadOnlyList<CliProxyHubRuntimeAccount> saved;
+        try { saved = _hubStore.ListRuntimeAccounts(); }
+        catch (Exception ex)
+        {
+            AppLog.Warn("cliproxy", $"Could not restore saved hub accounts ({ex.GetType().Name}).");
+            return;
+        }
+
+        var changed = _hubRuntimes.Reconcile(saved);
+        if (!refreshChanged) return;
+        foreach (var id in changed.Where(Layout.IsProviderEnabled))
+            _ = Data.RefreshProviderAsync(id, _cts.Token);
+    });
 
     public async Task ConnectClaudeAsync(Action<Uri> openBrowser, Task<string> pastedCode, CancellationToken cancellationToken)
     {
@@ -220,21 +263,29 @@ public sealed class AppContainer : IDisposable
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
         await _hubConnections.ConnectAsync(address, key, linked.Token);
+        ReconcileHubAccounts(refreshChanged: true);
     }
 
     public async Task ReplaceCliProxyHubKeyAsync(Guid id, string key, CancellationToken ct)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
         await _hubConnections.ReplaceKeyAsync(id, key, linked.Token);
+        ReconcileHubAccounts(refreshChanged: true);
     }
 
-    public bool RemoveCliProxyHub(Guid id) => _hubConnections.Remove(id);
+    public bool RemoveCliProxyHub(Guid id)
+    {
+        if (!_hubConnections.Remove(id)) return false;
+        ReconcileHubAccounts();
+        return true;
+    }
 
     public sealed record CliProxyHubSummary(Guid Id, Uri Address);
 
     public void Dispose()
     {
         _cts.Cancel();
+        _hubRuntimes.Dispose();
         _http.Dispose();
         _hubClient.Dispose();
     }

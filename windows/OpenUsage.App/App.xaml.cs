@@ -45,7 +45,10 @@ public partial class App : Application
             try { _notificationActivation = new NotificationActivation(OpenDashboardFromNotification); }
             catch (Exception ex) { AppLog.Warn("notifications", $"Could not listen for toast activation ({ex.GetType().Name})."); }
 
-            _container = new AppContainer();
+            _container = new AppContainer(action =>
+            {
+                if (!Dispatcher.HasShutdownStarted) Dispatcher.Invoke(action);
+            });
             ThemeService.Apply(_container.Settings.Theme);
             LaunchAtLogin.Apply(_container.Settings.LaunchAtLogin);
             _container.Start();

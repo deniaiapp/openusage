@@ -58,6 +58,13 @@ internal sealed class CliProxyHubStore(string? path = null)
         lock (_gate) return Load().SelectMany(entry => entry.Accounts ?? []).ToArray();
     }
 
+    internal IReadOnlyList<CliProxyHubRuntimeAccount> ListRuntimeAccounts()
+    {
+        lock (_gate)
+            return Load().SelectMany(entry => (entry.Accounts ?? [])
+                .Select(account => new CliProxyHubRuntimeAccount(entry.Hub, account, entry.KeyRevision))).ToArray();
+    }
+
     // The connection service must prove the key against the normalized address before saving it.
     internal CliProxyHub Add(Uri address, string validatedKey, IReadOnlyList<CliProxyHubLogin>? logins = null)
     {

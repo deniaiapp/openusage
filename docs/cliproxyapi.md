@@ -4,7 +4,7 @@
 several people or machines. Connect a hub, and its Claude, ChatGPT, Antigravity, Devin, and Grok
 logins show in OpenUsage as ordinary accounts.
 
-This page describes macOS. Windows can [save and sync hub logins](windows.md#cliproxyapi-hubs) and shows failed checks in Customize, but does not show hub accounts yet.
+This page describes macOS. For hub setup and dashboard cards on Windows, see [CLIProxyAPI hubs on Windows](windows.md#cliproxyapi-hubs).
 
 - The hub owns the list of logins. OpenUsage mirrors it.
 - You can connect more than one hub.

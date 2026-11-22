@@ -32,7 +32,7 @@ internal sealed class CliProxyHubsView : StackPanel
         _buttonStyle = buttonStyle;
         Children.Add(new TextBlock
         {
-            Text = "Connect a hub to save its management key. Hub accounts don’t appear on the dashboard yet.",
+            Text = "Connect a hub to show its supported accounts on the dashboard.",
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(0, 0, 0, 8)
         });
@@ -113,7 +113,7 @@ internal sealed class CliProxyHubsView : StackPanel
                         _confirmDisconnect = (remove, removeName);
                         remove.Content = "Confirm Disconnect";
                         AutomationProperties.SetName(remove, $"Confirm disconnecting {address}");
-                        _status.Text = "Disconnecting removes the saved key from this PC only.";
+                        _status.Text = "Disconnecting removes this hub’s accounts and saved key from this PC only.";
                         return;
                     }
                     ResetDisconnect();
