@@ -12,6 +12,8 @@ public sealed class AppSettings
     public WidgetDisplayMode MeterStyle { get; set; } = WidgetDisplayMode.Remaining;
     public ResetDisplayMode ResetDisplay { get; set; } = ResetDisplayMode.Relative;
     public bool AlwaysShowPacing { get; set; }
+    public PriorityLimits PriorityLimits { get; set; } = PriorityLimits.Default;
+    public bool ShowUnusedQuotaInPriority { get; set; } = true;
     public bool LaunchAtLogin { get; set; }
     public string? GlobalHotkey { get; set; }
     public int RefreshIntervalSeconds { get; set; } = 300;
@@ -25,6 +27,8 @@ public sealed class AppSettings
     public HashSet<string> OpenCards { get; set; } = new(StringComparer.Ordinal);
     public List<string> ProviderOrder { get; set; } = [];
     public bool CustomizeHintDismissed { get; set; }
+    public bool NotifyBurningFast { get; set; }
+    public bool NotifyUseItOrLoseIt { get; set; }
     /// <summary>Default metric IDs this layout has already been offered; null on layouts saved before tracking.</summary>
     public HashSet<string>? SeededDefaultMetrics { get; set; }
 
@@ -50,6 +54,7 @@ public sealed class AppSettings
                     loaded.PinnedMetrics ??= new HashSet<string>(StringComparer.Ordinal);
                     loaded.OpenCards ??= new HashSet<string>(StringComparer.Ordinal);
                     loaded.ProviderOrder ??= [];
+                    loaded.PriorityLimits ??= PriorityLimits.Default;
                     if (loaded.RefreshIntervalSeconds < 30) loaded.RefreshIntervalSeconds = 300;
                     return loaded;
                 }

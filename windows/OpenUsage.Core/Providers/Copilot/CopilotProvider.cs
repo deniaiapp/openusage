@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Copilot;
@@ -158,10 +159,38 @@ public static class CopilotUsageMapper
 public sealed class CopilotProvider : IProviderRuntime
 {
     public static readonly Uri UsageUrl = new("https://api.github.com/copilot_internal/user");
+    public const string VerificationUrl = CopilotDeviceLogin.VerificationUrl;
+    private const string CredentialKey = "copilot.oauth";
     private readonly CopilotAuthStore _auth = new();
     private readonly AppHttp _http;
+    private readonly ApiKeyStore? _keys;
+    private readonly CopilotDeviceLogin _signIn;
 
-    public CopilotProvider(AppHttp http) => _http = http;
+    public CopilotProvider(AppHttp http, ApiKeyStore? keys = null) : this(http, keys, new CopilotDeviceLogin(http)) { }
+
+    internal CopilotProvider(AppHttp http, ApiKeyStore? keys, CopilotDeviceLogin signIn)
+    {
+        _http = http;
+        _keys = keys;
+        _signIn = signIn;
+    }
+
+    public bool HasAppCredential => _keys?.Get(CredentialKey) is not null;
+
+    internal async Task<ProviderSnapshot> ConnectAsync(Action<string> showCode, CancellationToken ct)
+    {
+        var keys = _keys ?? throw new InvalidOperationException("OpenUsage could not open its credentials store.");
+        var token = await _signIn.AuthorizeAsync(showCode, ct);
+        ProviderSnapshot snapshot;
+        try { snapshot = await FetchUsageAsync(token, true, ct); }
+        catch (ProviderRequestException) when (ct.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(ct);
+        }
+        ct.ThrowIfCancellationRequested();
+        keys.Set(CredentialKey, token);
+        return snapshot;
+    }
 
     public Provider Provider { get; } = new(
         "copilot", "Copilot", "copilot",
@@ -176,41 +205,52 @@ public sealed class CopilotProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_auth.LoadToken() is not null);
+        Task.FromResult(HasAppCredential || _auth.LoadToken() is not null);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var token = _auth.LoadToken();
+        var connectedToken = _keys?.Get(CredentialKey);
+        var token = connectedToken ?? _auth.LoadToken();
         if (token is null)
-            return ProviderSnapshot.Error(Provider, "Sign in to GitHub Copilot in your editor, or run gh auth login, and try again.");
+            return ProviderSnapshot.Error(Provider, "Sign in to GitHub in Customize → Copilot.");
         try
         {
-            var response = await _http.SendAsync(new AppHttpRequest(
-                "GET", UsageUrl,
-                new Dictionary<string, string>
-                {
-                    ["Authorization"] = $"token {token}",
-                    ["Accept"] = "application/json",
-                    ["Editor-Version"] = "vscode/1.96.2",
-                    ["Editor-Plugin-Version"] = "copilot-chat/0.26.7",
-                    ["User-Agent"] = "GitHubCopilotChat/0.26.7",
-                    ["X-Github-Api-Version"] = "2025-04-01"
-                },
-                TimeoutSeconds: 15), cancellationToken);
-            if (response.StatusCode is 401 or 403)
-                return ProviderSnapshot.Error(Provider, "GitHub token invalid or expired. Re-authenticate (gh auth login) and try again.");
-            if (!response.IsSuccess)
-                return ProviderSnapshot.Error(Provider, ProviderErrors.RequestFailed(response.StatusCode));
-            if (response.Json is not { } body)
-                return ProviderSnapshot.Error(Provider, "Copilot usage response invalid. Try again later.");
-            var mapped = CopilotUsageMapper.Map(body);
-            var lines = mapped.Lines.ToList();
-            MetricLine.AppendNoDataIfNeeded(lines);
-            return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
+            return await FetchUsageAsync(token, connectedToken is not null, cancellationToken);
         }
         catch (Exception ex)
         {
             return ProviderSnapshot.Error(Provider, ex);
         }
+    }
+
+    private async Task<ProviderSnapshot> FetchUsageAsync(string token, bool appCredential, CancellationToken cancellationToken)
+    {
+        var response = await _http.SendAsync(new AppHttpRequest(
+            "GET", UsageUrl,
+            new Dictionary<string, string>
+            {
+                ["Authorization"] = $"token {token}",
+                ["Accept"] = "application/json",
+                ["Editor-Version"] = "vscode/1.96.2",
+                ["Editor-Plugin-Version"] = "copilot-chat/0.26.7",
+                ["User-Agent"] = "GitHubCopilotChat/0.26.7",
+                ["X-Github-Api-Version"] = "2025-04-01"
+            },
+            TimeoutSeconds: 15), cancellationToken);
+        if (ProviderErrors.IsRateLimited(response))
+            throw new ProviderRequestException(ProviderErrors.RateLimited);
+        if (response.StatusCode is 401 or 403)
+            throw new ProviderRequestException(appCredential
+                ? "GitHub rejected this sign-in. Verify that the account has a Copilot seat and sign in again in Customize."
+                : "GitHub token invalid or expired. Sign in to GitHub in Customize → Copilot, or run gh auth login.");
+        if (!response.IsSuccess)
+            throw new ProviderRequestException(ProviderErrors.RequestFailed(response.StatusCode));
+        if (response.Json is not { } body)
+            throw new ProviderRequestException("Copilot usage response invalid. Try again later.");
+        var mapped = CopilotUsageMapper.Map(body);
+        if (appCredential && mapped.Plan is null && mapped.Lines.Count == 0)
+            throw new ProviderRequestException("GitHub did not return any Copilot usage information. Check that the account has a Copilot seat.");
+        MetricLine.AppendNoDataIfNeeded(mapped.Lines);
+        return ProviderSnapshot.Make(Provider, mapped.Plan, mapped.Lines, DateTimeOffset.Now);
     }
 }
