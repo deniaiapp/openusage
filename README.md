@@ -92,6 +92,7 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
+Expand the Codex card to see ChatGPT's reported tokens for Today, Yesterday, and Last 30 Days, using UTC dates.
 
 OpenRouter management keys show the spend they can read across keys, including workspace spend.
 
