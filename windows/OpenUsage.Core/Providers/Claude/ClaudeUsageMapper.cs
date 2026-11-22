@@ -8,6 +8,10 @@ public static class ClaudeUsageMapper
 {
     public const string RateLimitResetsLabel = "Rate Limit Resets";
 
+    internal static string? ExtraUsageTitle(string? plan) =>
+        plan == "Enterprise" || plan?.StartsWith("Enterprise ", StringComparison.Ordinal) == true
+            ? "Spend" : null;
+
     public static (string? Plan, List<MetricLine> Lines, string? Warning) Map(JsonObject body, ClaudeOAuth credentials)
     {
         var lines = new List<MetricLine>();
