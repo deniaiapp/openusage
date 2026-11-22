@@ -31,7 +31,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[ChatGPT](docs/providers.md#chatgpt)**: session, weekly, Spark, extra usage, credit limit, rate-limit resets, daily tokens
 - **[Cursor](docs/providers.md#cursor)**: total usage, model usage, extra usage, requests, credits, daily spend and tokens
 - **[Amp](docs/providers.md#amp)**: agent usage, orb hours, Amp Free, credits; on Windows, [connect in Customize](docs/windows.md#amp-on-windows)
-- **[Antigravity](docs/providers.md#antigravity)**: Gemini, Argon, and Claude quotas
+- **[Antigravity](docs/providers.md#antigravity)**: Gemini, Argon, and Claude quotas; Windows no longer reads local conversation history
 - **[Copilot](docs/providers.md#copilot)**: credits, extra usage, chat, completions, organization billing, GitHub Enterprise on GHE.com
 - **[Devin](docs/providers.md#devin)**: daily and weekly quota, extra usage
 - **[Grok](docs/providers.md#grok)**: weekly limit, extra usage
@@ -93,11 +93,13 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 
+Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
+
 Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
 
 Windows reset countdowns show calendar months and years for longer waits.
 
-Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
+Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known. Priority also shows which accounts are waiting for their first reading.
 Priority also lists unpinned limits you can use before they reset.
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
