@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using OpenUsage.Core;
-using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 using Button = System.Windows.Controls.Button;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
@@ -22,7 +21,8 @@ internal sealed class CliProxyHubsView : StackPanel
     private readonly PasswordBox _key = new() { Margin = new Thickness(0, 3, 0, 6), Padding = new Thickness(6) };
     private readonly Button _save;
     private readonly Button _cancel;
-    private CliProxyHub? _replace;
+    private Guid? _replace;
+    private (Button Button, string Name)? _confirmDisconnect;
     private CancellationTokenSource? _attempt;
 
     public CliProxyHubsView(AppContainer container, Style buttonStyle)
@@ -56,15 +56,15 @@ internal sealed class CliProxyHubsView : StackPanel
         Children.Add(actions);
         AutomationProperties.SetLiveSetting(_status, AutomationLiveSetting.Polite);
         Children.Add(_status);
-        IsVisibleChanged += (_, _) => { if (!IsVisible) ClearAttempt(); };
-        Unloaded += (_, _) => ClearAttempt();
+        IsVisibleChanged += (_, _) => { if (!IsVisible) Cancel(); };
         ResetEditor();
         RefreshHubs();
     }
 
-    private void ClearAttempt()
+    public void Cancel()
     {
         _attempt?.Cancel();
+        ResetDisconnect();
         _key.Clear();
     }
 
@@ -86,11 +86,13 @@ internal sealed class CliProxyHubsView : StackPanel
                 var actions = new StackPanel { Orientation = Orientation.Horizontal };
                 var replace = Action("Replace Key");
                 var remove = Action("Disconnect");
+                var removeName = $"Disconnect {address}";
                 AutomationProperties.SetName(replace, $"Replace management key for {address}");
-                AutomationProperties.SetName(remove, $"Disconnect {address}");
+                AutomationProperties.SetName(remove, removeName);
                 replace.Click += (_, _) =>
                 {
-                    _replace = hub;
+                    ResetDisconnect();
+                    _replace = hub.Id;
                     _key.Clear();
                     _addressLabel.Visibility = _address.Visibility = Visibility.Collapsed;
                     _save.Content = "Save Key";
@@ -100,13 +102,16 @@ internal sealed class CliProxyHubsView : StackPanel
                 };
                 remove.Click += (_, _) =>
                 {
-                    if (remove.Content is "Disconnect")
+                    if (_confirmDisconnect?.Button != remove)
                     {
+                        ResetDisconnect();
+                        _confirmDisconnect = (remove, removeName);
                         remove.Content = "Confirm Disconnect";
                         AutomationProperties.SetName(remove, $"Confirm disconnecting {address}");
                         _status.Text = "Disconnecting removes the saved key from this PC only.";
                         return;
                     }
+                    ResetDisconnect();
                     try
                     {
                         var removed = _container.RemoveCliProxyHub(hub.Id);
@@ -125,8 +130,17 @@ internal sealed class CliProxyHubsView : StackPanel
         catch (Exception ex) { ShowError(ex); }
     }
 
+    private void ResetDisconnect()
+    {
+        if (_confirmDisconnect is not { } confirm) return;
+        confirm.Button.Content = "Disconnect";
+        AutomationProperties.SetName(confirm.Button, confirm.Name);
+        _confirmDisconnect = null;
+    }
+
     private void ResetEditor()
     {
+        ResetDisconnect();
         _replace = null;
         _key.Clear();
         _status.Text = "";
@@ -138,6 +152,7 @@ internal sealed class CliProxyHubsView : StackPanel
     private async Task SaveAsync()
     {
         if (_attempt is not null) return;
+        ResetDisconnect();
         using var attempt = new CancellationTokenSource();
         _attempt = attempt;
         _hubs.IsEnabled = _address.IsEnabled = _key.IsEnabled = _save.IsEnabled = false;
@@ -145,9 +160,9 @@ internal sealed class CliProxyHubsView : StackPanel
         _status.Text = "Checking the management key…";
         try
         {
-            if (_replace is { } hub)
+            if (_replace is { } id)
             {
-                await _container.ReplaceCliProxyHubKeyAsync(hub.Id, _key.Password, attempt.Token);
+                await _container.ReplaceCliProxyHubKeyAsync(id, _key.Password, attempt.Token);
                 ResetEditor();
                 _status.Text = "Management key replaced.";
             }

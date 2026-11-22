@@ -15,7 +15,7 @@ public static class DefaultLayout
         "claude.extra", "claude.rateLimitResets",
 
         "codex.session", "codex.weekly", "codex.spark", "codex.sparkWeekly",
-        "codex.credits", "codex.rateLimitResets",
+        "codex.credits", "codex.creditLimit", "codex.rateLimitResets",
 
         "cursor.usage", "cursor.auto", "cursor.api", "cursor.grokBot", "cursor.trend",
         "cursor.onDemand", "cursor.today", "cursor.yesterday", "cursor.last30",
@@ -59,7 +59,7 @@ public static class DefaultLayout
         "antigravity.today", "antigravity.yesterday", "antigravity.last30",
         "claude.sonnet", "claude.rateLimitResets",
         "codex.spark", "codex.sparkWeekly",
-        "codex.credits", "codex.rateLimitResets",
+        "codex.credits", "codex.creditLimit", "codex.rateLimitResets",
         "cursor.grokBot", "cursor.onDemand", "cursor.requests", "cursor.credits",
         "cursor.today", "cursor.yesterday", "cursor.last30",
         "copilot.orgCredits", "copilot.orgSpend", "copilot.chat", "copilot.completions",
@@ -80,7 +80,8 @@ public static class DefaultLayout
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
-        .Except(["antigravity.argonWeekly", "claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly", "amp.agent", "amp.orbHours", "amp.free", "amp.credits"])
+        .Except(["antigravity.argonWeekly", "claude.rateLimitResets", "codex.creditLimit", "ollama.monthly",
+            "ollama.purchasedCredits", "muse.session", "muse.weekly", "amp.agent", "amp.orbHours", "amp.free", "amp.credits"])
         .Except(NewAccountMetricIds)
         .ToArray();
 

@@ -46,6 +46,7 @@ public partial class DashboardWindow : Window
     private DevinSignInView? _devinSignIn;
     private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
+    private GrokLoginView? _grokLoginEditor;
     private ClaudeSignInView? _claudeSignInEditor;
     private CursorLoginView? _cursorLoginEditor;
     public event Action<string?>? HotkeyChanged;
@@ -78,7 +79,9 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true || _claudeSignInEditor?.ResumeIfPending() == true || _cursorLoginEditor?.ResumeIfPending() == true)
+        if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true ||
+            _grokLoginEditor?.ResumeIfPending() == true || _claudeSignInEditor?.ResumeIfPending() == true ||
+            _cursorLoginEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
         else if (_devinSignIn?.IsPending != true)
         {
@@ -198,14 +201,17 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && _hubEditor is not null) return;
-        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null || _claudeSignInEditor is not null || _cursorLoginEditor is not null)) return;
+        if (preserveEditor && (_hubEditor is not null || _accountEditor is not null || _devinSignIn is not null ||
+            _codexLoginEditor is not null || _copilotLoginEditor is not null || _grokLoginEditor is not null ||
+            _claudeSignInEditor is not null || _cursorLoginEditor is not null)) return;
         _accountEditor = null;
+        _hubEditor?.Cancel();
         _hubEditor = null;
         _devinSignIn?.Cancel();
         _devinSignIn = null;
         _codexLoginEditor = null;
         _copilotLoginEditor = null;
+        _grokLoginEditor = null;
         _claudeSignInEditor = null;
         _cursorLoginEditor = null;
         ContentHost.Children.Clear();
@@ -665,6 +671,12 @@ public partial class DashboardWindow : Window
             ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
             _copilotLoginEditor = new CopilotLoginView(_container, copilot, (Style)FindResource("GhostButton"));
             ContentHost.Children.Add(_copilotLoginEditor);
+        }
+        if (runtime is OpenUsage.Core.Providers.Grok.GrokProvider grok)
+        {
+            ContentHost.Children.Add(SectionTitle("Grok Sign-In"));
+            _grokLoginEditor = new GrokLoginView(_container, grok, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_grokLoginEditor);
         }
         if (runtime is OpenUsage.Core.Providers.Cursor.CursorProvider cursor)
         {

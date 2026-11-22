@@ -4,6 +4,7 @@ using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Copilot;
+using OpenUsage.Core.Providers.Grok;
 using OpenUsage.Core.Providers.Cursor;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
@@ -129,6 +130,14 @@ public sealed class AppContainer : IDisposable
         _ = Data.RefreshProviderAsync(account.CardId, _cts.Token);
     }
 
+    public async Task ConnectGrokAsync(Action<string, Uri> showCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var grok = Providers.OfType<GrokProvider>().Single();
+        var snapshot = await grok.ConnectAsync(showCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
+
     public async Task ConnectCursorAsync(Action<Uri> openBrowser, CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
@@ -185,7 +194,8 @@ public sealed class AppContainer : IDisposable
         Data.ReplaceAccountSnapshot(snapshot);
     }
 
-    public IReadOnlyList<CliProxyHub> CliProxyHubs() => _hubConnections.List();
+    public IReadOnlyList<CliProxyHubSummary> CliProxyHubs() =>
+        _hubConnections.List().Select(hub => new CliProxyHubSummary(hub.Id, hub.Address)).ToArray();
 
     public async Task ConnectCliProxyHubAsync(string address, string key, CancellationToken ct)
     {
@@ -200,6 +210,8 @@ public sealed class AppContainer : IDisposable
     }
 
     public bool RemoveCliProxyHub(Guid id) => _hubConnections.Remove(id);
+
+    public sealed record CliProxyHubSummary(Guid Id, Uri Address);
 
     public void Dispose()
     {

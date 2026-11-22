@@ -109,6 +109,8 @@ If you hide every metric on Windows, the dashboard points you back to Customize 
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 
+On Windows, a Codex account shows **Credit Limit** when its ChatGPT workspace reports a member limit.
+
 OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
 
 Copilot sign-in keeps the same GitHub device code through a brief network interruption.
@@ -141,6 +143,8 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
 Connect Cursor from **Customize → Cursor → Sign In with Cursor**. Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
+
+Connect Grok from Customize without installing the Grok CLI.
 
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 
