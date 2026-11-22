@@ -1,5 +1,6 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Antigravity;
+using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Copilot;
@@ -78,6 +79,14 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public async Task ConnectClaudeAsync(Action<Uri> openBrowser, Task<string> pastedCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var claude = Providers.OfType<ClaudeProvider>().Single();
+        var snapshot = await claude.ConnectAsync(openBrowser, pastedCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
 
     public async Task ConnectAntigravityAsync(AntigravityProvider provider, Action<Uri> openBrowser, CancellationToken ct)
     {
