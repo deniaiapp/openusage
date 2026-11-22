@@ -8,6 +8,7 @@ using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Providers.Grok;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Tests;
@@ -78,14 +79,47 @@ public class MapperTests
         Assert.Contains(mapped.Lines, l => l is MetricLine.ProgressLine p && p.Label == "Session" && p.Used == 8);
     }
 
-    [Fact]
-    public void OpenRouterMapper_CreditsAndKeySpend()
+    [Theory]
+    [InlineData(50, 12.5, 37.5)]
+    [InlineData(10, 12.5, 0)]
+    [InlineData(0, 0, 0)]
+    [InlineData(50, -1, 50)]
+    public void OpenRouterMapper_PurchasedCreditsAreNotALimit(double credits, double usage, double expected)
     {
-        var credits = JsonUtil.ParseObject("""{ "total_usage": 12.5, "total_credits": 50 }""")!;
-        var lines = OpenRouterUsageMapper.CreditsLines(credits);
-        Assert.Contains(lines, l => l is MetricLine.ProgressLine p && p.Label == "Credits" && p.Used == 12.5 && p.Limit == 50);
-        Assert.Contains(lines, l => l is MetricLine.ValuesLine v && v.Label == "Balance" && v.Items[0].Number == 37.5);
+        var line = Assert.IsType<MetricLine.ValuesLine>(Assert.Single(
+            OpenRouterUsageMapper.CreditsLines(new JsonObject
+            {
+                ["total_credits"] = credits,
+                ["total_usage"] = usage
+            })));
+        Assert.Equal("Balance", line.Label);
+        var value = Assert.Single(line.Items);
+        Assert.Equal(MetricKind.Dollars, value.Kind);
+        Assert.Equal(expected, value.Number);
+    }
 
+    [Theory]
+    [InlineData("""{"total_usage":0}""")]
+    [InlineData("""{"total_credits":5}""")]
+    public void OpenRouterMapper_DoesNotShowABalanceWithIncompleteTotals(string body) =>
+        Assert.Empty(OpenRouterUsageMapper.CreditsLines(JsonUtil.ParseObject(body)!));
+
+    [Fact]
+    public void OpenRouterLayout_RemovesOnlyThePurchasedCreditsMeter()
+    {
+        using var http = new AppHttp(new HttpClient());
+        var provider = new OpenRouterProvider(http, new ApiKeyStore());
+        string[] retained = ["openrouter.balance", "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit"];
+        var ids = provider.WidgetDescriptors.Select(d => d.Id).ToArray();
+        Assert.Equal(retained, ids.Where(retained.Contains));
+        Assert.DoesNotContain("openrouter.credits", ids);
+        Assert.DoesNotContain("openrouter.credits", DefaultLayout.MetricIds);
+        Assert.DoesNotContain("openrouter.credits", DefaultLayout.PinnedMetricIds);
+    }
+
+    [Fact]
+    public void OpenRouterMapper_KeySpendAndLimit()
+    {
         var key = JsonUtil.ParseObject("""{ "usage_daily": 1.25, "is_free_tier": false, "limit": 10, "limit_remaining": 4 }""")!;
         var metrics = OpenRouterUsageMapper.KeyMetrics(key);
         Assert.Equal("Pay as you go", metrics.Plan);
@@ -140,6 +174,38 @@ public class MapperTests
         Assert.Contains(lines, l => l is MetricLine.ProgressLine p && p.Label == "Session" && p.Used == 11);
         Assert.Contains(lines, l => l is MetricLine.ProgressLine p && p.Label == "Weekly" && p.Used == 44);
         Assert.Contains(lines, l => l is MetricLine.ProgressLine p && p.Label == "Web searches");
+    }
+
+    [Fact]
+    public void ZaiMapper_MonthlyTokenWindowKeepsItsDurationAndUsesTheLongWindowRow()
+    {
+        var quota = JsonUtil.ParseObject("""
+            {"data":{"limits":[
+                {"type":"TOKENS_LIMIT","unit":5,"number":1,"percentage":44,"resetAt":"2026-12-01T00:00:00Z"},
+                {"type":"CREDIT_LIMIT","unit":3,"number":5,"percentage":11}
+            ]}}
+            """)!;
+
+        Assert.Collection(ZaiUsageMapper.MapQuota(quota), longWindow =>
+        {
+            var line = Assert.IsType<MetricLine.ProgressLine>(longWindow);
+            Assert.Equal("Weekly", line.Label);
+            Assert.Equal(44, line.Used);
+            Assert.Equal(MetricPeriod.MonthMs, line.PeriodDurationMs);
+            Assert.Equal(DateTimeOffset.Parse("2026-12-01T00:00:00Z"), line.ResetsAt);
+        }, session => Assert.Equal("Session", session.Label));
+    }
+
+    [Theory]
+    [InlineData("0.00000000001")]
+    [InlineData("1e300")]
+    [InlineData("1000000")]
+    public void ZaiMapper_RejectsUnrepresentableTokenWindows(string number)
+    {
+        var quota = JsonUtil.ParseObject($$"""
+            {"limits":[{"type":"TOKENS_LIMIT","unit":5,"number":{{number}},"percentage":44,"nextResetTime":1796083200000}]}
+            """)!;
+        Assert.Throws<InvalidOperationException>(() => ZaiUsageMapper.MapQuota(quota));
     }
 
     [Fact]
