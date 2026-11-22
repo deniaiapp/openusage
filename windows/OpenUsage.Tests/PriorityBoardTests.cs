@@ -47,6 +47,36 @@ public sealed class PriorityBoardTests
         finally { directory.Delete(recursive: true); }
     }
 
+    [Fact]
+    public async Task RunningOutSortsByTimeToLimitBeforeFallingBackToRemainingQuota()
+    {
+        var directory = Directory.CreateTempSubdirectory("openusage-priority-");
+        try
+        {
+            var now = new DateTimeOffset(2026, 11, 21, 12, 0, 0, TimeSpan.Zero);
+            var active = new Runtime("test", ("expired", 95), ("low", 99), ("slower", 75), ("faster", 50))
+            {
+                Windows = new Dictionary<string, (DateTimeOffset, long)>
+                {
+                    ["expired"] = (now.AddMinutes(-1), MetricPeriod.SessionMs),
+                    ["slower"] = (now.AddMinutes(30), MetricPeriod.SessionMs),
+                    ["faster"] = (now.AddHours(5).AddMinutes(-20), MetricPeriod.SessionMs)
+                }
+            };
+            var settings = AppSettings.Load(Path.Combine(directory.FullName, "settings.json"));
+            settings.EnabledProviders.Add("test");
+            settings.EnabledMetrics.UnionWith(["expired", "low", "slower", "faster"]);
+            var layout = new LayoutStore(settings, [active]);
+            var store = new WidgetDataStore(layout, settings, directory.FullName);
+
+            await store.RefreshAllAsync(false);
+
+            Assert.Equal(new[] { "faster", "slower", "low", "expired" },
+                PriorityBoard.Make(layout, store, now).RunningOut.Select(m => m.Descriptor.Id));
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
     private sealed class Runtime(string id, params (string Id, double Used)[] metrics) : IProviderRuntime
     {
         public Provider Provider { get; } = new(id, id, id);
@@ -54,13 +84,20 @@ public sealed class PriorityBoardTests
             metrics.Select(metric => WidgetDescriptor.Percent(metric.Id, Provider, metric.Id)).ToList();
 
         public bool Fail { get; set; }
+        public IReadOnlyDictionary<string, (DateTimeOffset Reset, long PeriodMs)> Windows { get; init; } =
+            new Dictionary<string, (DateTimeOffset, long)>();
         public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken) => Task.FromResult(true);
 
         public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken) =>
             Task.FromResult(Fail
                 ? ProviderSnapshot.Error(Provider, "Fixture retry.")
                 : ProviderSnapshot.Make(Provider, null,
-                    metrics.Select(metric => MetricLine.Progress(metric.Id, metric.Used, 100, ProgressFormat.Percent)).ToList(),
+                    metrics.Select(Line).ToList(),
                     DateTimeOffset.UtcNow));
+
+        private MetricLine Line((string Id, double Used) metric) =>
+            Windows.TryGetValue(metric.Id, out var window)
+                ? MetricLine.Progress(metric.Id, metric.Used, 100, ProgressFormat.Percent, window.Reset, window.PeriodMs)
+                : MetricLine.Progress(metric.Id, metric.Used, 100, ProgressFormat.Percent);
     }
 }
