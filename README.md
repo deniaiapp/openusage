@@ -92,6 +92,8 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
 Priority also lists unpinned limits you can use before they reset.
 
+On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App
