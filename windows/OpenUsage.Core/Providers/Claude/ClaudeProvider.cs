@@ -149,9 +149,8 @@ public sealed class ClaudeProvider : IProviderRuntime
         return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now, warning);
     }
 
-    /// The Rate Limit Resets row, asking Anthropic at most once an hour per login. A failed attempt keeps
-    /// the previous line and still counts as the hour's check, so an outage or 429 is retried an hour
-    /// later rather than on every refresh.
+    /// The Rate Limit Resets row, asking Anthropic at most once an hour per login. A connection failure
+    /// before the first response leaves the check due for the next refresh.
     private async Task<MetricLine?> ResetGrantsLineAsync(ClaudeOAuth oauth, string usageUrl, CancellationToken ct)
     {
         var fingerprint = CredentialFingerprint(oauth);
@@ -170,6 +169,12 @@ public sealed class ClaudeProvider : IProviderRuntime
         {
             // A cancelled refresh is not a verdict on the endpoint; let the next refresh try again.
             if (ct.IsCancellationRequested) return held;
+            if (previous.Fingerprint is null &&
+                ex is ProviderRequestException { InnerException: HttpRequestException { StatusCode: null } or OperationCanceledException })
+            {
+                AppLog.Warn("claude", $"reset grants lookup failed; retrying on the next refresh: {ex.Message}");
+                return held;
+            }
             AppLog.Warn("claude", $"reset grants lookup failed; retrying in an hour: {ex.Message}");
             _resetGrantsCheck = (fingerprint, now, previous.Line);
             return held;
