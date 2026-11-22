@@ -115,6 +115,7 @@ public sealed class CodexDeviceLoginTests
                 Exchange => (200, replacing ? TokenResponse : $$"""{"access_token":"{{oldAccess}}","refresh_token":"original-refresh"}"""),
                 Usage => ReadUsage(request),
                 "/backend-api/wham/rate-limit-reset-credits" => (404, "{}"),
+                "/backend-api/wham/analytics/daily-workspace-usage-counts" => ReadUnavailableHistory(request),
                 _ => throw new InvalidOperationException()
             });
             var provider = new CodexProvider(http, new ApiKeyStore(path));
@@ -130,6 +131,13 @@ public sealed class CodexDeviceLoginTests
             Assert.Equal(1, renewals);
             Assert.False((await new CodexProvider(http, new ApiKeyStore(path)).RefreshAsync()).IsError);
             Assert.Equal(1, renewals);
+
+            (int, string) ReadUnavailableHistory(HttpRequestMessage req)
+            {
+                Assert.Equal(rotated ? "rotated-access" : oldAccess, req.Headers.Authorization?.Parameter);
+                Assert.Equal("fixture-account", Assert.Single(req.Headers.GetValues("ChatGPT-Account-Id")));
+                return (503, "{}");
+            }
 
             (int, string) Renew(HttpRequestMessage req, string form)
             {
