@@ -59,6 +59,8 @@ public partial class DashboardWindow : Window
         InitializeComponent();
         VersionLabel.Text = $"OpenUsage {AppContainer.Version}";
         _container.Data.Changed += () => Dispatcher.Invoke(() => Render(preserveEditor: true));
+        _container.CliProxyHubSyncFinished += () =>
+            Dispatcher.InvokeAsync(() => _hubEditor?.RefreshSyncErrors());
         _clock = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _clock.Tick += (_, _) => Render(preserveEditor: true);
         _clock.Start();
