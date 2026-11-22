@@ -133,6 +133,40 @@ public class ClaudeUpstreamTests
 
     // MARK: - Provider cadence
 
+    [Theory]
+    [InlineData(true, 2)]
+    [InlineData(false, 1)]
+    public async Task Provider_RetriesFirstResetGrantsReadIfItCouldNotConnect(bool lostConnection, int expectedCalls)
+    {
+        using var dir = new TempDir();
+        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
+        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-token"}}""");
+        var handler = new FakeAnthropic
+        {
+            DisconnectResetGrants = lostConnection,
+            FailResetGrants = !lostConnection
+        };
+        var clock = Now;
+        using var http = new AppHttp(new HttpClient(handler));
+        var provider = new ClaudeProvider(http, store, () => clock);
+
+        var first = await provider.RefreshAsync();
+        Assert.NotNull(first.Line("Session"));
+        Assert.Null(first.Line("Rate Limit Resets"));
+        Assert.Equal(1, handler.ResetGrantCalls);
+
+        handler.DisconnectResetGrants = false;
+        handler.FailResetGrants = false;
+        clock = Now.AddMinutes(5);
+        var next = await provider.RefreshAsync();
+        Assert.Equal(lostConnection, next.Line("Rate Limit Resets") is not null);
+        Assert.Equal(expectedCalls, handler.ResetGrantCalls);
+
+        clock = Now.AddMinutes(10);
+        await provider.RefreshAsync();
+        Assert.Equal(expectedCalls, handler.ResetGrantCalls);
+    }
+
     [Fact]
     public async Task Provider_ChecksResetGrantsHourlyAndThePlanOncePerToken()
     {
@@ -205,6 +239,7 @@ public class ClaudeUpstreamTests
         public int ResetGrantCalls;
         public int ProfileCalls;
         public bool FailResetGrants;
+        public bool DisconnectResetGrants;
         public string ResetCount = "1";
         public List<string> UsageAgents { get; } = [];
 
@@ -222,6 +257,8 @@ public class ClaudeUpstreamTests
             {
                 ResetGrantCalls++;
                 UsageAgents.Add(string.Join(" ", request.Headers.GetValues("User-Agent")));
+                if (DisconnectResetGrants)
+                    throw new HttpRequestException(HttpRequestError.ConnectionError, "Fixture connection failure");
                 status = FailResetGrants ? HttpStatusCode.TooManyRequests : HttpStatusCode.OK;
                 body = $$"""{ "cedar_ember": { "eligible": true, "grants": [ { "resets_left": {{ResetCount}}, "ends_at": "2026-12-01T00:00:00Z" } ] } }""";
             }
