@@ -145,7 +145,7 @@ Claude Extra Usage uses the account's billing currency on Windows, including in 
 
 Connect Cursor from **Customize → Cursor → Sign In with Cursor**. OpenUsage no longer reads or changes the Cursor app's SQLite database or Credential Manager tokens; existing local-only connections need to sign in once in Customize. Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
 
-Connect Grok from Customize without installing the Grok CLI.
+Connect Grok from Customize without installing the Grok CLI. OpenUsage no longer reads Grok CLI credentials; existing CLI-only connections need to sign in once in Customize.
 
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 

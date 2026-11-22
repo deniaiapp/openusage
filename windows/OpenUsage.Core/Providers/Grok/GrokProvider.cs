@@ -1,5 +1,3 @@
-using System.Net;
-using System.Text;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
@@ -7,48 +5,6 @@ using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Grok;
-
-public sealed class GrokAuthState
-{
-    public string Token { get; set; } = "";
-    public string? RefreshToken { get; set; }
-    public string ClientId { get; set; } = GrokAuthStore.DefaultClientId;
-    public string Path { get; set; } = "";
-    public JsonObject? Root { get; set; }
-    public string EntryKey { get; set; } = "";
-}
-
-public sealed class GrokAuthStore
-{
-    public const string DefaultClientId = "b1a00492-073a-47ea-816f-4c329264a828";
-    public static string AuthPath => AppPaths.Expand("~/.grok/auth.json");
-
-    public IReadOnlyList<GrokAuthState> LoadCandidates()
-    {
-        if (!File.Exists(AuthPath)) return [];
-        var root = JsonUtil.ParseObject(File.ReadAllText(AuthPath));
-        if (root is null) return [];
-        var list = new List<GrokAuthState>();
-        foreach (var property in root)
-        {
-            if (property.Value is not JsonObject entry) continue;
-            var token = JsonUtil.String(entry["key"]);
-            if (string.IsNullOrEmpty(token)) continue;
-            list.Add(new GrokAuthState
-            {
-                Token = token,
-                RefreshToken = JsonUtil.String(entry["refresh_token"]) ?? JsonUtil.String(entry["refresh"]),
-                ClientId = JsonUtil.String(entry["oidc_client_id"]) ?? DefaultClientId,
-                Path = AuthPath,
-                Root = root,
-                EntryKey = property.Key
-            });
-        }
-        return list;
-    }
-
-    public bool HasUsableCredentials() => LoadCandidates().Count > 0;
-}
 
 public static class GrokCreditsConfigDecoder
 {
@@ -123,7 +79,6 @@ public sealed partial class GrokProvider : IProviderRuntime
     public static readonly Uri RefreshUrl = new("https://auth.x.ai/oauth2/token");
     public static readonly Uri CreditsConfigUrl = new("https://cli-chat-proxy.grok.com/v1/billing?format=credits");
 
-    private readonly GrokAuthStore _auth = new();
     private readonly AppHttp _http;
 
     public GrokProvider(AppHttp http, ApiKeyStore? keys = null)
@@ -143,7 +98,7 @@ public sealed partial class GrokProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(HasAppCredential || _auth.HasUsableCredentials());
+        Task.FromResult(HasAppCredential);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
@@ -153,37 +108,7 @@ public sealed partial class GrokProvider : IProviderRuntime
             catch (Exception ex) when (!cancellationToken.IsCancellationRequested) { return ProviderSnapshot.Error(Provider, ex); }
         }
 
-        var candidates = _auth.LoadCandidates();
-        if (candidates.Count == 0)
-            return ProviderSnapshot.Error(Provider, "Sign in to Grok in Customize → Grok.");
-        Exception? last = null;
-        foreach (var auth in candidates)
-        {
-            try { return await ProbeAsync(auth, cancellationToken); }
-            catch (Exception ex)
-            {
-                last = ex;
-                AppLog.Warn("grok", $"candidate failed: {ex.Message}");
-            }
-        }
-        return ProviderSnapshot.Error(Provider, last ?? new InvalidOperationException("Grok refresh failed."));
-    }
-
-    internal async Task<ProviderSnapshot> ProbeAsync(GrokAuthState auth, CancellationToken ct)
-    {
-        var token = auth.Token;
-        if (!string.IsNullOrEmpty(auth.RefreshToken) && Jwt.Expiration(token) is { } exp &&
-            exp - DateTimeOffset.UtcNow <= TimeSpan.FromMinutes(5))
-        {
-            try { token = await RefreshTokenAsync(auth, ct); }
-            catch (ProviderRequestException ex) when (!ct.IsCancellationRequested && exp > DateTimeOffset.UtcNow)
-            {
-                AppLog.Warn("grok", $"early token renewal failed; keeping the current token: {ex.Message}");
-            }
-        }
-
-        var credits = await ReadCreditsAsync(token, ct);
-        return await MapUsageAsync(credits, token, "Grok auth expired. Run `grok login` again.", ct);
+        return ProviderSnapshot.Error(Provider, "Sign in to Grok in Customize → Grok.");
     }
 
     private Task<AppHttpResponse> ReadCreditsAsync(string token, CancellationToken ct) =>
@@ -220,25 +145,6 @@ public sealed partial class GrokProvider : IProviderRuntime
 
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now, warning);
-    }
-
-    private async Task<string> RefreshTokenAsync(GrokAuthState auth, CancellationToken ct)
-    {
-        var body = $"grant_type=refresh_token&client_id={WebUtility.UrlEncode(auth.ClientId)}&refresh_token={WebUtility.UrlEncode(auth.RefreshToken)}";
-        var response = await _http.SendAsync(new AppHttpRequest(
-            "POST", RefreshUrl,
-            new Dictionary<string, string> { ["Content-Type"] = "application/x-www-form-urlencoded" },
-            Encoding.UTF8.GetBytes(body), 15), ct);
-        if (response.StatusCode is 400 or 401 or 403 && JsonUtil.String(response.Json?["error"]) == "invalid_grant")
-            throw new ProviderRequestException("Grok auth expired. Run `grok login` again.");
-        if (response.StatusCode == 429)
-            throw new ProviderRequestException("Grok is limiting sign-in requests. Try again later.");
-        if (!response.IsSuccess)
-            throw new ProviderRequestException($"Grok token renewal failed (HTTP {response.StatusCode}). Try again later.");
-        var access = JsonUtil.String(response.Json?["access_token"]);
-        if (string.IsNullOrWhiteSpace(access))
-            throw new ProviderRequestException("Grok returned an invalid sign-in response. Try again later.");
-        return access;
     }
 
     private static Dictionary<string, string> AuthHeaders(string token) => new()

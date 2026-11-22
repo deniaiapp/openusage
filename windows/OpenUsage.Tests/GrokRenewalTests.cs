@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using OpenUsage.Core.Providers.Grok;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 using Xunit;
 
@@ -9,13 +11,13 @@ namespace OpenUsage.Tests;
 public sealed class GrokRenewalTests
 {
     [Theory]
-    [InlineData(400, """{"error":"invalid_grant"}""", "Run `grok login` again")]
-    [InlineData(401, """{"error":"invalid_grant"}""", "Run `grok login` again")]
-    [InlineData(403, """{"error":"invalid_grant"}""", "Run `grok login` again")]
+    [InlineData(400, """{"error":"invalid_grant"}""", "Sign in again in Customize")]
+    [InlineData(401, """{"error":"invalid_grant"}""", "Sign in again in Customize")]
+    [InlineData(403, """{"error":"invalid_grant"}""", "Sign in again in Customize")]
     [InlineData(401, """{"error":"invalid_client"}""", "renewal failed (HTTP 401)")]
-    [InlineData(429, """{"error":"temporarily_unavailable"}""", "limiting sign-in requests")]
-    [InlineData(503, """{"error":"invalid_grant"}""", "renewal failed (HTTP 503)")]
-    [InlineData(200, """{"access_token":" "}""", "invalid sign-in response")]
+    [InlineData(429, """{"error":"temporarily_unavailable"}""", "renewal failed (HTTP 429)")]
+    [InlineData(503, """{"error":"temporarily_unavailable"}""", "renewal failed (HTTP 503)")]
+    [InlineData(200, """{"access_token":" "}""", "invalid sign-in tokens")]
     public async Task RenewalFailureOnlyAsksForLoginWhenTheGrantWasRefused(int status, string body, string expected)
     {
         using var http = Http(request =>
@@ -24,44 +26,56 @@ public sealed class GrokRenewalTests
             return Response(status, body);
         });
 
-        var provider = new GrokProvider(http);
         var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
-            provider.ProbeAsync(Auth(DateTimeOffset.UtcNow.AddMinutes(-1)), default));
+            new GrokDeviceLogin(http).RenewAsync(Auth(DateTimeOffset.UtcNow.AddMinutes(-1)), default));
 
         Assert.Contains(expected, error.Message);
-        Assert.Equal(expected.StartsWith("Run", StringComparison.Ordinal),
-            error.Message.Contains("Run `grok login` again"));
+        Assert.Equal(expected.StartsWith("Sign in", StringComparison.Ordinal),
+            error.Message.Contains("Sign in again in Customize"));
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task KeepsStillValidTokenDuringAnOutageButUsesNewTokenAfterSuccessfulRenewal(bool renewalSucceeds)
+    [WindowsFact]
+    public async Task KeepsStillValidAppTokenDuringAnOutageButPersistsSuccessfulRenewal()
     {
-        var auth = Auth(DateTimeOffset.UtcNow.AddMinutes(4));
-        var calls = new List<Uri>();
-        using var http = Http(request =>
+        var dir = Directory.CreateTempSubdirectory();
+        try
         {
-            calls.Add(request.RequestUri!);
-            if (request.RequestUri == GrokProvider.RefreshUrl)
+            var path = Path.Combine(dir.FullName, "keys.bin");
+            var keys = new ApiKeyStore(path);
+            var auth = Auth(DateTimeOffset.UtcNow.AddMinutes(4));
+            var renewalSucceeds = false;
+            var calls = new List<Uri>();
+            using var http = Http(request =>
             {
-                if (!renewalSucceeds) throw new HttpRequestException("fixture offline");
-                return Response(200, """{"access_token":"fixture-new-token"}""");
+                calls.Add(request.RequestUri!);
+                if (request.RequestUri == GrokProvider.RefreshUrl)
+                {
+                    if (!renewalSucceeds) throw new HttpRequestException("fixture offline");
+                    return Response(200, """{"access_token":"fixture-new-token","expires_in":3600}""");
+                }
+                Assert.Equal(renewalSucceeds ? "fixture-new-token" : auth.AccessToken, request.Headers.Authorization?.Parameter);
+                return request.RequestUri == GrokProvider.CreditsConfigUrl
+                    ? Response(200, """
+                        {"config":{"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-11-17T00:00:00Z","end":"2026-11-24T00:00:00Z"},"creditUsagePercent":25}}
+                        """)
+                    : Response(200, """{"subscription_tier_display":"Fixture Plan"}""");
+            });
+
+            keys.Set("grok.oauth", JsonSerializer.Serialize(auth));
+            foreach (var succeeds in new[] { false, true })
+            {
+                renewalSucceeds = succeeds;
+                calls.Clear();
+                var snapshot = await new GrokProvider(http, new ApiKeyStore(path)).RefreshAsync();
+                Assert.False(snapshot.IsError);
+                Assert.Equal("Fixture Plan", snapshot.Plan);
+                Assert.NotNull(snapshot.Line("Weekly limit"));
+                Assert.Equal(new[] { GrokProvider.RefreshUrl, GrokProvider.CreditsConfigUrl, GrokProvider.SettingsUrl }, calls);
+                var saved = JsonSerializer.Deserialize<GrokOAuth>(new ApiKeyStore(path).Get("grok.oauth")!);
+                Assert.Equal(succeeds ? "fixture-new-token" : auth.AccessToken, saved!.AccessToken);
             }
-            Assert.Equal(renewalSucceeds ? "fixture-new-token" : auth.Token, request.Headers.Authorization?.Parameter);
-            return request.RequestUri == GrokProvider.CreditsConfigUrl
-                ? Response(200, """
-                    {"config":{"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-11-17T00:00:00Z","end":"2026-11-24T00:00:00Z"},"creditUsagePercent":25}}
-                    """)
-                : Response(200, """{"subscription_tier_display":"Fixture Plan"}""");
-        });
-
-        var snapshot = await new GrokProvider(http).ProbeAsync(auth, default);
-
-        Assert.False(snapshot.IsError);
-        Assert.Equal("Fixture Plan", snapshot.Plan);
-        Assert.NotNull(snapshot.Line("Weekly limit"));
-        Assert.Equal(new[] { GrokProvider.RefreshUrl, GrokProvider.CreditsConfigUrl, GrokProvider.SettingsUrl }, calls);
+        }
+        finally { dir.Delete(recursive: true); }
     }
 
     [Fact]
@@ -72,19 +86,17 @@ public sealed class GrokRenewalTests
             Assert.Equal(GrokProvider.RefreshUrl, request.RequestUri);
             throw new HttpRequestException("fixture offline");
         });
-        var provider = new GrokProvider(http);
-
         var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
-            provider.ProbeAsync(Auth(DateTimeOffset.UtcNow.AddMinutes(-1)), default));
+            new GrokDeviceLogin(http).RenewAsync(Auth(DateTimeOffset.UtcNow.AddMinutes(-1)), default));
 
         Assert.IsType<HttpRequestException>(error.InnerException);
         Assert.DoesNotContain("grok login", error.Message);
     }
 
-    private static GrokAuthState Auth(DateTimeOffset expiry)
+    private static GrokOAuth Auth(DateTimeOffset expiry)
     {
         var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{{\"exp\":{expiry.ToUnixTimeSeconds()}}}")).TrimEnd('=');
-        return new GrokAuthState { Token = $"fixture.{payload}.signature", RefreshToken = "fixture-refresh-token" };
+        return new GrokOAuth($"fixture.{payload}.signature", "fixture-refresh-token", expiry);
     }
 
     private static AppHttp Http(Func<HttpRequestMessage, HttpResponseMessage> send) => new(new HttpClient(new StubHandler(send)));
@@ -96,5 +108,13 @@ public sealed class GrokRenewalTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
             Task.FromResult(send(request));
+    }
+
+    private sealed class WindowsFactAttribute : FactAttribute
+    {
+        public WindowsFactAttribute()
+        {
+            if (!OperatingSystem.IsWindows()) Skip = "Windows DPAPI is required.";
+        }
     }
 }

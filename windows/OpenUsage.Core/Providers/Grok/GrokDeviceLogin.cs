@@ -25,7 +25,7 @@ internal sealed record GrokOAuth(string AccessToken, string RefreshToken, DateTi
 internal sealed class GrokDeviceLogin(AppHttp http, Func<TimeSpan, CancellationToken, Task>? wait = null)
 {
     private static readonly Uri StartUrl = new("https://auth.x.ai/oauth2/device/code");
-    private const string ClientId = GrokAuthStore.DefaultClientId;
+    internal const string ClientId = "b1a00492-073a-47ea-816f-4c329264a828";
     private const string SignInFailed = "xAI device sign-in failed. Try again.";
     private const string CodeExpired = "The xAI sign-in code expired. Start sign-in again.";
     private readonly Func<TimeSpan, CancellationToken, Task> _wait = wait ?? Task.Delay;
