@@ -32,7 +32,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Claude | `%USERPROFILE%\.claude\.credentials.json`, Windows Credential Manager (`Claude Code-credentials`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | Codex | **Customize → Codex → Sign In with ChatGPT** (requires device code authorization enabled in ChatGPT), or an existing Codex CLI sign-in |
 | Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |
-| Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com), or existing editor and GitHub CLI credentials |
+| Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com) |
 | Grok | `%USERPROFILE%\.grok\auth.json` |
 | Muse Code | **Customize → Muse Code → Sign In with Meta** |
 | OpenCode | Go API key in Customize, or `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |

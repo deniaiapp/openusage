@@ -135,6 +135,8 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 
 Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
+Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
+
 To connect Antigravity on Windows, choose **Sign In with Google** in Customize.
 
 Windows shows available Z.ai Limit Resets when you expand the account card.
