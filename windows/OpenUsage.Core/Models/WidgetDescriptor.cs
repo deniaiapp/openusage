@@ -8,6 +8,7 @@ public sealed record WidgetDescriptor
     public required WidgetData Sample { get; init; }
     public bool Pinnable { get; init; } = true;
     public bool IsSpendTile { get; init; }
+    internal Func<string?, string?>? PlanTitle { get; init; }
 
     public string Title => Sample.Title;
 
