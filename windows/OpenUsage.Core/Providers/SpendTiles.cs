@@ -71,25 +71,6 @@ public static class SpendTileMapper
             .Concat(WidgetDescriptor.SpendTiles(provider, spendNote))
             .ToList();
 
-    public static async Task AppendScanAsync(
-        List<MetricLine> lines,
-        Func<LogUsageScan?> scan,
-        string trendNote,
-        string tag,
-        CancellationToken cancellationToken = default)
-    {
-        LogUsageScan? result = null;
-        try
-        {
-            result = await Task.Run(scan, cancellationToken);
-            AppendAll(result, lines, DateTimeOffset.Now, trendNote);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Warn(tag, $"usage history scan failed: {ex.Message}");
-        }
-    }
-
     public const int PreviousDays = 30;
 
     public static void AppendAll(
