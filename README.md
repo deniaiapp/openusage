@@ -90,6 +90,7 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
+Priority also lists unpinned limits you can use before they reset.
 
 ```powershell
 cd windows

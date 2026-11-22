@@ -16,6 +16,8 @@ dotnet run --project OpenUsage.App
 
 The app lives in the notification area (system tray). Left-click the icon to open the dashboard popover. Right-click for Options.
 
+In **Priority**, **Use It or Lose It** shows unpinned multi-day limits with most of their quota left and a reset within 24 hours. Turn it off in **Settings → Priority Limits**.
+
 On first launch a welcome screen lists the AI tools already signed in on this PC. Pick the ones to follow and click **Connect Selected**, or **Skip for Now** and turn providers on later in **Customize**. Closing the welcome window quits the app; it shows again next time.
 
 ## What it reads
