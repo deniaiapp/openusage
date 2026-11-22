@@ -86,24 +86,9 @@ public sealed class LayoutStore
             SeedAccountLayout(runtime, providerId, firstTemplateAccount);
             SetProviderEnabled(id, true);
         }
-        if (SeedNewAccountMetrics(runtime, providerId)) _settings.Save();
+        else if (SeedNewAccountMetrics(runtime, providerId))
+            _settings.Save();
         _registry = Registry.From(providers);
-    }
-
-    private bool SeedNewAccountMetrics(IProviderRuntime runtime, string providerId)
-    {
-        var seeded = _settings.SeededDefaultMetrics!;
-        var changed = false;
-        foreach (var descriptor in runtime.WidgetDescriptors)
-        {
-            var templateId = providerId + descriptor.Id[runtime.Provider.Id.Length..];
-            if (!DefaultLayout.NewAccountMetricIds.Contains(templateId) || !seeded.Add(descriptor.Id))
-                continue;
-            if (_settings.EnabledMetrics.Add(descriptor.Id) && DefaultLayout.ExpandedMetricIds.Contains(templateId))
-                _settings.ExpandedMetrics.Add(descriptor.Id);
-            changed = true;
-        }
-        return changed;
     }
 
     private void SeedAccountLayout(IProviderRuntime runtime, string providerId, bool inheritPins = false)
@@ -120,6 +105,23 @@ public sealed class LayoutStore
                 pins < MaxPinsPerProvider && _settings.PinnedMetrics.Add(descriptor.Id))
                 pins++;
         }
+        SeedNewAccountMetrics(runtime, providerId);
+    }
+
+    private bool SeedNewAccountMetrics(IProviderRuntime runtime, string providerId)
+    {
+        var seeded = _settings.SeededDefaultMetrics!;
+        var changed = false;
+        foreach (var descriptor in runtime.WidgetDescriptors)
+        {
+            var templateId = providerId + descriptor.Id[runtime.Provider.Id.Length..];
+            if (!DefaultLayout.NewAccountMetricIds.Contains(templateId) || !seeded.Add(descriptor.Id))
+                continue;
+            if (_settings.EnabledMetrics.Add(descriptor.Id) && DefaultLayout.ExpandedMetricIds.Contains(templateId))
+                _settings.ExpandedMetrics.Add(descriptor.Id);
+            changed = true;
+        }
+        return changed;
     }
 
     internal void RemoveAccount(string id)
