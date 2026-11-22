@@ -41,6 +41,8 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
+Z.ai shows token windows of a day or longer on the Weekly row, with the reported reset time.
+
 If a manual and scheduled refresh overlap for one provider, OpenUsage shares the same request
 instead of renewing that sign-in twice.
 
