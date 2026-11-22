@@ -13,10 +13,12 @@ public static class AntigravityMetric
 {
     public const string GeminiId = "antigravity.geminiPro";
     public const string GeminiWeeklyId = "antigravity.geminiWeekly";
+    public const string ArgonWeeklyId = "antigravity.argonWeekly";
     public const string ClaudeId = "antigravity.claude";
     public const string ClaudeWeeklyId = "antigravity.claudeWeekly";
     public const string SessionLabel = "Session";
     public const string WeeklyLabel = "Weekly";
+    public const string ArgonWeeklyLabel = "Argon Weekly";
     public const string ClaudeLabel = "Claude";
     public const string ClaudeWeeklyLabel = "Claude Weekly";
 }
@@ -166,6 +168,8 @@ public sealed class AntigravityAuthStore
 
 public static class AntigravityUsageMapper
 {
+    private const string ArgonGroupName = "Gemini 4 Argon";
+
     public static readonly (string BucketId, string Label, long PeriodMs)[] SummaryBuckets =
     [
         ("gemini-5h", AntigravityMetric.SessionLabel, MetricPeriod.SessionMs),
@@ -179,10 +183,16 @@ public static class AntigravityUsageMapper
         var groups = JsonUtil.Array(JsonUtil.Object(root["response"])?["groups"]) ?? JsonUtil.Array(root["groups"]);
         if (groups is null) return null;
         var pooled = new Dictionary<string, (double Fraction, DateTimeOffset? Reset)>(StringComparer.Ordinal);
+        var argonWeekly = new List<JsonObject>();
         foreach (var group in groups.OfType<JsonObject>())
         {
-            if (JsonUtil.String(group["displayName"]) == "Gemini 4 Argon") continue;
             if (JsonUtil.Array(group["buckets"]) is not { } buckets) continue;
+            if (JsonUtil.String(group["displayName"]) == ArgonGroupName)
+            {
+                argonWeekly.AddRange(buckets.OfType<JsonObject>()
+                    .Where(bucket => JsonUtil.String(bucket["window"]) == "weekly"));
+                continue;
+            }
             foreach (var bucket in buckets.OfType<JsonObject>())
             {
                 var id = JsonUtil.String(bucket["bucketId"]);
@@ -192,10 +202,45 @@ public static class AntigravityUsageMapper
                 pooled[id] = (fraction, Iso8601.Parse(JsonUtil.String(bucket["resetTime"])));
             }
         }
-        return SummaryBuckets
+        var lines = SummaryBuckets
             .Where(spec => pooled.ContainsKey(spec.BucketId))
             .Select(spec => Line(spec.Label, pooled[spec.BucketId].Fraction, pooled[spec.BucketId].Reset, spec.PeriodMs))
             .ToList();
+        if (ParseArgonWeekly(argonWeekly) is { } argon)
+        {
+            var index = lines.FindIndex(line => line.Label is AntigravityMetric.ClaudeLabel or AntigravityMetric.ClaudeWeeklyLabel);
+            lines.Insert(index < 0 ? lines.Count : index, argon);
+        }
+        return lines;
+    }
+
+    private static MetricLine? ParseArgonWeekly(List<JsonObject> buckets)
+    {
+        if (buckets.Count == 0) return null;
+        if (buckets.Count != 1
+            || JsonUtil.String(buckets[0]["bucketId"]) is not { } id
+            || SummaryBuckets.Any(spec => spec.BucketId == id))
+        {
+            AppLog.Warn("antigravity", "Argon quota has no unambiguous separate weekly bucket.");
+            return null;
+        }
+        var bucket = buckets[0];
+        if (bucket["disabled"] is { } disabled)
+        {
+            if (disabled is not JsonValue value || !value.TryGetValue<bool>(out var flag))
+            {
+                AppLog.Warn("antigravity", "Argon weekly quota has an invalid disabled flag.");
+                return null;
+            }
+            if (flag) return null;
+        }
+        if (JsonUtil.Number(bucket["remainingFraction"]) is not double fraction || !double.IsFinite(fraction))
+        {
+            AppLog.Warn("antigravity", "Argon weekly quota has no usable remaining fraction.");
+            return null;
+        }
+        return Line(AntigravityMetric.ArgonWeeklyLabel, fraction,
+            Iso8601.Parse(JsonUtil.String(bucket["resetTime"])), MetricPeriod.WeekMs);
     }
 
     public static MetricLine Line(string label, double remainingFraction, DateTimeOffset? reset, long periodMs)
@@ -244,6 +289,7 @@ public sealed partial class AntigravityProvider : IProviderRuntime
     [
         WidgetDescriptor.Percent(AntigravityMetric.GeminiId, Provider, AntigravityMetric.SessionLabel, sessionStartSignal: SessionStartSignal.ZeroUsage),
         WidgetDescriptor.Percent(AntigravityMetric.GeminiWeeklyId, Provider, AntigravityMetric.WeeklyLabel),
+        WidgetDescriptor.Percent(AntigravityMetric.ArgonWeeklyId, Provider, AntigravityMetric.ArgonWeeklyLabel),
         WidgetDescriptor.Percent(AntigravityMetric.ClaudeId, Provider, AntigravityMetric.ClaudeLabel, sessionStartSignal: SessionStartSignal.ZeroUsage),
         WidgetDescriptor.Percent(AntigravityMetric.ClaudeWeeklyId, Provider, AntigravityMetric.ClaudeWeeklyLabel)
     ];

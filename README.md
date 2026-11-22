@@ -93,6 +93,8 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 
+OpenRouter management keys show the spend they can read across keys, including workspace spend.
+
 On Windows, OpenCode shows live Go limits instead of totaling local session history.
 
 Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
@@ -138,6 +140,8 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 
 Claude Extra Usage uses the account's billing currency on Windows, including in CLI output.
 
+Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
+
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 
 To connect Antigravity on Windows, choose **Sign In with Google** in Customize.
@@ -151,6 +155,8 @@ Grok on Windows keeps using a still-valid sign-in if an early renewal fails.
 Saved Windows API-key accounts that this version cannot read stay encrypted when you edit other accounts.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
+
+Expand Antigravity on Windows to see Argon Weekly immediately after Weekly when the account has a separate Argon quota.
 
 ## License
 
