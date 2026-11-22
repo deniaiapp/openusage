@@ -42,6 +42,9 @@ Antigravity reads the `gemini:antigravity` Windows credential (or a cached Googl
 
 When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
 
+In **Customize → Antigravity**, use **Sign In with Google** and finish in your browser. OpenUsage only replaces the connection once it can read that account's quota and encrypt its sign-in for your Windows user. An existing Windows Antigravity connection still works if you haven't signed in through OpenUsage. **Sign In Again** keeps the current layout and pins.
+
+
 OpenUsage encrypts its cached Antigravity sign-in for your Windows user. On refresh, it removes the old unencrypted cache only after saving a protected copy.
 
 
@@ -55,8 +58,8 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 
 ### Provider details that match macOS
 
-- **Claude:** Rate Limit Resets and a plan badge from the live profile. Resets are checked hourly; if the first check can't connect, the next refresh tries again. Usage limits still show if the resets check fails. Enterprise plans show **Spend** instead of **Extra Usage**. Max 5x shows as Max, and Max 20x shows as Ultra.
-- **Codex:** Pro 100 / 200 / 500 plan names. The Credits row shows a reported balance, including zero. It is hidden if ChatGPT says the account has no credits or does not report a balance. When ChatGPT reports a workspace credit limit, the expanded card shows **Credit Limit** between **Credits** and **Rate Limit Resets**, with a reset time when reported. It is not pinned to the tray by default.
+- **Claude:** Rate Limit Resets and a plan badge from the live profile. Resets are checked hourly; if the first check can't connect, the next refresh tries again. Usage limits still show if the resets check fails. Enterprise plans show **Spend** instead of **Extra Usage**. Max 5x shows as Max, and Max 20x shows as Ultra. If usage is rate limited, OpenUsage keeps the last reading and pauses requests for that sign-in for five minutes, or up to an hour if Claude asks it to wait longer.
+- **Codex:** Pro 100 / 200 / 500 plan names. The Credits row shows a reported balance, including zero. It is hidden if ChatGPT says the account has no credits or does not report a balance.
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, personal budgets show **Extra Usage** and team pools show **Team Spend**. If Cursor doesn't report a usable plan meter, OpenUsage shows the request count and cap. When Cursor supplies the request period start, the estimated reset is one calendar month later. Spend history is fetched day by day and finished days are cached per account.
 - **Devin:** Choose **Customize → Devin → Sign In to Devin** and finish in your browser. Windows keeps the resulting session in its encrypted app store. Previously detected Devin CLI and editor sign-ins need to connect once in Customize; those other apps are not signed out.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
@@ -72,6 +75,8 @@ For Copilot, open **Customize → Copilot**. Leave the address as `github.com`, 
 If the connection briefly drops while OpenUsage waits for GitHub, it retries with the same code until the code expires or you cancel.
 
 For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing Codex CLI logins still work if you haven't connected ChatGPT in OpenUsage.
+
+When ChatGPT reports a workspace credit limit, the expanded Codex card shows **Credit Limit** between **Credits** and **Rate Limit Resets**, with a reset time when reported. It is not pinned to the tray by default.
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage. If a CLI-based session expires, run the corresponding CLI once.
 

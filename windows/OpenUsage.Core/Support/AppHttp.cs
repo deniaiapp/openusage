@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -19,6 +20,20 @@ public sealed record AppHttpResponse(int StatusCode, byte[] Body, IReadOnlyDicti
     public string? Header(string name) =>
         Headers.FirstOrDefault(h => h.Key.Equals(name, StringComparison.OrdinalIgnoreCase)).Value;
     public bool IsSuccess => StatusCode is >= 200 and < 300;
+
+    internal TimeSpan? RetryAfter(DateTimeOffset now)
+    {
+        var value = Header("Retry-After")?.Trim();
+        if (!double.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var seconds))
+        {
+            if (!DateTimeOffset.TryParseExact(value, "r", CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal, out var date)) return null;
+            seconds = (date - now).TotalSeconds;
+        }
+        return double.IsFinite(seconds) && seconds > 0
+            ? TimeSpan.FromSeconds(Math.Min(seconds, TimeSpan.FromHours(1).TotalSeconds))
+            : null;
+    }
 }
 
 public sealed class AppHttp : IDisposable
