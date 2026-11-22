@@ -98,6 +98,28 @@ public sealed class CliProxyHubStoreTests : IDisposable
     }
 
     [WindowsFact]
+    public void RuntimeKeyFollowsReplacementButNotRelinkedOrDeletedLogins()
+    {
+        var store = new CliProxyHubStore(StorePath);
+        var login = new CliProxyHubLogin("fixture-login", "before", "codex", "Fixture", true, false, "workspace");
+        var hub = store.Add(new Uri("https://hub.example/"), "fixture-key", [login]);
+        var account = Assert.Single(store.ListAccounts());
+        Assert.Equal("fixture-key", store.KeyFor(hub, account));
+        Assert.Null(store.KeyFor(hub, account with { AccountId = Guid.NewGuid() }));
+        Assert.Null(store.KeyFor(hub with { Address = new Uri("https://other.example/") }, account));
+
+        Assert.True(store.ReplaceKey(hub, "fixture-replacement-key", [login]));
+        Assert.Equal("fixture-replacement-key", store.KeyFor(hub, account));
+        Assert.True(store.ReplaceKey(hub, "fixture-replacement-key", [login with { AuthIndex = "after" }]));
+        var relinked = Assert.Single(store.ListAccounts());
+        Assert.Equal(account.AccountId, relinked.AccountId);
+        Assert.Null(store.KeyFor(hub, account));
+        Assert.Equal("fixture-replacement-key", store.KeyFor(hub, relinked));
+        Assert.True(store.Remove(hub.Id));
+        Assert.Null(store.KeyFor(hub, relinked));
+    }
+
+    [WindowsFact]
     public void UnreadableStoreIsNotOverwritten()
     {
         byte[] broken = [0x01, 0x02, 0x03];

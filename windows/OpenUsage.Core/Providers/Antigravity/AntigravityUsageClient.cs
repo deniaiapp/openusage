@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Antigravity;
@@ -22,7 +23,11 @@ public sealed class AntigravityUsageClient(AppHttp http)
         _ => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()
     };
 
-    public async Task<(List<MetricLine> Lines, string? Plan)> QuotaAsync(string token, CancellationToken ct = default)
+    public Task<(List<MetricLine> Lines, string? Plan)> QuotaAsync(string token, CancellationToken ct = default) =>
+        QuotaAsync(token, ct, false);
+
+    internal async Task<(List<MetricLine> Lines, string? Plan)> QuotaAsync(
+        string token, CancellationToken ct, bool fromHub)
     {
         var buckets = new Dictionary<string, MetricLine>(StringComparer.Ordinal);
         string? plan = null;
@@ -30,9 +35,16 @@ public sealed class AntigravityUsageClient(AppHttp http)
         var accepted = false;
         var rateLimited = false;
         var authRejected = false;
+        CliProxyHubUpstreamUnavailableException? unavailable = null;
         foreach (var baseUrl in AntigravityProvider.CloudCodeUrls)
         {
-            var response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuotaSummary", token, ct);
+            AppHttpResponse? response;
+            try { response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuotaSummary", token, ct, fromHub); }
+            catch (CliProxyHubUpstreamUnavailableException ex) when (fromHub)
+            {
+                unavailable ??= ex;
+                continue;
+            }
             accepted |= response is { IsSuccess: true };
             if (response is not { IsSuccess: true, Json: { } body })
             {
@@ -49,24 +61,30 @@ public sealed class AntigravityUsageClient(AppHttp http)
                 buckets.TryAdd(line.Label, line);
             if (AntigravityUsageMapper.SummaryBuckets.All(bucket => buckets.ContainsKey(bucket.Label))) break;
         }
-        if (refused && !accepted) throw new TokenRefused();
+        if ((refused || fromHub && authRejected) && !accepted) throw new TokenRefused();
         if (buckets.Count == 0 && rateLimited && !authRejected)
             throw new ProviderRequestException(ProviderErrors.RateLimited);
+        if (!accepted && unavailable is not null) throw unavailable;
         return (QuotaOrder.Select(label => buckets.GetValueOrDefault(label)).OfType<MetricLine>().ToList(), plan);
     }
 
-    public async Task<string?> FallbackPlanAsync(string token, CancellationToken ct)
+    public Task<string?> FallbackPlanAsync(string token, CancellationToken ct) =>
+        FallbackPlanAsync(token, ct, false);
+
+    internal async Task<string?> FallbackPlanAsync(string token, CancellationToken ct, bool fromHub)
     {
         foreach (var baseUrl in AntigravityProvider.CloudCodeUrls)
         {
-            var response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuota", token, ct);
+            AppHttpResponse? response;
+            try { response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuota", token, ct, fromHub); }
+            catch (CliProxyHubUpstreamUnavailableException) when (fromHub) { continue; }
             if (response is { StatusCode: 401 or 403 }) break;
             if (response is { IsSuccess: true }) return AntigravityUsageMapper.PlanName(response.Json);
         }
         return null;
     }
 
-    private async Task<AppHttpResponse?> SendAsync(string baseUrl, string path, string token, CancellationToken ct)
+    private async Task<AppHttpResponse?> SendAsync(string baseUrl, string path, string token, CancellationToken ct, bool fromHub)
     {
         try
         {
@@ -81,7 +99,7 @@ public sealed class AntigravityUsageClient(AppHttp http)
                 },
                 "{}"u8.ToArray()), ct);
         }
-        catch (ProviderRequestException ex)
+        catch (ProviderRequestException ex) when (!fromHub)
         {
             ct.ThrowIfCancellationRequested();
             AppLog.Warn("antigravity", $"{path} via {baseUrl} failed: {ex.Message}");

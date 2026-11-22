@@ -70,9 +70,11 @@ public sealed partial class CodexProvider
         finally { _credentialGate.Release(); }
     }
 
-    private Task<ProviderSnapshot> ReadAppUsageAsync(AppHttpResponse usage, CodexAuth auth, CancellationToken ct)
+    private Task<ProviderSnapshot> ReadAppUsageAsync(
+        AppHttpResponse usage, CodexAuth auth, CancellationToken ct, string? expiredMessage = null)
     {
-        AuthRetry.RequireSuccess(usage, ExpiredSignIn(), status => new ProviderRequestException(ProviderErrors.RequestFailed(status)));
+        AuthRetry.RequireSuccess(usage, expiredMessage is null ? ExpiredSignIn() : new ProviderRequestException(expiredMessage),
+            status => new ProviderRequestException(ProviderErrors.RequestFailed(status)));
         return MapUsageAsync(usage, auth, ct);
     }
 

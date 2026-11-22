@@ -61,10 +61,10 @@ public sealed partial class CodexProvider : IProviderRuntime
             ? RefreshAppCredentialAsync(cancellationToken)
             : Task.FromResult(ProviderSnapshot.Error(Provider, "Not logged in. Open Customize → Codex to sign in."));
 
-    internal async Task<ProviderSnapshot> FetchUsageAsync(CodexAuth auth, CancellationToken ct)
+    internal async Task<ProviderSnapshot> FetchUsageAsync(CodexAuth auth, CancellationToken ct, string? expiredMessage = null)
     {
         var usage = await SendAuthGet(UsageUrl, auth, ct);
-        return await ReadAppUsageAsync(usage, auth, ct);
+        return await ReadAppUsageAsync(usage, auth, ct, expiredMessage);
     }
 
     private async Task<ProviderSnapshot> MapUsageAsync(AppHttpResponse usage, CodexAuth auth, CancellationToken ct)
