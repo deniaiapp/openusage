@@ -4,7 +4,7 @@ Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tra
 
 The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, and global shortcut. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
 
-The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Both tabs respect which providers and metrics you have turned on.
+The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Accounts without a saved reading appear under **Waiting for Usage** until their first refresh finishes; failures are reported separately. Both tabs respect which providers and metrics you have turned on.
 
 **Running Out** puts the shortest projected time to exhaustion first. Limits without a usable pace follow, with the lowest remaining percentage first.
 
@@ -56,6 +56,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 - **Claude:** Rate Limit Resets and a plan badge from the live profile. Resets are checked hourly; if the first check can't connect, the next refresh tries again. Usage limits still show if the resets check fails. Enterprise plans show **Spend** instead of **Extra Usage**. Max 5x shows as Max, and Max 20x shows as Ultra.
 - **Codex:** Pro 100 / 200 / 500 plan names. The Credits row shows a reported balance, including zero. It is hidden if ChatGPT says the account has no credits or does not report a balance.
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, personal budgets show **Extra Usage** and team pools show **Team Spend**. Spend history is fetched day by day and finished days are cached per account.
+- **Devin:** Choose **Customize → Devin → Sign In to Devin** and finish in your browser. Windows keeps the resulting session in its encrypted app store. Previously detected Devin CLI and editor sign-ins need to connect once in Customize; those other apps are not signed out.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** Add a Go API key in **Customize → OpenCode → Additional Accounts** to see live Session, Weekly, and Monthly limits without a local OpenCode install. Existing local connections still work.
@@ -79,6 +80,14 @@ For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when a
 The CLI lists expiries from the usage response if the separate reset list disagrees.
 
 CLIProxyAPI hub connections are not available in the Windows UI yet. The Windows storage layer keeps each hub's address and management key together, encrypted for the current Windows user.
+
+## Privacy Mode
+
+Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.
+
+Privacy Mode pauses new usage notifications. It does not remove notifications Windows already saved.
+
+This is off by default and stays set after a restart. Not every capture method honors Windows' protection. Check your capture preview before sharing; other apps, the CLI and saved data are unchanged.
 
 ## Priority Limits
 

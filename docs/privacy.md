@@ -25,6 +25,8 @@ panel blurs account names. While it's on, copied usage pictures blur every accou
 off, they leave email addresses out. It is off by default. A single still screenshot (⌘⇧3, ⌘⇧4) can't
 be detected, so use the copy button to share a picture.
 
+See [Windows Privacy Mode](windows.md#privacy-mode) for the Windows setting and capture limits.
+
 ## Anonymous telemetry
 
 | Data | When | Can you turn it off? |
