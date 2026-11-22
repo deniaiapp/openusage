@@ -77,7 +77,9 @@ If the connection briefly drops while OpenUsage waits for GitHub, it retries wit
 
 To connect Claude, go to **Customize → Claude → Sign In with Claude**. Finish in the browser, or return to the Claude settings page and paste the code the browser gives you. A failed sign-in leaves your existing connection in place. OpenUsage saves verified sign-ins with Windows user encryption.
 
-Existing Claude CLI credentials still work until you connect in Customize. Claude and Codex logins stored in Credential Manager are left for their respective CLIs to refresh.
+Existing Claude CLI credentials still work until you connect in Customize.
+
+For Cursor, choose **Customize → Cursor → Sign In with Cursor** and finish signing in in your browser. OpenUsage verifies usage before saving the sign-in with Windows user encryption. **Sign In Again** replaces it without changing your card settings. Existing local Cursor sign-ins still work if you haven't connected Cursor in OpenUsage.
 
 For Codex, enable device code authorization in ChatGPT's security settings, then open **Customize → Codex → Sign In with ChatGPT**. Enter the code on ChatGPT's device sign-in page. OpenUsage saves the verified connection with Windows user encryption. Use **Sign In Again** to reconnect without changing your card settings. Existing Codex CLI logins still work if you haven't connected ChatGPT in OpenUsage.
 
