@@ -5,9 +5,8 @@ name: Release
 # A tag with a pre-release suffix (e.g. v0.7.0-beta.1) publishes to the Early Access channel; a plain
 # tag (v0.7.0) publishes to everyone. The one-time secret/Pages setup is documented in the
 # release-swift skill under .agents/skills/release-swift/.
+# macOS runs are paused: tag pushes no longer start a release; run it manually with the tag input.
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:

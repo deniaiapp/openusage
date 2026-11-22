@@ -1,5 +1,6 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Antigravity;
+using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
@@ -82,11 +83,19 @@ public sealed class AppContainer : IDisposable
         Data.ReplaceAccountSnapshot(snapshot);
     }
 
-    public async Task ConnectCopilotAsync(Action<string> showCode, CancellationToken cancellationToken)
+    public async Task ConnectCodexAsync(Action<string> showCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var codex = Providers.OfType<CodexProvider>().Single();
+        var snapshot = await codex.ConnectAsync(showCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
+
+    public async Task ConnectCopilotAsync(string address, Action<string, Uri> showCode, CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
         var copilot = Providers.OfType<CopilotProvider>().Single();
-        var snapshot = await copilot.ConnectAsync(showCode, linked.Token);
+        var snapshot = await copilot.ConnectAsync(address, showCode, linked.Token);
         Data.ReplaceAccountSnapshot(snapshot);
     }
 
