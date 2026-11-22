@@ -105,13 +105,11 @@ public class ClaudeUpstreamTests
     [Fact]
     public async Task Provider_HoldsLastReadingThroughRetryAfterAndResumesAtTheDeadline()
     {
-        using var dir = new TempDir();
-        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
-        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-access"}}""");
+        var credential = new ClaudeOAuth { AccessToken = "fixture-access", RefreshToken = "fixture-refresh" };
         var clock = Now;
         var handler = new FakeAnthropic();
         using var http = new AppHttp(new HttpClient(handler));
-        var provider = new ClaudeProvider(http, store, () => clock);
+        var provider = new ClaudeProvider(http, credential, () => clock);
         var initial = await provider.RefreshAsync();
         Assert.NotNull(initial.Line("Session"));
 
@@ -131,19 +129,18 @@ public class ClaudeUpstreamTests
     }
 
     [Fact]
-    public async Task Provider_HonorsTheFirstThrottleWithoutBlockingADifferentCliLogin()
+    public async Task Provider_HonorsTheFirstThrottleUntilTheDeadline()
     {
-        using var dir = new TempDir();
-        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
-        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-first"}}""");
+        var credential = new ClaudeOAuth { AccessToken = "fixture-first", RefreshToken = "fixture-refresh" };
+        var clock = Now;
         var handler = new FakeAnthropic { RetryAfter = "1800" };
         using var http = new AppHttp(new HttpClient(handler));
-        var provider = new ClaudeProvider(http, store, () => Now);
+        var provider = new ClaudeProvider(http, credential, () => clock);
         Assert.True((await provider.RefreshAsync()).IsError);
         Assert.True((await provider.RefreshAsync()).IsError);
         Assert.Equal(1, handler.PlainUsageCalls);
 
-        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-second"}}""");
+        clock = Now.AddMinutes(30);
         handler.RetryAfter = null;
         Assert.False((await provider.RefreshAsync()).IsError);
         Assert.Equal(2, handler.PlainUsageCalls);
@@ -247,7 +244,7 @@ public class ClaudeUpstreamTests
     {
         using var dir = new TempDir();
         using var http = new AppHttp(new HttpClient());
-        var provider = new ClaudeProvider(http, new ClaudeAuthStore(dir.Path, readCredentialManager: false));
+        var provider = new ClaudeProvider(http);
         var settings = AppSettings.Load(Path.Combine(dir.Path, "settings.json"));
         settings.EnabledProviders.Add("claude");
         settings.EnabledMetrics.Add("claude.extra");
@@ -279,47 +276,6 @@ public class ClaudeUpstreamTests
         Assert.Equal(bounded, pin.Data.IsBounded);
     }
 
-    // MARK: - Credential document preservation
-
-    [Fact]
-    public void SaveRotated_KeepsMcpLoginsAndUnknownFields()
-    {
-        using var dir = new TempDir();
-        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
-        File.WriteAllText(store.CredentialsPath(), """
-            { "claudeAiOauth": { "accessToken": "old-access", "refreshToken": "old-refresh", "expiresAt": 1,
-                                 "subscriptionType": "max", "futureField": { "keep": true } },
-              "mcpOAuth": { "server": { "accessToken": "mcp-token" } } }
-            """);
-        var oauth = Assert.Single(store.LoadCandidates());
-        oauth.AccessToken = "new-access";
-        oauth.RefreshToken = "new-refresh";
-        oauth.ExpiresAt = 1_800_000_000_000;
-
-        Assert.True(store.SaveRotated(oauth, "old-refresh"));
-        var saved = JsonUtil.ParseObject(File.ReadAllText(store.CredentialsPath()))!;
-        var stored = saved["claudeAiOauth"]!.AsObject();
-        Assert.Equal("new-access", JsonUtil.String(stored["accessToken"]));
-        Assert.Equal("new-refresh", JsonUtil.String(stored["refreshToken"]));
-        Assert.Equal(1_800_000_000_000, JsonUtil.Number(stored["expiresAt"]));
-        Assert.Equal("max", JsonUtil.String(stored["subscriptionType"]));
-        Assert.True(JsonUtil.Bool(stored["futureField"]!["keep"]));
-        Assert.Equal("mcp-token", JsonUtil.String(saved["mcpOAuth"]!["server"]!["accessToken"]));
-    }
-
-    [Fact]
-    public void SaveRotated_LeavesANewerLoginAlone()
-    {
-        using var dir = new TempDir();
-        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
-        var original = """{ "claudeAiOauth": { "accessToken": "theirs", "refreshToken": "their-refresh" } }""";
-        File.WriteAllText(store.CredentialsPath(), original);
-        var rotated = new ClaudeOAuth { AccessToken = "ours", RefreshToken = "our-refresh" };
-
-        Assert.False(store.SaveRotated(rotated, "spent-refresh"));
-        Assert.Equal(original, File.ReadAllText(store.CredentialsPath()));
-    }
-
     // MARK: - Provider cadence
 
     [Theory]
@@ -327,9 +283,7 @@ public class ClaudeUpstreamTests
     [InlineData(false, 1)]
     public async Task Provider_RetriesFirstResetGrantsReadIfItCouldNotConnect(bool lostConnection, int expectedCalls)
     {
-        using var dir = new TempDir();
-        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
-        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-token"}}""");
+        var credential = new ClaudeOAuth { AccessToken = "fixture-token", RefreshToken = "fixture-refresh" };
         var handler = new FakeAnthropic
         {
             DisconnectResetGrants = lostConnection,
@@ -337,7 +291,7 @@ public class ClaudeUpstreamTests
         };
         var clock = Now;
         using var http = new AppHttp(new HttpClient(handler));
-        var provider = new ClaudeProvider(http, store, () => clock);
+        var provider = new ClaudeProvider(http, credential, () => clock);
 
         var first = await provider.RefreshAsync();
         Assert.NotNull(first.Line("Session"));
@@ -359,13 +313,14 @@ public class ClaudeUpstreamTests
     [Fact]
     public async Task Provider_ChecksResetGrantsHourlyAndThePlanOncePerToken()
     {
-        using var dir = new TempDir();
-        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
-        File.WriteAllText(store.CredentialsPath(),
-            """{ "claudeAiOauth": { "accessToken": "token", "refreshToken": "refresh", "subscriptionType": "max", "rateLimitTier": "default_claude_max_5x" } }""");
+        var credential = new ClaudeOAuth
+        {
+            AccessToken = "fixture-token", RefreshToken = "fixture-refresh",
+            SubscriptionType = "max", RateLimitTier = "default_claude_max_5x"
+        };
         var handler = new FakeAnthropic();
         var clock = Now;
-        var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), store, () => clock);
+        var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), credential, () => clock);
 
         var first = await provider.RefreshAsync();
         Assert.Equal("Ultra", first.Plan);
@@ -397,12 +352,10 @@ public class ClaudeUpstreamTests
     [Fact]
     public async Task Provider_KeepsLastKnownResetsWhenTheNextCountIsInvalid()
     {
-        using var dir = new TempDir();
-        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
-        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"token"}}""");
+        var credential = new ClaudeOAuth { AccessToken = "fixture-token", RefreshToken = "fixture-refresh" };
         var handler = new FakeAnthropic();
         var clock = Now;
-        var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), store, () => clock);
+        var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), credential, () => clock);
 
         var first = await provider.RefreshAsync();
         Assert.Equal(1, Assert.IsType<MetricLine.ValuesLine>(first.Line(ClaudeUsageMapper.RateLimitResetsLabel)).Items[0].Number);

@@ -135,7 +135,7 @@ Cursor's usage history shows actual on-demand charges and reported tokens, not e
 
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
-On Windows, connect Claude in Customize using your browser, or connect ChatGPT for Codex in Customize using a device code. Codex no longer reads CLI files or Credential Manager items; existing CLI-only connections need to sign in once in Customize. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment. OpenRouter management keys also show Yesterday and Prior 30 Days spend.
+On Windows, connect Claude in Customize using your browser, or connect ChatGPT for Codex in Customize using a device code. Claude and Codex no longer read CLI files or Credential Manager items, and Claude ignores environment tokens; existing CLI-only connections need to sign in once in Customize. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment. OpenRouter management keys also show Yesterday and Prior 30 Days spend.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 

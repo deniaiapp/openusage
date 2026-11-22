@@ -8,8 +8,7 @@ namespace OpenUsage.Core.Providers.Claude;
 public sealed partial class ClaudeProvider
 {
     private const string CredentialKey = "claude.oauth";
-    private static readonly (string UsageUrl, string RefreshUrl, string ClientId) AppOAuthConfig =
-        ($"{ClaudeAuthStore.ProdBaseApi}/api/oauth/usage", ClaudeAuthStore.ProdRefreshUrl, ClaudeAuthStore.ProdClientId);
+    private const string UsageUrl = ClaudeLogin.BaseApi + "/api/oauth/usage";
     private readonly SemaphoreSlim _authGate = new(1, 1);
     private readonly ApiKeyStore? _keys;
     private volatile ClaudeOAuth? _connected;
@@ -24,7 +23,7 @@ public sealed partial class ClaudeProvider
         var previous = (_lastGood, _rateLimit, _livePlan, _resetGrantsCheck);
         try
         {
-            var snapshot = await ProbeAsync(oauth, ct, appOwned: true, validateReplacement: true);
+            var snapshot = await ProbeAsync(oauth, ct, validateReplacement: true);
             if (snapshot.IsError) throw new ProviderRequestException("Couldn’t verify Claude usage. Try again later.");
             ct.ThrowIfCancellationRequested();
             keys.Set(CredentialKey, JsonSerializer.Serialize(oauth));

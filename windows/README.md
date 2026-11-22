@@ -31,7 +31,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Provider | Windows credential sources |
 |---|---|
 | Amp | Device-code sign-in in Customize (Windows user encryption); does not read the Amp CLI credentials |
-| Claude | **Customize → Claude → Sign In with Claude**, or existing Claude CLI credentials if not connected in OpenUsage |
+| Claude | **Customize → Claude → Sign In with Claude**; CLI files, Credential Manager items, and environment tokens are not read |
 | Codex | **Customize → Codex → Sign In with ChatGPT** (requires device code authorization enabled in ChatGPT); CLI files and Credential Manager items are not read |
 | Cursor | **Customize → Cursor → Sign In with Cursor**, or existing Cursor sign-ins in `%APPDATA%\Cursor\User\globalStorage\state.vscdb` or Credential Manager (`cursor-access-token`) |
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com) |
@@ -60,7 +60,7 @@ Other accounts update normally. You can still retry manually.
 
 Cursor keeps using the last known billing plan for the current sign-in if the plan lookup fails.
 
-OpenUsage renews its own Claude and ChatGPT sign-ins without touching the CLI login. Existing CLI-only Codex connections need to sign in once in Customize. For CLI-based Claude logins, OpenUsage only refreshes tokens that came from a file, keeping the rest of that file intact. Claude tokens from Credential Manager are left for the CLI to refresh.
+OpenUsage renews its own Claude and ChatGPT sign-ins without touching the CLI login. Existing CLI-only Claude and Codex connections need to sign in once in Customize.
 
 When an update adds a new default metric, it's turned on once for existing layouts too. If you turn it off, it stays off.
 
