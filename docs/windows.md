@@ -45,7 +45,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 ### Provider details that match macOS
 
 - **Claude:** Rate Limit Resets and a plan badge from the live profile. Resets are checked hourly; if the first check can't connect, the next refresh tries again. Usage limits still show if the resets check fails. Enterprise plans show **Spend** instead of **Extra Usage**. Max 5x shows as Max, and Max 20x shows as Ultra. If usage is rate limited, OpenUsage keeps the last reading and pauses requests for that sign-in for five minutes, or up to an hour if Claude asks it to wait longer.
-- **Codex:** Pro 100 / 200 / 500 plan names.
+- **Codex:** Pro 100 / 200 / 500 plan names. The Credits row shows a reported balance, including zero. It is hidden if ChatGPT says the account has no credits or does not report a balance.
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, extra usage is measured against the matching personal or pooled budget. Spend history is fetched day by day and finished days are cached per account.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
@@ -62,6 +62,9 @@ Claude, Codex, and Grok show live limits without reading local session logs. Est
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
+
+For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when available, including zero.
+The CLI lists expiries from the usage response if the separate reset list disagrees.
 
 ## Priority Limits
 

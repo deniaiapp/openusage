@@ -89,8 +89,13 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
+
+On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
+
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
 Priority also lists unpinned limits you can use before they reset.
+
+On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 
 ```powershell
 cd windows
@@ -137,8 +142,10 @@ To learn the code, read the [architecture overview](docs/architecture.md),
 <details>
 <summary><strong>Releasing</strong></summary>
 
-Create the GitHub Release for the tag as a draft with its notes, then push a `v*` tag on `main` to
-build, sign, notarize, and publish it. A tag without a release that has notes fails before the build.
+Create the GitHub Release for the tag as a draft with its notes, then push a `v*` tag on `main` and
+run the Release workflow manually with that tag to build, sign, notarize, and publish it (macOS
+workflows no longer start on push, pull request, or tag). A tag without a release that has notes
+fails before the build.
 
 - A plain tag (`v0.8.0`) ships to everyone.
 - A pre-release tag (`v0.8.0-beta.1`) ships to the beta channel.
