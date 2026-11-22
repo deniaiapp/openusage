@@ -14,6 +14,8 @@ Choose **Replace API Key** next to an additional account to change its key witho
 
 In **Customize**, use the up and down arrows to move a provider and its accounts together on the dashboard. The order is saved; **Undo Reorder** restores the previous order during the current session.
 
+Right-click a dashboard metric or usage chart and choose **Hide** to remove it from the dashboard. Turn it back on from the provider's page in **Customize**.
+
 If Windows reports that there is no network path, OpenUsage retries that refresh for about a minute before showing an error. Other refresh failures keep the usual backoff.
 
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
