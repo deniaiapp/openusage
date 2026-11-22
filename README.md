@@ -86,7 +86,7 @@ How everything works, in [docs/](docs/README.md):
 
 ## Windows
 
-A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). See [OpenUsage on Windows](docs/windows.md) and its [Privacy Mode](docs/windows.md#privacy-mode).
+A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11. [Download the unsigned x64 ZIP when available](docs/windows.md#download-from-github-releases) or [build with the .NET 8 SDK](windows/README.md#self-contained-build). See [Privacy Mode](docs/windows.md#privacy-mode) for sharing the dashboard.
 
 Developers can also [publish a self-contained x64 build](windows/README.md#self-contained-build) locally. This is not an installer or an update channel.
 

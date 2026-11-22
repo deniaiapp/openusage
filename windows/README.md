@@ -99,6 +99,34 @@ From this folder on Windows x64 with the .NET 8 SDK, publish to a directory that
 Keep each executable with the files in its own folder. The target PC does not need the .NET runtime.
 This is an unsigned local build, not an installer or an automatic update channel.
 
+## Prepare the Windows release ZIP
+
+Build from a clean checkout of the approved release tag on Windows x64 with the .NET 8 SDK. Run from
+the repository root, replacing the example value with the approved tag.
+
+```powershell
+$tag = "<approved-release-tag>"
+$source = git rev-parse --verify "refs/tags/$tag^{commit}"
+if ($LASTEXITCODE -ne 0 -or (git rev-parse HEAD) -ne $source -or (git status --porcelain)) {
+    throw "Check out the exact release tag in a clean working tree."
+}
+$output = ".\dist\windows-x64-unsigned"
+.\windows\package.ps1 -OutputDirectory $output -Zip
+Expand-Archive -LiteralPath "$output.zip" -DestinationPath "$output-smoke"
+& "$output-smoke\cli\openusage.exe" --version
+if ($LASTEXITCODE -ne 0) { throw "The extracted CLI did not start." }
+```
+
+Check that the printed version matches the release tag and that the extracted `app\OpenUsage.exe`
+opens. After approval, attach the ZIP to the matching [GitHub Release](https://github.com/deniaiapp/openusage/releases);
+do not create a tag, publish a draft, or replace an existing asset as part of the upload:
+
+```powershell
+$isDraft = gh release view $tag --repo deniaiapp/openusage --json isDraft --jq '.isDraft'
+if ($LASTEXITCODE -ne 0 -or $isDraft -ne 'false') { throw "No published release for $tag." }
+gh release upload $tag "${output}.zip#Windows x64 (unsigned ZIP)" --repo deniaiapp/openusage
+```
+
 ## Not in this port yet
 
 macOS-only pieces left out on purpose:

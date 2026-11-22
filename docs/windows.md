@@ -4,6 +4,14 @@ Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tra
 
 For local testing without an installed .NET runtime, developers can make a [self-contained x64 build](../windows/README.md#self-contained-build). It does not install or update OpenUsage.
 
+## Download from GitHub Releases
+
+If a [release](https://github.com/deniaiapp/openusage/releases) offers a `windows-x64-unsigned.zip` asset, extract the entire ZIP and run `app\OpenUsage.exe`. Run the optional CLI as `cli\openusage.exe`, keeping both executables with their respective files. Windows may warn that the download is unsigned.
+
+The ZIP includes the .NET runtime. It does not install or update itself. For a newer version, quit OpenUsage, extract the new ZIP to a fresh folder, and use that copy. Your account settings are stored outside the application folder.
+
+## Dashboard
+
 The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, and global shortcut. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
 
 The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Accounts without a saved reading appear under **Waiting for Usage** until their first refresh finishes; failures are reported separately. Both tabs respect which providers and metrics you have turned on. If every metric is hidden, choose **Customize** on the dashboard to turn metrics back on without reconnecting.
