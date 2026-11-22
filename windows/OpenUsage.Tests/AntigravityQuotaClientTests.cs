@@ -126,7 +126,30 @@ public sealed class AntigravityQuotaClientTests
         Assert.Equal(25, Assert.IsType<MetricLine.ProgressLine>(Assert.Single(lines)).Used);
     }
 
-    private sealed class Handler(string daily, string production, HttpStatusCode dailyStatus = HttpStatusCode.OK) : HttpMessageHandler
+    [Fact]
+    public async Task BothQuotaEndpointsRateLimitedReportAnErrorInsteadOfEmptyUsage()
+    {
+        using var handler = new Handler("{}", "{}", HttpStatusCode.TooManyRequests, HttpStatusCode.TooManyRequests);
+        using var http = new AppHttp(new HttpClient(handler));
+        var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
+            new AntigravityUsageClient(http).QuotaAsync("fixture-token"));
+        Assert.Equal(ProviderErrors.RateLimited, error.Message);
+        Assert.Equal(2, handler.Hosts.Count);
+    }
+
+    [Fact]
+    public async Task RateLimitedFallbackDoesNotDiscardTheOtherEndpointsQuota()
+    {
+        using var handler = new Handler("""
+            {"groups":[{"buckets":[{"bucketId":"gemini-5h","remainingFraction":0.75}]}]}
+            """, "{}", HttpStatusCode.OK, HttpStatusCode.TooManyRequests);
+        using var http = new AppHttp(new HttpClient(handler));
+        var (lines, _) = await new AntigravityUsageClient(http).QuotaAsync("fixture-token");
+        Assert.Equal(25, Assert.IsType<MetricLine.ProgressLine>(Assert.Single(lines)).Used);
+    }
+
+    private sealed class Handler(string daily, string production, HttpStatusCode dailyStatus = HttpStatusCode.OK,
+        HttpStatusCode productionStatus = HttpStatusCode.OK) : HttpMessageHandler
     {
         public List<string> Hosts { get; } = [];
 
@@ -139,7 +162,7 @@ public sealed class AntigravityQuotaClientTests
             Assert.StartsWith("antigravity/hub/", userAgent);
             Assert.Contains("os_type=windows; arch=", userAgent);
             var isDaily = host == "daily-cloudcode-pa.googleapis.com";
-            return Task.FromResult(new HttpResponseMessage(isDaily ? dailyStatus : HttpStatusCode.OK)
+            return Task.FromResult(new HttpResponseMessage(isDaily ? dailyStatus : productionStatus)
             {
                 Content = new StringContent(isDaily ? daily : production)
             });
