@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Stores;
@@ -21,8 +22,13 @@ internal sealed class CliProxyHubStore(string? path = null)
         lock (_gate) return Load().Find(entry => Matches(entry, hub))?.Key;
     }
 
+    internal IReadOnlyList<CliProxyMirroredAccount> ListAccounts()
+    {
+        lock (_gate) return Load().SelectMany(entry => entry.Accounts ?? []).ToArray();
+    }
+
     // The connection service must prove the key against the normalized address before saving it.
-    internal CliProxyHub Add(Uri address, string validatedKey)
+    internal CliProxyHub Add(Uri address, string validatedKey, IReadOnlyList<CliProxyHubLogin>? logins = null)
     {
         if (!address.IsAbsoluteUri || address.Scheme is not ("http" or "https") ||
             address.Host.Length == 0 || address.UserInfo.Length != 0 ||
@@ -35,13 +41,13 @@ internal sealed class CliProxyHubStore(string? path = null)
             if (entries.Any(entry => SameAddress(entry.Hub.Address, address)))
                 throw new InvalidOperationException("This CLIProxyAPI hub is already connected.");
             var hub = new CliProxyHub(Guid.NewGuid(), address);
-            entries.Add(new Entry(hub, key));
+            entries.Add(new Entry(hub, key, logins is null ? null : Reconcile(hub, logins, [])));
             Save(entries);
             return hub;
         }
     }
 
-    internal bool ReplaceKey(CliProxyHub hub, string validatedKey)
+    internal bool ReplaceKey(CliProxyHub hub, string validatedKey, IReadOnlyList<CliProxyHubLogin>? logins = null)
     {
         var key = CheckKey(validatedKey);
         lock (_gate)
@@ -49,7 +55,12 @@ internal sealed class CliProxyHubStore(string? path = null)
             var entries = Load();
             var index = entries.FindIndex(entry => Matches(entry, hub));
             if (index < 0) return false;
-            entries[index] = entries[index] with { Key = key };
+            var entry = entries[index];
+            entries[index] = entry with
+            {
+                Key = key,
+                Accounts = logins is null ? entry.Accounts : Reconcile(hub, logins, entry.Accounts ?? [])
+            };
             Save(entries);
             return true;
         }
@@ -68,6 +79,10 @@ internal sealed class CliProxyHubStore(string? path = null)
 
     private static bool Matches(Entry entry, CliProxyHub hub) =>
         entry.Hub.Id == hub.Id && SameAddress(entry.Hub.Address, hub.Address);
+
+    private static IReadOnlyList<CliProxyMirroredAccount> Reconcile(
+        CliProxyHub hub, IReadOnlyList<CliProxyHubLogin> logins, IReadOnlyList<CliProxyMirroredAccount> accounts) =>
+        CliProxyHubReconciliation.Create(hub.Id, logins, accounts).Apply(accounts);
 
     private static bool SameAddress(Uri saved, Uri candidate) =>
         candidate.IsAbsoluteUri && saved.AbsoluteUri == candidate.AbsoluteUri;
@@ -106,5 +121,5 @@ internal sealed class CliProxyHubStore(string? path = null)
         finally { CryptographicOperations.ZeroMemory(clear); }
     }
 
-    private sealed record Entry(CliProxyHub Hub, string Key);
+    private sealed record Entry(CliProxyHub Hub, string Key, IReadOnlyList<CliProxyMirroredAccount>? Accounts);
 }

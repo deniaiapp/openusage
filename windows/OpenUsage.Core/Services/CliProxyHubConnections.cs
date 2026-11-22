@@ -17,7 +17,7 @@ internal sealed class CliProxyHubConnections(CliProxyHubClient client, CliProxyH
 
         var logins = await client.ListAsync(address, key, ct);
         ct.ThrowIfCancellationRequested();
-        return (store.Add(address.BaseUrl, key), logins);
+        return (store.Add(address.BaseUrl, key, logins), logins);
     }
 
     public async Task<IReadOnlyList<CliProxyHubLogin>> ReplaceKeyAsync(Guid id, string key, CancellationToken ct)
@@ -30,7 +30,7 @@ internal sealed class CliProxyHubConnections(CliProxyHubClient client, CliProxyH
 
         var logins = await client.ListAsync(address, key, ct);
         ct.ThrowIfCancellationRequested();
-        if (!store.ReplaceKey(hub, key)) throw HubNotConnected();
+        if (!store.ReplaceKey(hub, key, logins)) throw HubNotConnected();
         return logins;
     }
 

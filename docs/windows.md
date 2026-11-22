@@ -107,9 +107,9 @@ does not hide live limits. History rows are not pinned to the tray by default.
 
 ## CLIProxyAPI hubs
 
-Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management key, and choose **Connect**. OpenUsage saves a connection or replacement key only after the hub returns a valid login list. Saved addresses and keys are encrypted for the current Windows user.
+Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management key, and choose **Connect**. When a hub accepts a new or replacement key, OpenUsage saves its address, key, and supported active logins, encrypted for the current Windows user.
 
-**Replace Key** keeps the old key if verification fails. **Disconnect** removes only the saved connection on this PC; it does not change the hub. Hub accounts are not saved or shown on the Windows dashboard yet.
+**Replace Key** keeps the old key and saved logins if verification fails. **Disconnect** removes the saved connection and logins from this PC; it does not change the hub. Windows does not yet update the login list automatically or show hub accounts on the dashboard.
 
 ## Privacy Mode
 

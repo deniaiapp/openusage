@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using Xunit;
 
@@ -50,6 +51,50 @@ public sealed class CliProxyHubStoreTests : IDisposable
         Assert.Null(afterRemoval.KeyFor(first));
         Assert.Equal(second, Assert.Single(afterRemoval.List()));
         Assert.Equal("second-fixture", afterRemoval.KeyFor(second));
+    }
+
+    [WindowsFact]
+    public void LegacyStoreReopensAndSavesMirrorsOnlyOnTheMatchingHub()
+    {
+        var firstId = Guid.NewGuid();
+        var legacy = $$"""
+            [{"Hub":{"Id":"{{firstId}}","Address":"https://one.example.test/"},"Key":"legacy-fixture"}]
+            """;
+        File.WriteAllBytes(StorePath, ProtectedData.Protect(
+            Encoding.UTF8.GetBytes(legacy), null, DataProtectionScope.CurrentUser));
+        var store = new CliProxyHubStore(StorePath);
+        var first = Assert.Single(store.List());
+        Assert.Equal(firstId, first.Id);
+        Assert.Equal("legacy-fixture", store.KeyFor(first));
+        Assert.Empty(store.ListAccounts());
+
+        CliProxyHubLogin[] logins =
+        [
+            new("fixture-login", "fixture-index", "codex", "fixture-label", true, false, "fixture-workspace")
+        ];
+        var second = store.Add(new Uri("https://two.example.test/"), "other-fixture", logins);
+        var otherAccount = Assert.Single(store.ListAccounts());
+        Assert.Equal(second.Id, otherAccount.Link.HubId);
+        Assert.True(store.ReplaceKey(first, "new-fixture", logins));
+
+        var reopened = new CliProxyHubStore(StorePath);
+        Assert.Collection(reopened.ListAccounts(),
+            account =>
+            {
+                Assert.Equal(firstId, account.Link.HubId);
+                Assert.Equal("fixture-label", account.Label);
+                Assert.Equal("fixture-workspace", account.Link.ChatGptAccountId);
+                Assert.NotEqual(otherAccount.AccountId, account.AccountId);
+            },
+            account => Assert.Equal(otherAccount, account));
+        var encrypted = Encoding.UTF8.GetString(File.ReadAllBytes(StorePath));
+        Assert.DoesNotContain("fixture-workspace", encrypted);
+        Assert.DoesNotContain("new-fixture", encrypted);
+
+        Assert.True(reopened.ReplaceKey(first, "new-fixture", []));
+        Assert.Equal(otherAccount, Assert.Single(reopened.ListAccounts()));
+        Assert.True(reopened.Remove(second.Id));
+        Assert.Empty(new CliProxyHubStore(StorePath).ListAccounts());
     }
 
     [WindowsFact]
