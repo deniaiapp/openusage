@@ -41,6 +41,7 @@ internal sealed class CliProxyHubAccountRuntime : IProviderRuntime, IDisposable
             _ => throw new ArgumentException("The account provider is not supported through a hub.", nameof(account))
         };
         var expired = CliProxyHubRefusal.Message(CliProxyHubRefusalKind.NoToken, hub.Address.Host);
+        RefreshTurn = client.AccountRefreshTurn(hub.Id);
         _key = key;
         _http = new AppHttp(new HttpClient(new CliProxyHubTunnel(
             client, hub.Id, address, key, account.Link.AuthIndex, displayName)));
@@ -73,6 +74,7 @@ internal sealed class CliProxyHubAccountRuntime : IProviderRuntime, IDisposable
 
     public Provider Provider { get; }
     internal Guid HubId { get; }
+    internal SemaphoreSlim RefreshTurn { get; }
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors { get; }
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>

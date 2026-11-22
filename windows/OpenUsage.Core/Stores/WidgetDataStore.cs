@@ -204,6 +204,23 @@ public sealed class WidgetDataStore
     {
         var providerId = provider.Provider.Id;
         bool IsCurrent() => _providerRefreshes.TryGetValue(providerId, out var active) && active == refresh;
+        // Waiting for another account on the hub is not part of this provider's timeout.
+        var refreshTurn = (provider as CliProxyHubAccountRuntime)?.RefreshTurn;
+        if (refreshTurn is not null)
+        {
+            try { await refreshTurn.WaitAsync(cancellationToken).ConfigureAwait(false); }
+            catch (OperationCanceledException)
+            {
+                _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
+                return;
+            }
+            if (!IsCurrent() || cancellationToken.IsCancellationRequested)
+            {
+                _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
+                refreshTurn.Release();
+                return;
+            }
+        }
         var attempt = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var work = Task.Run(() => ReadWithOfflineRetriesAsync(provider, IsCurrent, attempt.Token), attempt.Token);
         try
@@ -233,7 +250,7 @@ public sealed class WidgetDataStore
         }
         finally
         {
-            _ = RetireRefreshAsync(providerId, refresh, work, attempt);
+            _ = RetireRefreshAsync(providerId, refresh, work, attempt, refreshTurn);
         }
     }
 
@@ -255,7 +272,8 @@ public sealed class WidgetDataStore
         return null;
     }
 
-    private async Task RetireRefreshAsync(string providerId, Lazy<Task> refresh, Task work, CancellationTokenSource attempt)
+    private async Task RetireRefreshAsync(string providerId, Lazy<Task> refresh, Task work,
+        CancellationTokenSource attempt, SemaphoreSlim? refreshTurn)
     {
         using (attempt)
         {
@@ -268,6 +286,7 @@ public sealed class WidgetDataStore
             // Don't start a second read while the first can still rotate credentials.
             await work.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
+            refreshTurn?.Release();
         }
     }
 

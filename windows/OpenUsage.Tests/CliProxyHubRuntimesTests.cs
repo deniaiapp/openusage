@@ -15,6 +15,7 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
 {
     private readonly DirectoryInfo _directory = Directory.CreateTempSubdirectory("openusage-hub-runtimes-");
     private readonly FixtureHub _handler = new();
+    private readonly RefreshClock _clock = new();
     private readonly CliProxyHubClient _client;
     private readonly LayoutStore _layout;
     private readonly WidgetDataStore _data;
@@ -24,7 +25,7 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
     {
         var settings = AppSettings.Load(Path.Combine(_directory.FullName, "settings.json"));
         _layout = new LayoutStore(settings, []);
-        _data = new WidgetDataStore(_layout, settings, _directory.FullName);
+        _data = new WidgetDataStore(_layout, settings, _directory.FullName, _clock);
         _client = new CliProxyHubClient(new AppHttp(new HttpClient(_handler)));
         _runtimes = new(_layout, _data,
             item => new CliProxyHubAccountRuntime(_client, item.Hub, item.Account, () => "fixture-key"));
@@ -57,6 +58,32 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
         Assert.Empty(_layout.PinnedDescriptors());
         Assert.False(File.Exists(Path.Combine(_directory.FullName, CardId(first) + ".json")));
         Assert.Empty(_runtimes.Reconcile([first, second]));
+    }
+
+    [Fact]
+    public async Task SameHubCardsStartTheirTimeoutOnlyWhenTheirTurnBegins()
+    {
+        var first = Account("first", "first");
+        var second = first with { Account = new(Guid.NewGuid(), "codex", "second",
+            first.Account.Link with { LoginId = "second", AuthIndex = "second" }) };
+        var otherHub = Account("other", "other");
+        _runtimes.Reconcile([first, second]);
+        using var release = new TaskCompletionSourceSignal();
+        _handler.BeforeResponse = index => index == "first" ? release.Task : Task.CompletedTask;
+
+        var refresh = _data.RefreshAllAsync(false, _ => Task.CompletedTask, default);
+        Assert.Equal(1, _clock.TimersStarted);
+        Assert.DoesNotContain(_handler.Calls, call => call.Index == "second");
+
+        _runtimes.Reconcile([first, second, otherHub]);
+        await _data.RefreshProviderAsync(CardId(otherHub)).WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(20, Used(CardId(otherHub)));
+
+        release.Release();
+        await refresh.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.Equal(10, Used(CardId(first)));
+        Assert.Equal(20, Used(CardId(second)));
+        Assert.Null(_data.ProviderError(CardId(second)));
     }
 
     [Fact]
@@ -100,7 +127,7 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
         using var requestStarted = new TaskCompletionSourceSignal();
         var account = Account("first", "first");
         _runtimes.Reconcile([account]);
-        _handler.BeforeResponse = async () =>
+        _handler.BeforeResponse = async _ =>
         {
             requestStarted.Release();
             await release.Task;
@@ -188,7 +215,7 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
         public ConcurrentQueue<(string Hub, string Index, string? Workspace)> Calls { get; } = [];
         public ConcurrentQueue<string> Listings { get; } = [];
         public string? Index { get; set; }
-        public Func<Task>? BeforeResponse { get; set; }
+        public Func<string, Task>? BeforeResponse { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
@@ -211,7 +238,7 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
             if (usage)
             {
                 Calls.Enqueue((request.RequestUri.Host, index, (string?)call["header"]?["ChatGPT-Account-Id"]));
-                if (BeforeResponse is { } before) await before();
+                if (BeforeResponse is { } before) await before(index);
             }
             if (Index is not null && index != Index)
                 return new HttpResponseMessage(HttpStatusCode.BadRequest)
@@ -233,6 +260,18 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
     private sealed class FixedClock : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
+    }
+
+    private sealed class RefreshClock : TimeProvider
+    {
+        private int _timersStarted;
+        public int TimersStarted => Volatile.Read(ref _timersStarted);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            Interlocked.Increment(ref _timersStarted);
+            return base.CreateTimer(callback, state, dueTime, period);
+        }
     }
 
     private sealed class WindowsFactAttribute : FactAttribute

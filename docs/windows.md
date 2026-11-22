@@ -123,6 +123,8 @@ Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management 
 
 OpenUsage checks the login list at startup, on **Refresh**, and before reading usage from a hub with enabled cards. Other connected hubs are checked about once an hour. A failed check keeps the saved logins and shows the error next to the hub in **Customize → CLIProxyAPI Hubs**. If a hub rejects the saved key, use **Replace Key** to resume automatic checks.
 
+Cards on the same hub refresh one at a time, without using up their refresh timeout while waiting for their turn.
+
 Each supported Claude, ChatGPT, Antigravity, Devin, or Grok login gets its own dashboard card. Enabled cards
 refresh usage through the hub without a separate local sign-in. You can customize each card and pin its
 metrics as usual; new hub cards have no tray pins. Hub usage is fetched again when the app restarts rather

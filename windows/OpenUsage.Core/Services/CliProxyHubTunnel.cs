@@ -87,6 +87,8 @@ internal sealed partial class CliProxyHubClient
     /// <summary>Lets a hub be called again after its key was replaced or the hub was removed.</summary>
     public void Reopen(Guid hubId) => _gate.Reopen(hubId);
 
+    internal SemaphoreSlim AccountRefreshTurn(Guid hubId) => _gate.AccountRefreshTurn(hubId);
+
     private sealed record Envelope(
         [property: JsonPropertyName("status_code")] int? StatusCode,
         [property: JsonPropertyName("header")] Dictionary<string, List<string>?>? Header,
@@ -147,7 +149,7 @@ internal static class CliProxyHubRefusal
 
 /// <summary>
 /// Keeps a wrong management key to one strike per hub. CLIProxyAPI bans an IP for 30 minutes after five
-/// wrong keys and every hub account refreshes at once, so a hub's calls go one at a time. Once the hub
+/// wrong keys, so a hub's calls go one at a time. Once the hub
 /// rejects a key or bans this PC, calls with that key fail without being sent until the hub is reopened.
 /// </summary>
 internal sealed class CliProxyHubGate
@@ -162,7 +164,7 @@ internal sealed class CliProxyHubGate
         long generation;
         lock (_lock)
         {
-            if (!_hubs.TryGetValue(hubId, out state!)) _hubs[hubId] = state = new HubState();
+            state = StateFor(hubId);
             generation = state.Generation;
             state.ThrowIfRefused(key);
         }
@@ -201,9 +203,21 @@ internal sealed class CliProxyHubGate
         }
     }
 
+    internal SemaphoreSlim AccountRefreshTurn(Guid hubId)
+    {
+        lock (_lock) return StateFor(hubId).AccountRefreshTurn;
+    }
+
+    private HubState StateFor(Guid hubId)
+    {
+        if (!_hubs.TryGetValue(hubId, out var state)) _hubs[hubId] = state = new HubState();
+        return state;
+    }
+
     private sealed class HubState
     {
         public SemaphoreSlim Turn { get; } = new(1, 1);
+        public SemaphoreSlim AccountRefreshTurn { get; } = new(1, 1);
         public long Generation { get; set; }
         public (string Key, string Message)? Refused { get; set; }
 

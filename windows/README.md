@@ -168,6 +168,7 @@ The app syncs supported hub logins at startup, on demand, and on scheduled refre
 It checks for login changes before reading hub usage, so relinked accounts keep their cards and settings.
 Failed checks appear next to the hub in Customize. Each enabled hub login has its own dashboard card
 and refreshes usage through its hub. Hub metrics aren't pinned to the tray by default.
+Cards on the same hub refresh one at a time.
 Management requests use HTTPS, or HTTP for loopback, local network, and Tailscale addresses,
 without following redirects.
 
