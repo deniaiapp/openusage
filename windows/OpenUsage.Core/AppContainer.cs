@@ -1,5 +1,6 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Codex;
+using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
@@ -74,6 +75,15 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public async Task ConnectDevinAsync(DevinProvider provider, Action<Uri> openBrowser, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        var snapshot = await provider.ConnectAsync(openBrowser, linked.Token);
+        if (!Layout.IsProviderEnabled(provider.Provider.Id))
+            Layout.SetProviderEnabled(provider.Provider.Id, true);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
 
     public async Task ConnectCodexAsync(Action<string> showCode, CancellationToken cancellationToken)
     {
