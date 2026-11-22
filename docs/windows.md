@@ -14,11 +14,23 @@ Choose **Replace API Key** next to an additional account to change its key witho
 
 In **Customize**, use the up and down arrows to move a provider and its accounts together on the dashboard. The order is saved; **Undo Reorder** restores the previous order during the current session.
 
+If Windows reports that there is no network path, OpenUsage retries that refresh for about a minute before showing an error. Other refresh failures keep the usual backoff.
+
 Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
+
+Enable **Usage Notifications** in Settings to get a Windows notification before a limit runs out at its current pace, or before a multi-day limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit. Click the banner while it is visible to open the dashboard. If it has moved to Notification Center, use the OpenUsage tray icon instead.
+
+OpenRouter only uses API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY`, enter the key in **Customize → OpenRouter**. Already saved keys keep working.
 
 A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.
 
 Ollama's local sign-in stays off until you turn it on in Customize — the local signing key exists even when you only run models on-device. Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
+
+When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
+
+### Muse Code on Windows
+
+In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the displayed code in your browser. OpenUsage checks that the account has a Muse Code subscription before saving its sign-in with Windows user encryption. Turn Muse Code on in Customize to see **Session** and **Weekly** limits; **Session** is pinned to the tray by default. Use **Sign In Again** to replace the connection without losing your layout.
 
 Provider details that match macOS:
 
@@ -42,6 +54,8 @@ See the [Windows README](../windows/README.md) for how to build it and which pro
 ## Privacy Mode
 
 Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.
+
+Privacy Mode pauses new usage notifications. It does not remove notifications Windows already saved.
 
 This is off by default and stays set after a restart. Not every capture method honors Windows' protection. Check your capture preview before sharing; other apps, the CLI and saved data are unchanged.
 
