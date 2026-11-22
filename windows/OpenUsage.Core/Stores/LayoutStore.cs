@@ -213,10 +213,28 @@ public sealed class LayoutStore
 
     public bool IsMetricEnabled(string metricId) => _settings.EnabledMetrics.Contains(metricId);
 
+    public static bool CanUnifyAccounts(string providerId) => providerId is "claude" or "codex";
+
+    public bool UnifiesAccounts(string providerId) =>
+        CanUnifyAccounts(providerId) && _settings.UnifiedProviders.Contains(providerId);
+
+    public void SetUnifiesAccounts(string providerId, bool unify)
+    {
+        if (!CanUnifyAccounts(providerId)) return;
+        if (unify ? _settings.UnifiedProviders.Add(providerId) : _settings.UnifiedProviders.Remove(providerId))
+            _settings.Save();
+    }
+
     public void SetMetricEnabled(string metricId, bool enabled)
     {
         if (enabled) _settings.EnabledMetrics.Add(metricId);
         else _settings.EnabledMetrics.Remove(metricId);
+        _settings.Save();
+    }
+
+    public void HideUnifiedMetric(UnifiedAccountMetric metric)
+    {
+        _settings.EnabledMetrics.ExceptWith(metric.CopyIds);
         _settings.Save();
     }
 
@@ -230,6 +248,30 @@ public sealed class LayoutStore
     }
 
     public bool IsPinned(string metricId) => _settings.PinnedMetrics.Contains(metricId);
+
+    public bool IsUnifiedMetricPinned(UnifiedAccountMetric metric) =>
+        metric.CopyIds.Any(id => IsMetricEnabled(id) && IsPinned(id));
+
+    public bool ToggleUnifiedMetricPin(UnifiedAccountMetric metric)
+    {
+        var copies = metric.CopyIds.Select(Descriptor).OfType<WidgetDescriptor>()
+            .Where(d => d.Pinnable).DistinctBy(d => d.Id).ToArray();
+        if (copies.Length == 0) return false;
+        if (IsUnifiedMetricPinned(metric))
+            _settings.PinnedMetrics.ExceptWith(copies.Select(d => d.Id));
+        else
+        {
+            var added = copies.Where(d => !IsPinned(d.Id)).ToArray();
+            foreach (var account in added.GroupBy(d => d.ProviderId))
+            {
+                var existing = _settings.PinnedMetrics.Count(id => Descriptor(id)?.ProviderId == account.Key);
+                if (existing + account.Count() > MaxPinsPerProvider) return false;
+            }
+            _settings.PinnedMetrics.UnionWith(added.Select(d => d.Id));
+        }
+        _settings.Save();
+        return true;
+    }
 
     public bool TogglePin(string metricId)
     {
@@ -297,6 +339,7 @@ public sealed class LayoutStore
             SeedNewAccountMetrics(runtime, providerId);
         }
         _settings.OpenCards.Clear();
+        _settings.UnifiedProviders.Clear();
         _settings.Save();
     }
 

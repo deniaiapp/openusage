@@ -128,6 +128,12 @@ refresh usage through the hub without a separate local sign-in. You can customiz
 metrics as usual; new hub cards have no tray pins. Hub usage is fetched again when the app restarts rather
 than written to the local snapshot cache. Disconnecting a hub removes only its own cards.
 
+## Unify Multiple Accounts
+
+In **Customize**, open Claude or ChatGPT and turn on **Unify Multiple Accounts**. When at least two enabled accounts of that provider are available, **All Usage** shows one card. Expand it to see the individual accounts.
+
+The combined card pools compatible limits and shows the earliest reset. A combined limit appears once in **Priority** and in the tray. Hide or star a combined limit from its context menu to apply the change to every account in the card. Usage notifications still apply per account.
+
 ## Privacy Mode
 
 Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.
