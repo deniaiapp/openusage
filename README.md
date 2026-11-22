@@ -99,7 +99,7 @@ Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage
 
 Windows reset countdowns show calendar months and years for longer waits.
 
-Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
+Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known. Priority also shows which accounts are waiting for their first reading.
 Priority also lists unpinned limits you can use before they reset.
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
