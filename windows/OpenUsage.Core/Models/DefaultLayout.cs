@@ -73,6 +73,8 @@ public static class DefaultLayout
 
     public static readonly string[] StarterProviders = ["claude", "codex", "cursor"];
 
+    internal static readonly string[] NewAccountMetricIds = ["openrouter.yesterday", "openrouter.prior30", ZaiProvider.ResetsMetricId];
+
     /// <summary>
     /// Defaults that layouts saved before seeding was tracked already had. Anything in
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
@@ -82,5 +84,4 @@ public static class DefaultLayout
         .Except(NewAccountMetricIds)
         .ToArray();
 
-    internal static readonly string[] NewAccountMetricIds = ["openrouter.yesterday", "openrouter.prior30", ZaiProvider.ResetsMetricId];
 }
