@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
@@ -50,7 +51,7 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [Fact]
-    public async Task OllamaApiKeyRefreshDoesNotUseLocalSignIn()
+    public async Task OllamaRefreshUsesBearerAuthentication()
     {
         var requests = new List<(HttpMethod, string)>();
         using var http = MakeHttp(request =>
@@ -65,7 +66,7 @@ public sealed class ApiKeyAccountTests : IDisposable
                 ? (200, """{"included":{},"purchased":{"balance_usd":5}}""")
                 : (200, """{"Plan":"pro"}""");
         });
-        var provider = new OllamaProvider(http, () => throw new InvalidOperationException("Local key was consulted"));
+        var provider = new OllamaProvider(http);
 
         var snapshot = await provider.RefreshWithApiKeyAsync("fixture-key", default);
 
@@ -96,6 +97,83 @@ public sealed class ApiKeyAccountTests : IDisposable
         Assert.Equal(restored.CardId, snapshot.ProviderId);
         Assert.Equal("Ollama · Work", snapshot.DisplayName);
         Assert.Equal(3, Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Monthly")).Used);
+    }
+
+    [Fact]
+    public async Task OllamaTemplateCannotBeEnabledButCloudAccountsCan()
+    {
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new OllamaProvider(http);
+        var settings = AppSettings.Load(Path.Combine(_directory, "settings.json"));
+        settings.EnabledProviders.Add(provider.Provider.Id);
+        var layout = new LayoutStore(settings, [provider]);
+        Assert.Empty(layout.VisibleProviders);
+        layout.SetProviderEnabled(provider.Provider.Id, true);
+        Assert.Empty(layout.VisibleProviders);
+        var data = new WidgetDataStore(layout, settings, Path.Combine(_directory, "cache"));
+        Assert.Empty(new FirstLaunchSetup(layout, data, settings).Choices);
+        Assert.True((await provider.RefreshAsync()).IsError);
+
+        var account = new ApiKeyAccount(Guid.NewGuid(), provider.Provider.Id, "Cloud");
+        var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+        layout.RegisterAccount(service.MakeRuntime(account, provider), account.ProviderId);
+        Assert.Equal(account.CardId, Assert.Single(layout.VisibleProviders).Provider.Id);
+        Assert.Equal(account.CardId + ".monthly", Assert.Single(layout.PinnedDescriptors()).Id);
+
+        layout.TogglePin(account.CardId + ".monthly");
+        var second = new ApiKeyAccount(Guid.NewGuid(), provider.Provider.Id, "Second");
+        layout.RegisterAccount(service.MakeRuntime(second, provider), second.ProviderId);
+        var restored = new LayoutStore(AppSettings.Load(Path.Combine(_directory, "settings.json")), [provider]);
+        restored.RegisterAccount(service.MakeRuntime(account, provider), account.ProviderId);
+        restored.RegisterAccount(service.MakeRuntime(second, provider), second.ProviderId);
+        Assert.Empty(restored.PinnedDescriptors());
+        restored.ResetToDefault();
+        Assert.Equal(account.CardId + ".monthly", Assert.Single(restored.PinnedDescriptors()).Id);
+    }
+
+    [Theory]
+    [InlineData("openrouter", "OPENROUTER_API_KEY")]
+    [InlineData("zai", "ZAI_API_KEY")]
+    public async Task MainAccountDoesNotUseAnEnvironmentKey(string providerId, string variable)
+    {
+        var previous = Environment.GetEnvironmentVariable(variable);
+        try
+        {
+            Environment.SetEnvironmentVariable(variable, "fixture-environment-key");
+            using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+            var keys = new ApiKeyStore(Path.Combine(_directory, "keys.bin"));
+            IProviderRuntime provider = providerId == "zai"
+                ? new ZaiProvider(http, keys) : new OpenRouterProvider(http, keys);
+            Assert.Null(Assert.IsAssignableFrom<IApiKeyManaging>(provider).LoadKey());
+            Assert.False(await provider.HasLocalCredentialsAsync());
+            Assert.True((await provider.RefreshAsync()).IsError);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, previous);
+        }
+    }
+
+    [WindowsFact]
+    public async Task OpenRouterStillUsesTheSavedKeyAfterRestart()
+    {
+        var path = Path.Combine(_directory, "keys.bin");
+        new ApiKeyStore(path).Set("openrouter", "fixture-saved-key");
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new OpenRouterProvider(http, new ApiKeyStore(path));
+        Assert.Equal("fixture-saved-key", provider.LoadKey());
+        Assert.True(await provider.HasLocalCredentialsAsync());
+    }
+
+    [WindowsFact]
+    public async Task ZaiStillUsesTheSavedKeyAfterRestart()
+    {
+        var path = Path.Combine(_directory, "keys.bin");
+        new ApiKeyStore(path).Set("zai", "fixture-saved-key");
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new ZaiProvider(http, new ApiKeyStore(path));
+        Assert.Equal("fixture-saved-key", provider.LoadKey());
+        Assert.True(await provider.HasLocalCredentialsAsync());
     }
 
     [Fact]

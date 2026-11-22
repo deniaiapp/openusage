@@ -5,6 +5,7 @@ namespace OpenUsage.Core.Providers;
 public interface IProviderRuntime
 {
     Provider Provider { get; }
+    bool IsAccountTemplate => false;
     IReadOnlyList<WidgetDescriptor> WidgetDescriptors { get; }
     Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default);
     Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default);

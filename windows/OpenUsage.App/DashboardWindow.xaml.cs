@@ -16,6 +16,7 @@ using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
 using Brush = System.Windows.Media.Brush;
+using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
 using Rectangle = System.Windows.Shapes.Rectangle;
 using CheckBox = System.Windows.Controls.CheckBox;
@@ -39,7 +40,9 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
+    private DeviceLoginView? _deviceLoginEditor;
 
     public DashboardWindow(AppContainer container)
     {
@@ -56,13 +59,24 @@ public partial class DashboardWindow : Window
 
     public void ToggleFromTray()
     {
+        if (!IsVisible && _deviceLoginEditor?.ResumeIfPending() == true)
+        {
+            ShowAnchored();
+            Activate();
+            return;
+        }
         if (IsVisible)
         {
             Hide();
             return;
         }
-        _screen = DashboardScreen.Dashboard;
-        Render();
+        if (_copilotLoginEditor?.ResumeIfPending() == true)
+            Render(preserveEditor: true);
+        else
+        {
+            _screen = DashboardScreen.Dashboard;
+            Render();
+        }
         ShowAnchored();
         Activate();
     }
@@ -151,6 +165,8 @@ public partial class DashboardWindow : Window
 
     private void Render(bool preserveEditor = false)
     {
+        if (preserveEditor && _deviceLoginEditor is not null) return;
+        _deviceLoginEditor = null;
         var remaining = _container.Data.NextRefresh - DateTimeOffset.Now;
         RefreshLabel.Text = _container.Data.IsRefreshing
             ? "Updating…"
@@ -159,6 +175,9 @@ public partial class DashboardWindow : Window
                 : $"Next update in {Formatters.CompactDuration(remaining) ?? "soon"} — click to refresh";
 
         TopBar.Visibility = _screen == DashboardScreen.Dashboard ? Visibility.Collapsed : Visibility.Visible;
+        DashboardTabs.Visibility = _screen == DashboardScreen.Dashboard && _container.Layout.VisibleProviders.Count > 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
         TopTitle.Text = _screen switch
         {
             DashboardScreen.Customize => "Customize",
@@ -167,8 +186,9 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && _accountEditor is not null) return;
+        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null)) return;
         _accountEditor = null;
+        _copilotLoginEditor = null;
         ContentHost.Children.Clear();
         switch (_screen)
         {
@@ -201,6 +221,12 @@ public partial class DashboardWindow : Window
             return;
         }
 
+        if (PriorityTab.IsChecked == true)
+        {
+            RenderPriorityBoard();
+            return;
+        }
+
         foreach (var runtime in providers)
             ContentHost.Children.Add(ProviderCard(runtime));
     }
@@ -210,8 +236,9 @@ public partial class DashboardWindow : Window
         var provider = runtime.Provider;
         var snapshot = _container.Data.Snapshot(provider.Id);
         var open = _container.Layout.IsCardOpen(provider.Id);
-        var always = _container.Layout.VisibleMetrics(provider.Id, false);
-        var onDemand = _container.Layout.OnDemandMetrics(provider.Id);
+        var metrics = _container.Layout.VisibleMetrics(provider.Id, includeOnDemand: open);
+        var links = provider.VisibleLinks;
+        var hasExpandedContent = links.Count > 0 || _container.Layout.OnDemandMetrics(provider.Id).Count > 0;
         var card = Card();
         var stack = new StackPanel();
 
@@ -257,13 +284,10 @@ public partial class DashboardWindow : Window
 
         stack.Children.Add(header);
 
-        foreach (var descriptor in always)
+        foreach (var descriptor in metrics)
             stack.Children.Add(MetricRow(descriptor));
 
-        // The caret sits at the bottom of the card: below Always Visible when collapsed, and below a
-        // thin line, the On Demand rows, and the quick links when open.
-        var hasExpandedContent = onDemand.Count > 0 || provider.VisibleLinks.Count > 0;
-        if (hasExpandedContent && open)
+        if (open && links.Count > 0)
         {
             stack.Children.Add(new Border
             {
@@ -271,20 +295,15 @@ public partial class DashboardWindow : Window
                 Background = (Brush)FindResource("SeparatorBrush"),
                 Margin = new Thickness(14, 5, 14, 5)
             });
-            foreach (var descriptor in onDemand)
-                stack.Children.Add(MetricRow(descriptor));
-            if (provider.VisibleLinks.Count > 0)
+            var linkPanel = new WrapPanel { Margin = new Thickness(10, 4, 10, 0) };
+            foreach (var link in links)
             {
-                var links = new WrapPanel { Margin = new Thickness(10, 4, 10, 0) };
-                foreach (var link in provider.VisibleLinks)
-                {
-                    var btn = new Button { Content = link.Label, Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 0, 6, 4) };
-                    var url = link.Url;
-                    btn.Click += (_, _) => OpenUrl(url);
-                    links.Children.Add(btn);
-                }
-                stack.Children.Add(links);
+                var btn = new Button { Content = link.Label, Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 0, 6, 4) };
+                var url = link.Url;
+                btn.Click += (_, _) => OpenUrl(url);
+                linkPanel.Children.Add(btn);
             }
+            stack.Children.Add(linkPanel);
         }
         if (hasExpandedContent)
             stack.Children.Add(CardCaret(provider.Id, open));
@@ -294,11 +313,16 @@ public partial class DashboardWindow : Window
         return card;
     }
 
-    private UIElement MetricRow(WidgetDescriptor descriptor)
+    private UIElement MetricRow(WidgetDescriptor descriptor, WidgetData? resolved = null, DateTimeOffset? evaluatedAt = null)
     {
-        var data = _container.Data.Resolve(descriptor);
-        var now = DateTimeOffset.Now;
-        var panel = new StackPanel { Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4) };
+        var data = resolved ?? _container.Data.Resolve(descriptor);
+        var now = evaluatedAt ?? DateTimeOffset.Now;
+        var panel = new StackPanel
+        {
+            Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4),
+            Background = Brushes.Transparent,
+            ContextMenu = MetricContextMenu(descriptor)
+        };
 
         var labelLine = new Grid();
         labelLine.ColumnDefinitions.Add(new ColumnDefinition());
@@ -453,19 +477,23 @@ public partial class DashboardWindow : Window
             panel.Children.Add(unbounded);
         }
 
+        return panel;
+    }
+
+    private ContextMenu MetricContextMenu(WidgetDescriptor descriptor)
+    {
         var context = new ContextMenu();
-        context.Items.Add(Item(data.HasData && _container.Layout.IsMetricEnabled(descriptor.Id) ? "Hide" : "Show",
-            () => { _container.Layout.SetMetricEnabled(descriptor.Id, !_container.Layout.IsMetricEnabled(descriptor.Id)); Render(); }));
-        context.Items.Add(Item(_container.Layout.IsPinned(descriptor.Id) ? "Unstar" : "Star for Tray",
-            () => { _container.Layout.TogglePin(descriptor.Id); Render(); }));
+        context.Items.Add(Item("Hide", () => { _container.Layout.SetMetricEnabled(descriptor.Id, false); Render(); }));
+        if (descriptor.Pinnable)
+            context.Items.Add(Item(_container.Layout.IsPinned(descriptor.Id) ? "Unstar" : "Star for Tray",
+                () => { _container.Layout.TogglePin(descriptor.Id); Render(); }));
         context.Items.Add(Item($"Refresh {descriptor.ProviderId}", () => _ = _container.Data.RefreshProviderAsync(descriptor.ProviderId)));
         context.Items.Add(Item("Customize…", () =>
         {
             _detailProviderId = descriptor.ProviderId;
             ShowScreen(DashboardScreen.CustomizeDetail);
         }));
-        panel.ContextMenu = context;
-        return panel;
+        return context;
     }
 
     private void RenderCustomize()
@@ -509,7 +537,7 @@ public partial class DashboardWindow : Window
             Grid.SetColumn(toggle, 2);
             grid.Children.Add(icon);
             grid.Children.Add(name);
-            grid.Children.Add(toggle);
+            if (!runtime.IsAccountTemplate) grid.Children.Add(toggle);
             var button = new Button { Style = (Style)FindResource("GhostButton"), Padding = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
             button.Content = grid;
             button.Click += (_, _) =>
@@ -545,7 +573,7 @@ public partial class DashboardWindow : Window
                 row.Child = button;
             }
             row.Margin = new Thickness(0, 0, 0, 8);
-            row.Opacity = _container.Layout.IsProviderEnabled(provider.Id) ? 1 : 0.55;
+            row.Opacity = runtime.IsAccountTemplate || _container.Layout.IsProviderEnabled(provider.Id) ? 1 : 0.55;
             ContentHost.Children.Add(row);
         }
     }
@@ -554,6 +582,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is OpenUsage.Core.Providers.Copilot.CopilotProvider copilot)
+        {
+            ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
+            _copilotLoginEditor = new CopilotLoginView(_container, copilot, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_copilotLoginEditor);
+        }
         if (runtime is IApiKeyManaging keys)
         {
             ContentHost.Children.Add(SectionTitle("API Key"));
@@ -569,9 +603,18 @@ public partial class DashboardWindow : Window
 
         if (ApiKeyAccounts.Supports(runtime.Provider.Id))
         {
-            ContentHost.Children.Add(SectionTitle("Additional Accounts"));
+            ContentHost.Children.Add(SectionTitle(runtime.IsAccountTemplate ? "Accounts" : "Additional Accounts"));
             _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
             ContentHost.Children.Add(_accountEditor);
+        }
+
+        if (runtime.IsAccountTemplate) return;
+
+        if (runtime is IDeviceSignInProvider deviceProvider)
+        {
+            ContentHost.Children.Add(SectionTitle($"{deviceProvider.SignInAuthority} Sign-In"));
+            _deviceLoginEditor = new DeviceLoginView(_container, deviceProvider, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_deviceLoginEditor);
         }
 
         ContentHost.Children.Add(SectionTitle("Always Visible"));
@@ -652,6 +695,8 @@ public partial class DashboardWindow : Window
             _container.Settings.Save();
         }));
 
+        RenderPriorityLimitSettings();
+
         ContentHost.Children.Add(SectionTitle("Refresh"));
         ContentHost.Children.Add(SettingCombo("Interval", new[] { "1 minute", "5 minutes", "15 minutes" },
             _container.Settings.RefreshIntervalSeconds switch { 60 => 0, 900 => 2, _ => 1 },
@@ -660,6 +705,18 @@ public partial class DashboardWindow : Window
                 _container.Settings.RefreshIntervalSeconds = index switch { 0 => 60, 2 => 900, _ => 300 };
                 _container.Settings.Save();
             }));
+
+        ContentHost.Children.Add(SectionTitle("Usage Notifications"));
+        ContentHost.Children.Add(SettingToggle("Burning Fast", _container.Settings.NotifyBurningFast, value =>
+        {
+            _container.Settings.NotifyBurningFast = value;
+            _container.Settings.Save();
+        }));
+        ContentHost.Children.Add(SettingToggle("Use It or Lose It", _container.Settings.NotifyUseItOrLoseIt, value =>
+        {
+            _container.Settings.NotifyUseItOrLoseIt = value;
+            _container.Settings.Save();
+        }));
 
         var reset = new Button { Content = "Reset Layout to Default", Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 12, 0, 0) };
         reset.Click += (_, _) =>
