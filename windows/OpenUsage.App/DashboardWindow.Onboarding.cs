@@ -93,6 +93,28 @@ public partial class DashboardWindow
         return stack;
     }
 
+    private UIElement HiddenMetricsDashboard()
+    {
+        var stack = new StackPanel { Margin = new Thickness(16, 22, 16, 26) };
+        stack.Children.Add(new TextBlock
+        {
+            Text = "Every metric is hidden. Turn metrics back on in Customize.",
+            Style = (Style)FindResource("MutedText"),
+            TextWrapping = TextWrapping.Wrap,
+            TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(0, 0, 0, 12)
+        });
+        var customize = new Button
+        {
+            Content = "Customize",
+            Style = (Style)FindResource("PrimaryButton"),
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        customize.Click += (_, _) => ShowScreen(DashboardScreen.Customize);
+        stack.Children.Add(customize);
+        return stack;
+    }
+
     /// <summary>The centered caret at the bottom of a provider card that shows or hides its On Demand rows and links.</summary>
     private UIElement CardCaret(string providerId, bool open)
     {

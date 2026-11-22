@@ -58,6 +58,36 @@ public sealed class LimitsCommandTests : IDisposable
         Assert.Equal(2, Run(FetchedAt, "codex").Code);
     }
 
+    [Theory]
+    [InlineData(null, 600)]
+    [InlineData(29, 600)]
+    [InlineData(60, 120)]
+    [InlineData(900, 1800)]
+    public void CommandExpiresCachedDataAfterTwoConfiguredRefreshIntervals(int? interval, int freshness)
+    {
+        File.WriteAllText(Path.Combine(Cache, "codex.json"), """
+            {"ProviderId":"codex","DisplayName":"Codex","RefreshedAt":"2026-11-21T00:00:00Z",
+             "Limits":{"session":{"Kind":"consumption","Unit":"percent","Used":20}}}
+            """);
+
+        var settings = new Dictionary<string, object> { ["enabledProviders"] = new[] { "codex" } };
+        if (interval is { } seconds) settings["refreshIntervalSeconds"] = seconds;
+        File.WriteAllText(Settings, JsonSerializer.Serialize(settings));
+        var expiry = FetchedAt.AddSeconds(freshness);
+
+        var (freshCode, before, _) = Run(expiry.AddSeconds(-1), "codex");
+        var (staleCode, atExpiry, _) = Run(expiry, "codex");
+        Assert.Equal(0, freshCode);
+        Assert.Equal(0, staleCode);
+        using var fresh = JsonDocument.Parse(before);
+        using var stale = JsonDocument.Parse(atExpiry);
+        var freshEntry = fresh.RootElement.GetProperty("providers").GetProperty("codex");
+        var staleEntry = stale.RootElement.GetProperty("providers").GetProperty("codex");
+        Assert.Equal(expiry, freshEntry.GetProperty("expiresAt").GetDateTimeOffset());
+        Assert.False(freshEntry.GetProperty("stale").GetBoolean());
+        Assert.True(staleEntry.GetProperty("stale").GetBoolean());
+    }
+
     [Fact]
     public void CommandRejectsUnknownArgumentsAndDoesNotCreateSettings()
     {
