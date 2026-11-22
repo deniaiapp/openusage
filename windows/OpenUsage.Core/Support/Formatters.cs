@@ -33,9 +33,8 @@ public static class Formatters
         var current = now ?? DateTimeOffset.Now;
         if (mode == ResetDisplayMode.Relative)
         {
-            var seconds = (date - current).TotalSeconds;
-            if (seconds <= 5 * 60) return Imminent;
-            return CompactDuration(TimeSpan.FromSeconds(seconds));
+            if (date - current <= TimeSpan.FromMinutes(5)) return Imminent;
+            return CalendarDuration(current, date, TimeZoneInfo.Local);
         }
 
         if ((date - current).TotalSeconds <= 0) return Imminent;
@@ -56,13 +55,47 @@ public static class Formatters
 
     public static string? CompactDuration(TimeSpan span)
     {
-        if (span.TotalSeconds <= 0 || double.IsNaN(span.TotalSeconds)) return null;
-        var totalMinutes = Math.Max(1, (int)Math.Ceiling(span.TotalMinutes));
+        if (span <= TimeSpan.Zero) return null;
+        return FormatMinutes((long)Math.Ceiling(span.TotalMinutes));
+    }
+
+    internal static string CalendarDuration(DateTimeOffset start, DateTimeOffset end, TimeZoneInfo zone)
+    {
+        var totalMinutes = (long)Math.Ceiling((end - start).TotalMinutes);
+        var localStart = TimeZoneInfo.ConvertTime(start, zone).DateTime;
+        var roundedEnd = new DateTimeOffset(Math.Min(start.UtcTicks + totalMinutes * TimeSpan.TicksPerMinute,
+            DateTimeOffset.MaxValue.UtcTicks), TimeSpan.Zero);
+        var localEnd = TimeZoneInfo.ConvertTime(roundedEnd, zone).DateTime;
+        var months = (localEnd.Year - localStart.Year) * 12 + localEnd.Month - localStart.Month;
+        if (months <= 0) return FormatMinutes(totalMinutes);
+
+        long MonthBoundaryTicks(int count)
+        {
+            var boundary = localStart.AddMonths(count);
+            return boundary.Ticks - zone.GetUtcOffset(boundary).Ticks;
+        }
+
+        var boundaryTicks = MonthBoundaryTicks(months);
+        if (boundaryTicks > roundedEnd.UtcTicks)
+        {
+            if (--months == 0) return FormatMinutes(totalMinutes);
+            boundaryTicks = MonthBoundaryTicks(months);
+        }
+        var years = months / 12;
+        if (years > 0) return Pair(years, "y", months % 12, "mo");
+        return Pair(months, "mo", (roundedEnd.UtcTicks - boundaryTicks) / TimeSpan.TicksPerDay, "d");
+    }
+
+    private static string FormatMinutes(long totalMinutes)
+    {
         var days = totalMinutes / (24 * 60);
         var hours = totalMinutes % (24 * 60) / 60;
         var minutes = totalMinutes % 60;
-        if (days > 0) return $"{days}d {hours}h";
-        if (hours > 0) return minutes > 0 ? $"{hours}h {minutes}m" : $"{hours}h";
+        if (days > 0) return Pair(days, "d", hours, "h");
+        if (hours > 0) return Pair(hours, "h", minutes, "m");
         return $"{minutes}m";
     }
+
+    private static string Pair(long major, string majorUnit, long minor, string minorUnit) =>
+        minor > 0 ? $"{major}{majorUnit} {minor}{minorUnit}" : $"{major}{majorUnit}";
 }
