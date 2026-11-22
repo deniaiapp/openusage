@@ -418,8 +418,10 @@ public sealed class ApiKeyAccountTests : IDisposable
         Assert.True(await provider.HasLocalCredentialsAsync());
     }
 
-    [Fact]
-    public async Task OpenRouterManagementAccountTotalsAllListedKeys()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OpenRouterManagementAccountTotalsAllListedKeys(bool requireKey)
     {
         var firstPage = Enumerable.Repeat(new { usage_daily = 1, usage_weekly = 2, usage_monthly = 3 }, 100);
         var secondPage = new[] { new { usage_daily = 4, usage_weekly = 5, usage_monthly = 6 } };
@@ -439,8 +441,9 @@ public sealed class ApiKeyAccountTests : IDisposable
             return (200, JsonSerializer.Serialize(new { data = keys }));
         });
         var provider = new OpenRouterProvider(http, new ApiKeyStore());
-        var snapshot = await provider.RefreshWithKeyAsync("fixture-management-key", default, requireKey: true);
+        var snapshot = await provider.RefreshWithKeyAsync("fixture-management-key", default, requireKey);
         Assert.False(snapshot.IsError);
+        Assert.Null(snapshot.Line("Balance"));
         Assert.Equal(new[] { "?include_disabled=true&include_expired=true&offset=0", "?include_disabled=true&include_expired=true&offset=100" }, queries);
         Assert.Equal(104, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("Today")).Items).Number);
         Assert.Equal(205, Assert.Single(Assert.IsType<MetricLine.ValuesLine>(snapshot.Line("This Week")).Items).Number);
@@ -462,6 +465,8 @@ public sealed class ApiKeyAccountTests : IDisposable
                 return key == "fixture-standard"
                     ? (200, """{"data":{"is_management_key":false,"usage_daily":1}}""")
                     : (200, """{"data":{"is_management_key":true,"usage_daily":0,"limit":20,"limit_remaining":18}}""");
+            if (request.RequestUri?.AbsolutePath == "/api/v1/keys")
+                return (200, """{"data":[{"usage_daily":3,"usage_weekly":5,"usage_monthly":9}]}""");
             Assert.Equal(OpenRouterActivity.Url, request.RequestUri);
             requests.Add(key);
             return key == "fixture-denied" ? (403, "{}")
@@ -470,6 +475,7 @@ public sealed class ApiKeyAccountTests : IDisposable
         var provider = new OpenRouterProvider(http, new ApiKeyStore(), clock);
 
         var management = await provider.RefreshWithKeyAsync("fixture-management", default);
+        Assert.Equal(3, Spend(management, "Today"));
         Assert.Equal(4, Spend(management, "Yesterday"));
         Assert.Equal(11, Spend(management, "Prior 30 Days"));
         Assert.Equal(41, Spend(management, "Balance"));
@@ -539,6 +545,19 @@ public sealed class ApiKeyAccountTests : IDisposable
     {
         public DateTimeOffset Now { get; set; } = new(2026, 11, 21, 23, 40, 0, TimeSpan.Zero);
         public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    [Fact]
+    public async Task OpenRouterPrimaryManagementAccountDoesNotShowKeySpendIfTheListFails()
+    {
+        using var http = MakeHttp(request => request.RequestUri == OpenRouterProvider.KeyUrl
+            ? (200, """{"data":{"is_management_key":true,"usage_daily":0}}""")
+            : (503, "{}"));
+        var provider = new OpenRouterProvider(http, new ApiKeyStore());
+        var snapshot = await provider.RefreshWithKeyAsync("fixture-management-key", default);
+
+        Assert.True(snapshot.IsError);
+        Assert.Null(snapshot.Line("Today"));
     }
 
     [Fact]

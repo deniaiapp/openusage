@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Support;
 
@@ -6,6 +7,20 @@ namespace OpenUsage.Core.Providers.Antigravity;
 public sealed class AntigravityUsageClient(AppHttp http)
 {
     internal sealed class TokenRefused : Exception { }
+
+    private static readonly string[] QuotaOrder =
+    [
+        AntigravityMetric.SessionLabel, AntigravityMetric.WeeklyLabel, AntigravityMetric.ArgonWeeklyLabel,
+        AntigravityMetric.ClaudeLabel, AntigravityMetric.ClaudeWeeklyLabel
+    ];
+
+    private static string ArchitectureName => RuntimeInformation.ProcessArchitecture switch
+    {
+        Architecture.X64 => "amd64",
+        Architecture.X86 => "386",
+        Architecture.Arm64 => "arm64",
+        _ => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant()
+    };
 
     public async Task<(List<MetricLine> Lines, string? Plan)> QuotaAsync(string token, CancellationToken ct = default)
     {
@@ -32,13 +47,12 @@ public sealed class AntigravityUsageClient(AppHttp http)
             plan ??= AntigravityUsageMapper.PlanName(body);
             foreach (var line in AntigravityUsageMapper.ParseQuotaSummary(body) ?? [])
                 buckets.TryAdd(line.Label, line);
-            if (buckets.Count == AntigravityUsageMapper.SummaryBuckets.Length) break;
+            if (AntigravityUsageMapper.SummaryBuckets.All(bucket => buckets.ContainsKey(bucket.Label))) break;
         }
         if (refused && !accepted) throw new TokenRefused();
         if (buckets.Count == 0 && rateLimited && !authRejected)
             throw new ProviderRequestException(ProviderErrors.RateLimited);
-        return (AntigravityUsageMapper.SummaryBuckets
-            .Select(bucket => buckets.GetValueOrDefault(bucket.Label)).OfType<MetricLine>().ToList(), plan);
+        return (QuotaOrder.Select(label => buckets.GetValueOrDefault(label)).OfType<MetricLine>().ToList(), plan);
     }
 
     public async Task<string?> FallbackPlanAsync(string token, CancellationToken ct)
@@ -63,7 +77,7 @@ public sealed class AntigravityUsageClient(AppHttp http)
                     ["Accept"] = "application/json",
                     ["Content-Type"] = "application/json",
                     ["Authorization"] = $"Bearer {token}",
-                    ["User-Agent"] = "antigravity"
+                    ["User-Agent"] = $"antigravity/hub/2.24.0 (aidev_client; os_type=windows; arch={ArchitectureName})"
                 },
                 "{}"u8.ToArray()), ct);
         }
