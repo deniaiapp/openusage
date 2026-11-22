@@ -1,4 +1,5 @@
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Antigravity;
 using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Copilot;
@@ -76,6 +77,13 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public async Task ConnectAntigravityAsync(AntigravityProvider provider, Action<Uri> openBrowser, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        var snapshot = await provider.ConnectAsync(openBrowser, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
 
     public async Task ConnectDevinAsync(DevinProvider provider, Action<Uri> openBrowser, CancellationToken ct)
     {

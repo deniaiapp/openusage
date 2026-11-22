@@ -25,7 +25,7 @@ public static class ProviderCatalog
         new CodexProvider(http, keys),
         new CursorProvider(http, keys: keys),
         new AmpProvider(http, keys),
-        new AntigravityProvider(http),
+        new AntigravityProvider(http, keys),
         new CopilotProvider(http, keys),
         new DevinProvider(http, keys),
         new GrokProvider(http),

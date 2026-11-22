@@ -12,6 +12,7 @@ using OpenUsage.App.Views;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Antigravity;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
@@ -47,6 +48,7 @@ public partial class DashboardWindow : Window
     private CursorLoginView? _cursorLoginEditor;
     public event Action<string?>? HotkeyChanged;
     private DeviceLoginView? _deviceLoginEditor;
+    private AntigravitySignInView? _antigravitySignInEditor;
 
     public DashboardWindow(AppContainer container)
     {
@@ -63,7 +65,7 @@ public partial class DashboardWindow : Window
 
     public void ToggleFromTray()
     {
-        if (!IsVisible && _deviceLoginEditor?.ResumeIfPending() == true)
+        if (!IsVisible && (_deviceLoginEditor?.ResumeIfPending() == true || _antigravitySignInEditor?.IsPending == true))
         {
             ShowAnchored();
             Activate();
@@ -169,8 +171,10 @@ public partial class DashboardWindow : Window
 
     private void Render(bool preserveEditor = false)
     {
-        if (preserveEditor && _deviceLoginEditor is not null) return;
+        if (preserveEditor && (_deviceLoginEditor is not null || _antigravitySignInEditor is not null)) return;
         _deviceLoginEditor = null;
+        _antigravitySignInEditor?.Cancel();
+        _antigravitySignInEditor = null;
         var remaining = _container.Data.NextRefresh - DateTimeOffset.Now;
         RefreshLabel.Text = _container.Data.IsRefreshing
             ? "Updating…"
@@ -511,6 +515,17 @@ public partial class DashboardWindow : Window
 
     private void RenderCustomize()
     {
+        if (_container.ApiKeyAccountStore.HasUnreadableAccounts)
+        {
+            ContentHost.Children.Add(new TextBlock
+            {
+                Text = "This version couldn’t read some saved accounts. They’re still saved and encrypted.",
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)FindResource("MutedText"),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+        }
+
         var layout = _container.Layout;
         var undo = new Button
         {
@@ -595,6 +610,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is AntigravityProvider antigravity)
+        {
+            ContentHost.Children.Add(SectionTitle("Google Sign-In"));
+            _antigravitySignInEditor = new AntigravitySignInView(_container, antigravity, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_antigravitySignInEditor);
+        }
         if (runtime is DevinProvider devin)
         {
             ContentHost.Children.Add(SectionTitle("Devin Account"));
