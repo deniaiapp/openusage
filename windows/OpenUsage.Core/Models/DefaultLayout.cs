@@ -34,7 +34,7 @@ public static class DefaultLayout
         "opencode.session", "opencode.weekly", "opencode.monthly", "opencode.trend",
         "opencode.today", "opencode.yesterday", "opencode.last30",
 
-        "openrouter.credits", "openrouter.balance",
+        "openrouter.balance",
         "openrouter.today", "openrouter.week", "openrouter.month", "openrouter.keyLimit",
 
         "zai.session", "zai.weekly", "zai.webSearches", ZaiProvider.ResetsMetricId
@@ -49,7 +49,6 @@ public static class DefaultLayout
         "copilot.premium",
         "muse.session",
         "ollama.monthly",
-        "openrouter.credits",
         "zai.session", "zai.weekly"
     ];
 

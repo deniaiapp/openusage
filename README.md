@@ -27,7 +27,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 
 ## Supported Providers
 
-- **[Claude](docs/providers.md#claude)**: session, weekly, model limits, extra usage (Enterprise spend), rate-limit resets
+- **[Claude](docs/providers.md#claude)**: session, weekly, model limits, extra usage (Enterprise spend), rate-limit resets, Max and Ultra plan names
 - **[ChatGPT](docs/providers.md#chatgpt)**: session, weekly, Spark, extra usage, credit limit, rate-limit resets, daily tokens
 - **[Cursor](docs/providers.md#cursor)**: total usage, model usage, extra usage, requests, credits, daily spend and tokens
 - **[Amp](docs/providers.md#amp)**: agent usage, orb hours, Amp Free, credits; on Windows, [connect in Customize](docs/windows.md#amp-on-windows)
@@ -106,6 +106,8 @@ If Claude's first check for rate limit resets can't connect, the next refresh tr
 On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
+
+Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
 
 Windows shows available Z.ai Limit Resets when you expand the account card.
 
