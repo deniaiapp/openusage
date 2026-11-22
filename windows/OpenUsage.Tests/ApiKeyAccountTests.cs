@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
@@ -130,17 +131,20 @@ public sealed class ApiKeyAccountTests : IDisposable
         Assert.Equal(account.CardId + ".monthly", Assert.Single(restored.PinnedDescriptors()).Id);
     }
 
-    [Fact]
-    public async Task OpenRouterDoesNotUseAnEnvironmentKey()
+    [Theory]
+    [InlineData("openrouter", "OPENROUTER_API_KEY")]
+    [InlineData("zai", "ZAI_API_KEY")]
+    public async Task MainAccountDoesNotUseAnEnvironmentKey(string providerId, string variable)
     {
-        const string variable = "OPENROUTER_API_KEY";
         var previous = Environment.GetEnvironmentVariable(variable);
         try
         {
             Environment.SetEnvironmentVariable(variable, "fixture-environment-key");
             using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
-            var provider = new OpenRouterProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
-            Assert.Null(provider.LoadKey());
+            var keys = new ApiKeyStore(Path.Combine(_directory, "keys.bin"));
+            IProviderRuntime provider = providerId == "zai"
+                ? new ZaiProvider(http, keys) : new OpenRouterProvider(http, keys);
+            Assert.Null(Assert.IsAssignableFrom<IApiKeyManaging>(provider).LoadKey());
             Assert.False(await provider.HasLocalCredentialsAsync());
             Assert.True((await provider.RefreshAsync()).IsError);
         }
@@ -157,6 +161,17 @@ public sealed class ApiKeyAccountTests : IDisposable
         new ApiKeyStore(path).Set("openrouter", "fixture-saved-key");
         using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
         var provider = new OpenRouterProvider(http, new ApiKeyStore(path));
+        Assert.Equal("fixture-saved-key", provider.LoadKey());
+        Assert.True(await provider.HasLocalCredentialsAsync());
+    }
+
+    [WindowsFact]
+    public async Task ZaiStillUsesTheSavedKeyAfterRestart()
+    {
+        var path = Path.Combine(_directory, "keys.bin");
+        new ApiKeyStore(path).Set("zai", "fixture-saved-key");
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new ZaiProvider(http, new ApiKeyStore(path));
         Assert.Equal("fixture-saved-key", provider.LoadKey());
         Assert.True(await provider.HasLocalCredentialsAsync());
     }
