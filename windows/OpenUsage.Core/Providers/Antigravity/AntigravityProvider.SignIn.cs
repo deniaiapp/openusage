@@ -59,10 +59,14 @@ public sealed partial class AntigravityProvider
 
     private async Task<ProviderSnapshot> ReadConnectedUsageAsync(AntigravitySignIn tokens, CancellationToken ct)
     {
-        var (lines, plan) = await _usage.QuotaAsync(tokens.Access, ct);
-        if (lines.Count == 0)
-            throw new ProviderRequestException("Couldn't read Antigravity usage for this Google account. Try again.");
-        return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);
+        try
+        {
+            var (lines, plan) = await _usage.QuotaAsync(tokens.Access, ct);
+            if (lines.Count == 0)
+                throw new ProviderRequestException("Couldn't read Antigravity usage for this Google account. Try again.");
+            return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);
+        }
+        catch (AntigravityUsageClient.TokenRefused) { throw ExpiredSignIn(); }
     }
 
     private static AntigravitySignIn? LoadConnected(ApiKeyStore? keys)

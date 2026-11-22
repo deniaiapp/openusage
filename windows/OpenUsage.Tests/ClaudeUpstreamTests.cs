@@ -2,7 +2,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Claude;
+using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 using Xunit;
@@ -12,6 +14,78 @@ namespace OpenUsage.Tests;
 public class ClaudeUpstreamTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
+
+    [Theory]
+    [InlineData("""{"is_enabled":true,"used_credits":1234,"monthly_limit":5000,"currency":"eur","decimal_places":2}""",
+        "eur", 12.34, 50.0, "EUR 12.34 used")]
+    [InlineData("""{"is_enabled":true,"used_credits":1234,"currency":"JPY","decimal_places":0}""",
+        "jpy", 1234, null, "JPY 1.2K spent")]
+    [InlineData("""{"is_enabled":true,"used_credits":1234,"monthly_limit":5000}""",
+        "usd", 12.34, 50.0, "$12.34 used")]
+    public async Task ExtraUsageKeepsItsBillingCurrencyInTheDashboardCacheAndCli(
+        string extraUsage, string unit, double used, double? limit, string label)
+    {
+        using var dir = new TempDir();
+        var body = new JsonObject { ["extra_usage"] = JsonNode.Parse(extraUsage) };
+        var (_, lines, _) = ClaudeUsageMapper.Map(body, new ClaudeOAuth());
+        using var http = new AppHttp();
+        var provider = new ClaudeProvider(http);
+        var runtime = new CachedClaudeFixture(provider.Provider, provider.WidgetDescriptors, lines);
+        var settings = AppSettings.Load(Path.Combine(dir.Path, "settings.json"));
+        settings.EnabledProviders.Add("claude");
+        settings.Save();
+        var cache = Directory.CreateDirectory(Path.Combine(dir.Path, "cache")).FullName;
+        var layout = new LayoutStore(settings, [runtime]);
+        var store = new WidgetDataStore(layout, settings, cache);
+
+        await store.RefreshProviderAsync("claude");
+        var restored = new WidgetDataStore(layout, settings, cache);
+        var data = restored.Resolve(runtime.WidgetDescriptors.Single(d => d.Id == "claude.extra")) with
+            { DisplayMode = WidgetDisplayMode.Used };
+        Assert.Equal(label, data.IsBounded ? data.Headline : data.UnboundedDetail);
+        if (unit == "eur") Assert.Equal("EUR 50 limit", data.BoundedTrailingText(Now));
+
+        using var output = new StringWriter();
+        using var errors = new StringWriter();
+        Assert.Equal(0, LimitsCommand.Run(["claude"], dir.Path, output, errors, Now));
+        var resource = JsonNode.Parse(output.ToString())!["providers"]!["claude"]!["resources"]!["extraUsage"]!;
+        Assert.Equal(unit, resource["unit"]!.GetValue<string>());
+        Assert.Equal(used, resource["used"]!.GetValue<double>());
+        Assert.Equal(limit, resource["limit"]?.GetValue<double>());
+    }
+
+    [Theory]
+    [InlineData(999, "KWD 0.001 left", MeterStateKind.Level)]
+    [InlineData(1000, "KWD 0 left", MeterStateKind.Spent)]
+    public void ExtraUsageUsesDisplayedCurrencyPrecisionToDecideWhenTheLimitIsSpent(
+        int usedCredits, string headline, MeterStateKind state)
+    {
+        var body = new JsonObject
+        {
+            ["extra_usage"] = new JsonObject
+            {
+                ["is_enabled"] = true, ["used_credits"] = usedCredits, ["monthly_limit"] = 1000,
+                ["currency"] = "KWD", ["decimal_places"] = 3
+            }
+        };
+        var (_, lines, _) = ClaudeUsageMapper.Map(body, new ClaudeOAuth());
+        using var http = new AppHttp();
+        var descriptor = new ClaudeProvider(http).WidgetDescriptors.Single(d => d.Id == "claude.extra");
+        var data = WidgetData.Resolve(descriptor, Assert.Single(lines), WidgetDisplayMode.Remaining,
+            ResetDisplayMode.Relative, alwaysShowPacing: false);
+
+        Assert.Equal(headline, data.Headline);
+        Assert.Equal(state, data.GetMeterState(Now).Kind);
+    }
+
+    private sealed record CachedClaudeFixture(Provider Provider, IReadOnlyList<WidgetDescriptor> WidgetDescriptors,
+        IReadOnlyList<MetricLine> Lines) : IProviderRuntime
+    {
+        public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(ProviderSnapshot.Make(Provider, null, Lines, Now));
+
+        public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
 
     [Theory]
     [InlineData(" 600 ", 600)]
@@ -102,6 +176,18 @@ public class ClaudeUpstreamTests
         var ineligible = ClaudeUsageMapper.ResetGrantsLine(JsonNode.Parse("""{ "eligible": false, "grants": [] }"""), Now);
         Assert.Equal(0, Assert.IsType<MetricLine.ValuesLine>(ineligible).Items[0].Number);
         Assert.Null(ClaudeUsageMapper.ResetGrantsLine(null, Now));
+    }
+
+    [Theory]
+    [InlineData("""[{"resets_left":1001,"ends_at":"2026-10-20T00:00:00Z"}]""")]
+    [InlineData("""[{"resets_left":600},{"resets_left":401}]""")]
+    [InlineData("""[{"resets_left":1e20}]""")]
+    [InlineData("""[{"resets_left":"unavailable"}]""")]
+    public void ResetGrants_RejectsInvalidCountsBeforeAllocatingDeadlines(string grants)
+    {
+        var block = new JsonObject { ["eligible"] = true, ["grants"] = JsonNode.Parse(grants) };
+        var failure = Assert.Throws<InvalidOperationException>(() => ClaudeUsageMapper.ResetGrantsLine(block, Now));
+        Assert.Equal(ProviderErrors.InvalidResponse, failure.Message);
     }
 
     [Fact]
@@ -308,6 +394,28 @@ public class ClaudeUpstreamTests
         Assert.Equal(2, handler.ResetGrantCalls);
     }
 
+    [Fact]
+    public async Task Provider_KeepsLastKnownResetsWhenTheNextCountIsInvalid()
+    {
+        using var dir = new TempDir();
+        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
+        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"token"}}""");
+        var handler = new FakeAnthropic();
+        var clock = Now;
+        var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), store, () => clock);
+
+        var first = await provider.RefreshAsync();
+        Assert.Equal(1, Assert.IsType<MetricLine.ValuesLine>(first.Line(ClaudeUsageMapper.RateLimitResetsLabel)).Items[0].Number);
+
+        clock = Now.AddMinutes(61);
+        handler.ResetCount = "1e20";
+        var second = await provider.RefreshAsync();
+        Assert.Equal(2, handler.ResetGrantCalls);
+        var held = Assert.IsType<MetricLine.ValuesLine>(second.Line(ClaudeUsageMapper.RateLimitResetsLabel));
+        Assert.Equal(1, held.Items[0].Number);
+        Assert.Single(held.ExpiriesAt!);
+    }
+
     private sealed class TempDir : IDisposable
     {
         public string Path { get; } = Directory.CreateTempSubdirectory("openusage-claude-").FullName;
@@ -321,6 +429,7 @@ public class ClaudeUpstreamTests
         public int ProfileCalls;
         public bool FailResetGrants;
         public bool DisconnectResetGrants;
+        public string ResetCount = "1";
         public string? RetryAfter;
         public List<string> UsageAgents { get; } = [];
 
@@ -341,7 +450,7 @@ public class ClaudeUpstreamTests
                 if (DisconnectResetGrants)
                     throw new HttpRequestException(HttpRequestError.ConnectionError, "Fixture connection failure");
                 status = FailResetGrants ? HttpStatusCode.TooManyRequests : HttpStatusCode.OK;
-                body = """{ "cedar_ember": { "eligible": true, "grants": [ { "resets_left": 1, "ends_at": "2026-12-01T00:00:00Z" } ] } }""";
+                body = $$"""{ "cedar_ember": { "eligible": true, "grants": [ { "resets_left": {{ResetCount}}, "ends_at": "2026-12-01T00:00:00Z" } ] } }""";
             }
             else
             {

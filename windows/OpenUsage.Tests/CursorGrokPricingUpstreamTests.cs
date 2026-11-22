@@ -157,54 +157,11 @@ public class CursorGrokPricingUpstreamTests
     [Theory]
     [InlineData(1)]
     [InlineData(1_000)]
-    public void CursorGrokBotUsagePricesIntoEverySpendRange(int scale)
+    public void CursorGrokBotModelsUseTheirMappedRates(int scale)
     {
-        var now = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000);
-        var rows = new List<CursorUsageRow>();
-        foreach (var date in new[] { now, now.AddDays(-1) })
-        {
-            foreach (var model in new[] { "grok-bot-default", "grok-bot-automation", "grok-bot-cua" })
-            {
-                var tokens = new TokenBreakdown(Input: 1_000 * scale, CacheWrite5m: 2_000 * scale, CacheRead: 3_000 * scale, Output: 4_000 * scale);
-                rows.Add(new CursorUsageRow(date, model, tokens, Pricing.EstimatedCost(model, tokens, applyLongContext: false)));
-            }
-        }
-        foreach (var row in rows)
-        {
-            // Default: Grok 4.6 Fast. Automation: Grok 4.6. CUA: Grok 4.7 base.
-            var cost = row.Model == "grok-bot-default" ? 0.063 : 0.0315;
-            Assert.Equal(cost * scale, row.ImputedCostDollars!.Value, 9);
-        }
-
-        var lines = new List<MetricLine>();
-        CursorSpendMapper.AppendSpendLines(rows, now, lines);
-        foreach (var (label, days) in new[] { ("Today", 1), ("Yesterday", 1), ("Last 30 Days", 2) })
-        {
-            var line = Assert.IsType<MetricLine.ValuesLine>(lines.Single(l => l.Label == label));
-            // Each day's combined $0.126 estimate rounds to cents before days are summed.
-            var dailyDollars = scale == 1 ? 0.13 : 126.0;
-            Assert.Equal(dailyDollars * days, line.Items[0].Number, 6);
-            Assert.Equal(MetricKind.Dollars, line.Items[0].Kind);
-            Assert.Equal(30_000.0 * scale * days, line.Items[1].Number);
-            Assert.True(line.UnknownModels is null || line.UnknownModels.Count == 0, label);
-        }
-        Assert.Contains(lines, l => l is MetricLine.ChartLine c && c.Note == CursorSpendMapper.HistoryNote);
-    }
-
-    [Fact]
-    public void CursorUnpricedRowsOnlySurfaceAsUnknownModels()
-    {
-        var now = DateTimeOffset.FromUnixTimeSeconds(1_800_000_000);
-        var scan = CursorSpendMapper.BuildScan(
-        [
-            new CursorUsageRow(now, "composer-1", new TokenBreakdown(Input: 10), 0.5),
-            new CursorUsageRow(now, "mystery-model", new TokenBreakdown(Input: 999), null),
-            new CursorUsageRow(now, "zero-model", new TokenBreakdown(), null)
-        ]);
-        var day = Assert.Single(scan.Series.Daily);
-        Assert.Equal(10, day.TotalTokens);
-        Assert.Equal(0.5, day.CostUsd);
-        Assert.Equal(new[] { "mystery-model" }, scan.UnknownModelsByDay[DailyUsageAccumulator.DayKey(now)].ToArray());
+        var tokens = new TokenBreakdown(Input: 1_000 * scale, CacheWrite5m: 2_000 * scale, CacheRead: 3_000 * scale, Output: 4_000 * scale);
+        foreach (var (model, cost) in new[] { ("grok-bot-default", 0.063), ("grok-bot-automation", 0.0315), ("grok-bot-cua", 0.0315) })
+            Assert.Equal(cost * scale, Pricing.EstimatedCost(model, tokens, applyLongContext: false)!.Value, 9);
     }
 
     [Fact]
@@ -327,20 +284,28 @@ public class CursorGrokPricingUpstreamTests
         Assert.Equal(5, page.TotalCount);
         Assert.Equal(3, page.RejectedEventCount);
         Assert.Equal(2, page.Events.Count);
-        Assert.Equal("composer-1", page.Events[0].Model);
         Assert.Equal(new TokenBreakdown(Input: 11, CacheWrite5m: 13, CacheRead: 19, Output: 17), page.Events[0].Tokens);
         Assert.Equal(DateTimeOffset.FromUnixTimeMilliseconds(1_800_000_000_123), page.Events[0].Date);
-        Assert.Equal("", page.Events[1].Model);
         Assert.Equal(new TokenBreakdown(), page.Events[1].Tokens);
     }
 
     [Theory]
     [InlineData("""{ "usageEventsDisplay": [] }""")]
+    [InlineData("""{ "totalUsageEventsCount": 1 }""")]
+    [InlineData("""{ "totalUsageEventsCount": 0, "usageEventsDisplay": null }""")]
     [InlineData("[]")]
     [InlineData("""{ "totalUsageEventsCount": true, "usageEventsDisplay": [] }""")]
     public void CursorUsageEventsRequireValidPageShape(string json)
     {
         Assert.ThrowsAny<Exception>(() => CursorUsageEvents.ParsePage(Encoding.UTF8.GetBytes(json)));
+    }
+
+    [Fact]
+    public void CursorAcceptsOmittedEventListForAnEmptyDay()
+    {
+        var page = CursorUsageEvents.ParsePage("""{ "totalUsageEventsCount": 0 }"""u8.ToArray());
+        Assert.Equal(0, page.TotalCount);
+        Assert.Empty(page.Events);
     }
 
     // ---- Cursor spend history fetcher ----
@@ -376,8 +341,8 @@ public class CursorGrokPricingUpstreamTests
             Content = new StringContent($$"""{ "totalUsageEventsCount": {{total}}, "usageEventsDisplay": [{{string.Join(",", events ?? [])}}] }""")
         });
 
-    private static string Event(long startMs, string model, int input) =>
-        $$"""{ "timestamp": "{{startMs + 1_000}}", "model": "{{model}}", "tokenUsage": { "inputTokens": {{input}} } }""";
+    private static string Event(long startMs, string model, int input, string fields = "") =>
+        $$"""{ "timestamp": "{{startMs + 1_000}}", "model": "{{model}}", "tokenUsage": { "inputTokens": {{input}} } {{fields}} }""";
 
     private static List<string> WindowKeys() =>
         Enumerable.Range(0, 30)
@@ -395,7 +360,8 @@ public class CursorGrokPricingUpstreamTests
             x => x.key,
             x => new CursorUsageDay
             {
-                Models = new() { ["composer-1"] = new TokenBreakdown(Input: 2_000 + x.index) },
+                TotalTokens = 2_000 + x.index,
+                ChargedCents = 25,
                 IsComplete = x.index > 0
             });
 
@@ -408,24 +374,36 @@ public class CursorGrokPricingUpstreamTests
         var (store, dir) = MakeStore();
         try
         {
-            var handler = new FakeHandler(body => Page(1, JsonUtil.Number(body["page"]) == 1 ? [Event(StartMs(body), "composer-1", 10_000)] : []));
+            var handler = new FakeHandler(body => Page(5,
+            [
+                Event(StartMs(body), "unknown", 10_000, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED", "chargedCents": "25.25" """),
+                Event(StartMs(body), "composer-1", 20_000, """, "kind": "USAGE_EVENT_KIND_INCLUDED", "chargedCents": 50"""),
+                Event(StartMs(body), "composer-1", 30_000, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED", "isChargeable": false, "chargedCents": 100"""),
+                Event(StartMs(body), "composer-1", 1, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED" """),
+                $$"""{ "timestamp": {{StartMs(body) + 1_000}}, "kind": "USAGE_EVENT_KIND_USAGE_BASED", "chargedCents": 0.25 }"""
+            ]));
             var days = await Fetcher(handler, store).RefreshAsync(Session, Now);
 
             Assert.NotNull(days);
             Assert.Equal(30, days!.Count);
             Assert.Equal(WindowKeys().ToHashSet(), handler.RequestedDayKeys());
             var lines = new List<MetricLine>();
-            CursorSpendMapper.AppendSpendLines(CursorSpendMapper.Rows(days, Pricing), Now, lines);
-            var dailyCost = Pricing.EstimatedCost("composer-1", new TokenBreakdown(Input: 10_000), applyLongContext: false)!.Value;
-            var last30 = Assert.IsType<MetricLine.ValuesLine>(lines.Single(l => l.Label == "Last 30 Days"));
-            Assert.Equal(Math.Round(dailyCost * 100, MidpointRounding.AwayFromZero) / 100 * 30, last30.Items[0].Number, 6);
-            foreach (var label in new[] { "Today", "Yesterday", "Usage Trend" })
-                Assert.Contains(lines, l => l.Label == label);
+            CursorSpendMapper.AppendSpendLines(days, Now, lines);
+            foreach (var (label, dayCount) in new[] { ("Today", 1), ("Yesterday", 1), ("Last 30 Days", 30) })
+            {
+                var line = Assert.IsType<MetricLine.ValuesLine>(lines.Single(l => l.Label == label));
+                Assert.Equal(0.255 * dayCount, line.Items[0].Number, 6);
+                Assert.Equal(MetricKind.Dollars, line.Items[0].Kind);
+                Assert.Equal(60_001 * dayCount, line.Items[1].Number);
+            }
+            Assert.Contains(lines, l => l is MetricLine.ChartLine c && c.Note == CursorSpendMapper.HistoryNote);
 
             var saved = store.Load(Session.UserId, TimeZoneInfo.Local.Id);
             Assert.Equal(30, saved.Count);
             Assert.False(saved[WindowKeys()[0]].IsComplete);
             Assert.True(saved[WindowKeys()[1]].IsComplete);
+            Assert.Equal(25.5, saved[WindowKeys()[1]].ChargedCents);
+            Assert.Equal(60_001, saved[WindowKeys()[1]].TotalTokens);
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
@@ -443,7 +421,8 @@ public class CursorGrokPricingUpstreamTests
             Assert.Equal(2, handler.Requests.Count);
             Assert.Equal(WindowKeys().Take(2).ToHashSet(), handler.RequestedDayKeys());
             Assert.Equal(30, days!.Count);
-            Assert.Equal(2_002, days[2].Day.Models["composer-1"].Input);
+            Assert.Equal(2_002, days[2].Day.TotalTokens);
+            Assert.Equal(25, days[2].Day.ChargedCents);
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
@@ -456,7 +435,7 @@ public class CursorGrokPricingUpstreamTests
         {
             var keys = WindowKeys();
             var cached = CachedHistory();
-            cached[keys[5]] = new CursorUsageDay { Models = new() { ["composer-1"] = new TokenBreakdown(Input: 100) }, IsComplete = false };
+            cached[keys[5]] = new CursorUsageDay { TotalTokens = 100, IsComplete = false };
             store.Save(cached, Session.UserId, TimeZoneInfo.Local.Id);
             var handler = new FakeHandler(body => StartKey(body) == keys[5]
                 ? Page(1, JsonUtil.Number(body["page"]) == 1 ? [Event(StartMs(body), "composer-1", 900)] : [])
@@ -465,11 +444,57 @@ public class CursorGrokPricingUpstreamTests
             var days = await Fetcher(handler, store).RefreshAsync(Session, Now);
 
             Assert.Equal(new HashSet<string> { keys[0], keys[1], keys[5] }, handler.RequestedDayKeys());
-            Assert.Equal(900, days![5].Day.Models["composer-1"].Input);
+            Assert.Equal(900, days![5].Day.TotalTokens);
             Assert.True(days[5].Day.IsComplete);
             var saved = store.Load(Session.UserId, TimeZoneInfo.Local.Id)[keys[5]];
-            Assert.Equal(900, saved.Models["composer-1"].Input);
+            Assert.Equal(900, saved.TotalTokens);
             Assert.True(saved.IsComplete);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
+    public async Task CursorInvalidChargeKeepsThePreviouslyCachedDay()
+    {
+        var (store, dir) = MakeStore();
+        try
+        {
+            store.Save(CachedHistory(), Session.UserId, TimeZoneInfo.Local.Id);
+            var today = WindowKeys()[0];
+            var handler = new FakeHandler(body => StartKey(body) == today ? Page(2,
+            [
+                Event(StartMs(body), "composer-1", 10, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED", "chargedCents": 50"""),
+                Event(StartMs(body), "composer-1", 20, """, "kind": "USAGE_EVENT_KIND_USAGE_BASED", "chargedCents": -10""")
+            ]) : Page(0));
+
+            var days = await Fetcher(handler, store).RefreshAsync(Session, Now);
+            Assert.Equal(25, days![0].Day.ChargedCents);
+            Assert.Equal(2_000, store.Load(Session.UserId, TimeZoneInfo.Local.Id)[today].TotalTokens);
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Fact]
+    public async Task CursorRebuildsTheTokenOnlyCacheToGetActualCharges()
+    {
+        var (store, dir) = MakeStore();
+        try
+        {
+            store.Save(CachedHistory(), Session.UserId, TimeZoneInfo.Local.Id);
+            var file = Directory.GetFiles(dir).Single();
+            var old = JsonUtil.ParseObject(File.ReadAllBytes(file))!;
+            old["schemaVersion"] = 2;
+            old["days"] = new JsonObject
+            {
+                [WindowKeys()[2]] = JsonUtil.ParseObject("""{"isComplete":true,"models":{"composer-1":{"input":25}}}""")
+            };
+            File.WriteAllText(file, old.ToJsonString());
+            Assert.Empty(store.Load(Session.UserId, TimeZoneInfo.Local.Id));
+
+            var handler = new FakeHandler(_ => Page(0));
+            var days = await Fetcher(handler, store).RefreshAsync(Session, Now);
+            Assert.Equal(30, handler.Requests.Count);
+            Assert.All(days!, day => Assert.Equal(0, day.Day.ChargedCents));
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
