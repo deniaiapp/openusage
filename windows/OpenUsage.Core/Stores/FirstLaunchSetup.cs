@@ -35,7 +35,7 @@ public sealed class FirstLaunchSetup
         _layout = layout;
         _data = data;
         _settings = settings;
-        Choices = layout.Providers.Select(p => new FirstLaunchChoice(p.Provider)).ToList();
+        Choices = layout.Providers.Where(p => !p.IsAccountTemplate).Select(p => new FirstLaunchChoice(p.Provider)).ToList();
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public sealed class FirstLaunchSetup
     /// </summary>
     public async Task DetectAsync(CancellationToken cancellationToken = default)
     {
-        var probes = _layout.Providers.Select(provider => Task.Run(async () =>
+        var probes = _layout.Providers.Where(p => !p.IsAccountTemplate).Select(provider => Task.Run(async () =>
         {
             try
             {
