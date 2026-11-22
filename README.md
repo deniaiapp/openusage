@@ -107,6 +107,8 @@ On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
+Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
+
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
 ## License
