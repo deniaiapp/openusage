@@ -64,7 +64,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 - **Devin:** Choose **Customize → Devin → Sign In to Devin** and finish in your browser. Windows keeps the resulting session in its encrypted app store. Previously detected Devin CLI and editor sign-ins need to connect once in Customize; those other apps are not signed out.
 - **Grok:** The pay-as-you-go limit is shown in dollars. A failed early token renewal keeps using the current token until it expires; a temporary renewal failure does not ask you to sign in again.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
-- **OpenCode:** Add a Go API key in **Customize → OpenCode → Additional Accounts** to see live Session, Weekly, and Monthly limits without a local OpenCode install. Existing local connections still work.
+- **OpenCode:** Add a Go API key in **Customize → OpenCode → Additional Accounts** to see live Session, Weekly, and Monthly limits without a local OpenCode install. Existing local connections still work. Windows no longer totals local Go or Zen session history.
 - **OpenRouter:** Key Limit shows the next reset if OpenRouter reports a daily, weekly, or monthly interval. Limits reset at midnight UTC; weeks start on Monday.
 - **Z.ai:** Expand an account card to see available Limit Resets and their expiries. OpenUsage checks the balance hourly and does not spend resets. A rejected API key prompts you to replace it in Customize.
 
