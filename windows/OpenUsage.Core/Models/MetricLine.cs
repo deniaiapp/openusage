@@ -2,6 +2,7 @@ namespace OpenUsage.Core.Models;
 
 public abstract record MetricLine(string Label)
 {
+    public string? Title { get; init; }
     public const string ErrorBadgeLabel = "Error";
     public static readonly MetricLine NoUsageData = new BadgeLine("Status", "No usage data", "#A3A3A3");
 
