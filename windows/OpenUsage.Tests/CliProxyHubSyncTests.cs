@@ -64,18 +64,25 @@ public sealed class CliProxyHubSyncTests : IDisposable
         var sync = new CliProxyHubSync(client, store);
 
         await sync.RefreshAsync(false, default);
+        var error = Assert.IsType<string>(store.SyncError(hub.Id));
+        Assert.Contains("Replace it in Customize", error);
+        Assert.DoesNotContain("fixture-old-key", error);
         await sync.RefreshAsync(true, default);
+        Assert.Equal(error, store.SyncError(hub.Id));
         Assert.Equal(["fixture-old-key"], requests);
         Assert.Equal(original, Assert.Single(store.ListAccounts()));
 
         await new CliProxyHubConnections(client, store).ReplaceKeyAsync(hub.Id, "fixture-new-key", default);
+        Assert.Null(store.SyncError(hub.Id));
         await sync.RefreshAsync(true, default);
         Assert.Equal(["fixture-old-key", "fixture-new-key", "fixture-new-key"], requests);
         Assert.Equal(original with { Link = original.Link with { AuthIndex = "after" } }, Assert.Single(store.ListAccounts()));
     }
 
-    [WindowsFact]
-    public async Task AnInFlightListingCannotOverwriteASameKeyReplacement()
+    [WindowsTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AnInFlightListingCannotOverwriteASameKeyReplacement(bool rejected)
     {
         var store = new CliProxyHubStore(PathOnDisk);
         var hub = store.Add(new Uri("https://hub.example/"), "fixture-key");
@@ -99,10 +106,11 @@ public sealed class CliProxyHubSyncTests : IDisposable
         await sync.RefreshAsync(true, timeout.Token);
         Assert.Equal(1, calls);
         await new CliProxyHubConnections(client, store).ReplaceKeyAsync(hub.Id, "fixture-key", timeout.Token);
-        old.SetResult(Listing("[]"));
+        old.SetResult(rejected ? new HttpResponseMessage(HttpStatusCode.Unauthorized) : Listing("[]"));
         await first;
 
         Assert.Equal("current", Assert.Single(store.ListAccounts()).Link.LoginId);
+        Assert.Null(store.SyncError(hub.Id));
         Assert.Equal(2, calls);
     }
 
@@ -131,6 +139,14 @@ public sealed class CliProxyHubSyncTests : IDisposable
     private sealed class WindowsFactAttribute : FactAttribute
     {
         public WindowsFactAttribute()
+        {
+            if (!OperatingSystem.IsWindows()) Skip = "Requires Windows DPAPI.";
+        }
+    }
+
+    private sealed class WindowsTheoryAttribute : TheoryAttribute
+    {
+        public WindowsTheoryAttribute()
         {
             if (!OperatingSystem.IsWindows()) Skip = "Requires Windows DPAPI.";
         }

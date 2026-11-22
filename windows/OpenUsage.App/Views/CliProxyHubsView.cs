@@ -15,6 +15,7 @@ internal sealed class CliProxyHubsView : StackPanel
     private readonly AppContainer _container;
     private readonly Style _buttonStyle;
     private readonly StackPanel _hubs = new();
+    private readonly Dictionary<Guid, TextBlock> _syncErrors = [];
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 8, 0, 0) };
     private readonly TextBlock _addressLabel = new() { Text = "Hub Address" };
     private readonly TextBox _address = new() { Margin = new Thickness(0, 3, 0, 6) };
@@ -76,6 +77,7 @@ internal sealed class CliProxyHubsView : StackPanel
     private void RefreshHubs()
     {
         _hubs.Children.Clear();
+        _syncErrors.Clear();
         try
         {
             foreach (var hub in _container.CliProxyHubs())
@@ -83,6 +85,9 @@ internal sealed class CliProxyHubsView : StackPanel
                 var row = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
                 var address = hub.Address.AbsoluteUri;
                 row.Children.Add(new TextBlock { Text = address, TextWrapping = TextWrapping.Wrap });
+                var syncError = new TextBlock { TextWrapping = TextWrapping.Wrap };
+                _syncErrors.Add(hub.Id, syncError);
+                row.Children.Add(syncError);
                 var actions = new StackPanel { Orientation = Orientation.Horizontal };
                 var replace = Action("Replace Key");
                 var remove = Action("Disconnect");
@@ -126,8 +131,18 @@ internal sealed class CliProxyHubsView : StackPanel
                 row.Children.Add(actions);
                 _hubs.Children.Add(row);
             }
+            RefreshSyncErrors();
         }
         catch (Exception ex) { ShowError(ex); }
+    }
+
+    public void RefreshSyncErrors()
+    {
+        foreach (var (hubId, row) in _syncErrors)
+        {
+            row.Text = _container.CliProxyHubSyncError(hubId) ?? "";
+            row.Visibility = row.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+        }
     }
 
     private void ResetDisconnect()

@@ -10,6 +10,7 @@ internal sealed record CliProxyHub(Guid Id, Uri Address);
 internal sealed class CliProxyHubStore(string? path = null)
 {
     private readonly object _gate = new();
+    private readonly Dictionary<Guid, string> _syncErrors = [];
     private string PathOnDisk => path ?? Path.Combine(AppPaths.OpenUsageDir, "cliproxyapi-hubs.bin");
 
     internal IReadOnlyList<CliProxyHub> List()
@@ -18,6 +19,20 @@ internal sealed class CliProxyHubStore(string? path = null)
     }
 
     internal string? KeyFor(CliProxyHub hub) => ReadKey(hub)?.Key;
+
+    internal string? SyncError(Guid hubId)
+    {
+        lock (_gate) return _syncErrors.GetValueOrDefault(hubId);
+    }
+
+    internal void SetSyncError(CliProxyHub hub, Guid? revision, string message)
+    {
+        lock (_gate)
+        {
+            if (Load().Exists(entry => Matches(entry, hub) && entry.KeyRevision == revision))
+                _syncErrors[hub.Id] = message;
+        }
+    }
 
     internal (string Key, Guid? Revision)? ReadKey(CliProxyHub hub)
     {
@@ -69,6 +84,7 @@ internal sealed class CliProxyHubStore(string? path = null)
                 Accounts = logins is null ? entry.Accounts : Reconcile(hub, logins, entry.Accounts ?? [])
             };
             Save(entries);
+            _syncErrors.Remove(hub.Id);
             return true;
         }
     }
@@ -80,6 +96,7 @@ internal sealed class CliProxyHubStore(string? path = null)
             var entries = Load();
             if (entries.RemoveAll(entry => entry.Hub.Id == id) == 0) return false;
             Save(entries);
+            _syncErrors.Remove(id);
             return true;
         }
     }
@@ -98,6 +115,7 @@ internal sealed class CliProxyHubStore(string? path = null)
                 entries[index] = entry with { Accounts = accounts };
                 Save(entries);
             }
+            _syncErrors.Remove(hub.Id);
             return true;
         }
     }

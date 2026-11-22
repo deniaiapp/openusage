@@ -39,13 +39,13 @@ internal sealed class CliProxyHubSync(CliProxyHubClient client, CliProxyHubStore
 
     private async Task<(Guid Id, DateTimeOffset? ReadAt)> ReadAsync(CliProxyHub hub, CancellationToken ct)
     {
+        var saved = store.ReadKey(hub);
+        if (saved is not { } credential) return (hub.Id, null);
         try
         {
-            var saved = store.ReadKey(hub);
-            if (saved is not { } credential) return (hub.Id, null);
             var address = CliProxyHubAddress.Parse(hub.Address.AbsoluteUri);
             if (address is null || address.BaseUrl.AbsoluteUri != hub.Address.AbsoluteUri)
-                throw new InvalidDataException("Could not read the saved CLIProxyAPI hub address.");
+                throw new ProviderRequestException("The saved hub address is invalid. Disconnect the hub and connect it again.");
             var logins = await client.ListAsync(address, credential.Key, ct, hub.Id);
             ct.ThrowIfCancellationRequested();
             if (store.UpdateAccounts(hub, credential.Revision, logins))
@@ -54,6 +54,9 @@ internal sealed class CliProxyHubSync(CliProxyHubClient client, CliProxyHubStore
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             AppLog.Warn("cliproxy", $"{hub.Address.Host} login list could not be refreshed ({ex.GetType().Name}).");
+            store.SetSyncError(hub, credential.Revision, ex is ProviderRequestException
+                ? ex.Message
+                : "Couldn't update this hub's login list. Try again.");
         }
         return (hub.Id, null);
     }

@@ -87,7 +87,13 @@ public sealed class AppContainer : IDisposable
     public Task RefreshNowAsync() => RefreshAsync(true, _cts.Token);
 
     private Task RefreshAsync(bool force, CancellationToken ct) =>
-        Task.WhenAll(Data.RefreshAllAsync(force, ct), _hubSync.RefreshAsync(force, ct));
+        Task.WhenAll(Data.RefreshAllAsync(force, ct), RefreshCliProxyHubsAsync(force, ct));
+
+    private async Task RefreshCliProxyHubsAsync(bool force, CancellationToken ct)
+    {
+        await _hubSync.RefreshAsync(force, ct);
+        CliProxyHubSyncFinished?.Invoke();
+    }
 
     public async Task ConnectClaudeAsync(Action<Uri> openBrowser, Task<string> pastedCode, CancellationToken cancellationToken)
     {
@@ -202,6 +208,10 @@ public sealed class AppContainer : IDisposable
 
     public IReadOnlyList<CliProxyHubSummary> CliProxyHubs() =>
         _hubConnections.List().Select(hub => new CliProxyHubSummary(hub.Id, hub.Address)).ToArray();
+
+    public event Action? CliProxyHubSyncFinished;
+
+    public string? CliProxyHubSyncError(Guid hubId) => _hubConnections.SyncError(hubId);
 
     public async Task ConnectCliProxyHubAsync(string address, string key, CancellationToken ct)
     {
