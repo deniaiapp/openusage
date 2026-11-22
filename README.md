@@ -30,7 +30,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[Claude](docs/providers.md#claude)**: session, weekly, model limits, extra usage (Enterprise spend), rate-limit resets
 - **[ChatGPT](docs/providers.md#chatgpt)**: session, weekly, Spark, extra usage, credit limit, rate-limit resets, daily tokens
 - **[Cursor](docs/providers.md#cursor)**: total usage, model usage, extra usage, requests, credits, daily spend and tokens
-- **[Amp](docs/providers.md#amp)**: agent usage, orb hours, Amp Free, credits
+- **[Amp](docs/providers.md#amp)**: agent usage, orb hours, Amp Free, credits; on Windows, [connect in Customize](docs/windows.md#amp-on-windows)
 - **[Antigravity](docs/providers.md#antigravity)**: Gemini, Argon, and Claude quotas
 - **[Copilot](docs/providers.md#copilot)**: credits, extra usage, chat, completions, organization billing, GitHub Enterprise on GHE.com
 - **[Devin](docs/providers.md#devin)**: daily and weekly quota, extra usage
@@ -87,7 +87,10 @@ How everything works, in [docs/](docs/README.md):
 
 A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). It is not a substitute for the macOS app; see [OpenUsage on Windows](docs/windows.md).
 
+On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
+
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
+Priority also lists unpinned limits you can use before they reset.
 
 ```powershell
 cd windows
@@ -98,9 +101,11 @@ In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 On Windows, Copilot and Antigravity distinguish provider throttling from sign-in failures and empty usage.
 
+If Claude's first check for rate limit resets can't connect, the next refresh tries again.
+
 Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
 
-On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
+On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
