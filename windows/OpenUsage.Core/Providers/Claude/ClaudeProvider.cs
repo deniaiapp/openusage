@@ -24,7 +24,7 @@ public sealed partial class ClaudeProvider : IProviderRuntime
     private readonly AppHttp _http;
     private readonly Func<DateTimeOffset> _now;
     private (string Fingerprint, string? Plan, List<MetricLine> Lines)? _lastGood;
-    private DateTimeOffset? _rateLimitedUntil;
+    private (string Fingerprint, DateTimeOffset Until)? _rateLimit;
     private (string AccessFingerprint, string? Plan)? _livePlan;
     private (string Fingerprint, DateTimeOffset CheckedAt, MetricLine? Line)? _resetGrantsCheck;
 
@@ -114,21 +114,19 @@ public sealed partial class ClaudeProvider : IProviderRuntime
     private async Task<ProviderSnapshot> ProbeAsync(ClaudeOAuth oauth, CancellationToken ct, bool appOwned = false,
         bool validateReplacement = false, bool allowRenewal = true)
     {
+        var fingerprint = CredentialFingerprint(oauth);
+        if (!validateReplacement && _rateLimit is { } limit && limit.Fingerprint == fingerprint && _now() < limit.Until)
+            return HeldUsage(fingerprint);
+
         var config = appOwned ? AppOAuthConfig : _auth.OAuthConfig();
-        var usageUrl = new Uri(config.UsageUrl);
         // Only file logins are refreshed: OpenUsage can't write Credential Manager items back, and
         // rotating their refresh token would sign the Claude CLI out.
         if (!appOwned && oauth.Source == ClaudeCredentialSource.File &&
             _auth.NeedsRefresh(oauth) && !string.IsNullOrEmpty(oauth.RefreshToken))
         {
             await RefreshTokenAsync(oauth, config, ct);
+            fingerprint = CredentialFingerprint(oauth);
         }
-
-        // Cached state belongs to the complete access + refresh pair: a different login starts fresh.
-        var fingerprint = CredentialFingerprint(oauth);
-        var cached = _lastGood?.Fingerprint == fingerprint ? _lastGood : null;
-        if (!validateReplacement && _rateLimitedUntil is { } until && _now() < until && cached is { } held)
-            return RateLimitedSnapshot(held.Plan, held.Lines);
 
         if (appOwned && allowRenewal && !validateReplacement && oauth.ExpiresAt is { } expiry &&
             expiry - _now().ToUnixTimeMilliseconds() <= TimeSpan.FromMinutes(5).TotalMilliseconds)
@@ -137,16 +135,17 @@ public sealed partial class ClaudeProvider : IProviderRuntime
             return await ProbeAsync(oauth, ct, appOwned: true, allowRenewal: false);
         }
 
-        var response = await _http.SendAsync(UsageRequest(usageUrl, oauth), ct);
+        var response = await _http.SendAsync(UsageRequest(new Uri(config.UsageUrl), oauth), ct);
 
         if (response.StatusCode == 429)
         {
-            if (!validateReplacement)
-            {
-                _rateLimitedUntil = _now().Add(RateLimitCooldown);
-                if (cached is { } stale) return RateLimitedSnapshot(stale.Plan, stale.Lines);
-            }
-            return ProviderSnapshot.Error(Provider, "Rate limited, try again later.");
+            if (validateReplacement)
+                return ProviderSnapshot.Error(Provider, "Rate limited, try again later.");
+
+            var now = _now();
+            var delay = response.RetryAfter(now) ?? RateLimitCooldown;
+            _rateLimit = (fingerprint, now.Add(delay > RateLimitCooldown ? delay : RateLimitCooldown));
+            return HeldUsage(fingerprint);
         }
 
         if (response.StatusCode is 401 or 403)
@@ -178,9 +177,14 @@ public sealed partial class ClaudeProvider : IProviderRuntime
         if (!validateReplacement)
             plan = await ResolveLivePlanAsync(oauth, config.UsageUrl, ct) ?? mapped.Plan;
         _lastGood = (fingerprint, plan, lines);
-        _rateLimitedUntil = null;
+        _rateLimit = null;
         return MakeSnapshot(plan, lines.ToList(), mapped.Warning);
     }
+
+    private ProviderSnapshot HeldUsage(string fingerprint) =>
+        _lastGood is { } held && held.Fingerprint == fingerprint
+            ? RateLimitedSnapshot(held.Plan, held.Lines)
+            : ProviderSnapshot.Error(Provider, "Rate limited, try again later.");
 
     private ProviderSnapshot RateLimitedSnapshot(string? plan, List<MetricLine> lines)
     {
