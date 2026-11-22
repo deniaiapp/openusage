@@ -9,6 +9,7 @@ public sealed record WidgetDescriptor
     public bool Pinnable { get; init; } = true;
     public bool IsSpendTile { get; init; }
     internal Func<string?, string?>? PlanTitle { get; init; }
+    public bool HideWhenMissing { get; init; }
     public bool ShowsCountLimit { get; init; }
 
     public string Title => Sample.Title;
