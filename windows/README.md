@@ -136,10 +136,14 @@ The CLI version should match the release tag, ignoring the leading `v` and the C
 
 For a new **stable Windows release**, use the approved tag on the reviewed commit and include
 non-empty Windows release notes. Verify the tag's commit before publishing. This does not run the
-macOS release workflow or update Sparkle.
+macOS release workflow or update Sparkle. Carry forward the upstream v0.6.28 update manifest unchanged
+so legacy Tauri clients can still use `releases/latest/download/latest.json`.
 
 ```powershell
-gh release create $tag "${output}.zip#Windows x64 (unsigned ZIP)" --verify-tag --latest --title "OpenUsage for Windows $tag" --notes-file .\release-notes.md --repo deniaiapp/openusage
+$legacy = Join-Path (Split-Path $output) 'latest.json'
+gh release download v0.6.28 --pattern latest.json --output $legacy --repo robinebers/openusage
+if ($LASTEXITCODE -ne 0) { throw "Could not download the legacy update manifest." }
+gh release create $tag "${output}.zip#Windows x64 (unsigned ZIP)" $legacy --verify-tag --latest --title "OpenUsage for Windows $tag" --notes-file .\release-notes.md --repo deniaiapp/openusage
 ```
 
 If the matching [GitHub Release](https://github.com/deniaiapp/openusage/releases) is already published,
