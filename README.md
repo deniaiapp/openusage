@@ -101,6 +101,8 @@ Priority also lists unpinned limits you can use before they reset.
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 
+OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App
