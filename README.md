@@ -98,6 +98,8 @@ In **Settings → Priority Limits**, choose when low limits turn orange or red.
 
 On Windows, Copilot and Antigravity distinguish provider throttling from sign-in failures and empty usage.
 
+If Claude's first check for rate limit resets can't connect, the next refresh tries again.
+
 On Windows, add OpenRouter API keys in Customize; the app does not read them from the environment.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
