@@ -99,6 +99,62 @@ From this folder on Windows x64 with the .NET 8 SDK, publish to a directory that
 Keep each executable with the files in its own folder. The target PC does not need the .NET runtime.
 This is an unsigned local build, not an installer or an automatic update channel.
 
+## Prepare the Windows release ZIP
+
+Run [Windows CI](https://github.com/deniaiapp/openusage/actions/workflows/windows-ci.yml) manually on
+the reviewed `main` commit you intend to tag. Download the `windows-x64-unsigned` artifact from the
+successful run for that exact commit, and keep the ZIP inside it. The workflow does not publish a
+release.
+
+In PowerShell, set the approved tag and path to the ZIP (without the extension):
+
+```powershell
+$tag = "<approved-release-tag>"
+$output = ".\dist\windows-x64-unsigned"
+```
+
+Alternatively, build from a clean checkout of the tag on Windows x64 with the .NET 8 SDK:
+
+```powershell
+$source = git rev-parse --verify "refs/tags/$tag^{commit}"
+if ($LASTEXITCODE -ne 0 -or (git rev-parse HEAD) -ne $source -or (git status --porcelain)) {
+    throw "Check out the exact release tag in a clean working tree."
+}
+.\windows\package.ps1 -OutputDirectory $output -Zip
+```
+
+With either build, check the extracted CLI's version and launch the extracted tray app:
+
+```powershell
+Expand-Archive -LiteralPath "$output.zip" -DestinationPath "$output-smoke"
+& "$output-smoke\cli\openusage.exe" --version
+if ($LASTEXITCODE -ne 0) { throw "The extracted CLI did not start." }
+Start-Process "$output-smoke\app\OpenUsage.exe"
+```
+
+The CLI version should match the release tag, ignoring the leading `v` and the CLI's `+commit` suffix.
+
+For a new **stable Windows release**, use the approved tag on the reviewed commit and include
+non-empty Windows release notes. Verify the tag's commit before publishing. This does not run the
+macOS release workflow or update Sparkle. Carry forward the upstream v0.6.28 update manifest unchanged
+so legacy Tauri clients can still use `releases/latest/download/latest.json`.
+
+```powershell
+$legacy = Join-Path (Split-Path $output) 'latest.json'
+gh release download v0.6.28 --pattern latest.json --output $legacy --repo robinebers/openusage
+if ($LASTEXITCODE -ne 0) { throw "Could not download the legacy update manifest." }
+gh release create $tag "${output}.zip#Windows x64 (unsigned ZIP)" $legacy --verify-tag --latest --title "OpenUsage for Windows $tag" --notes-file .\release-notes.md --repo deniaiapp/openusage
+```
+
+If the matching [GitHub Release](https://github.com/deniaiapp/openusage/releases) is already published,
+attach the ZIP instead. Do not replace an existing asset:
+
+```powershell
+$isDraft = gh release view $tag --repo deniaiapp/openusage --json isDraft --jq '.isDraft'
+if ($LASTEXITCODE -ne 0 -or $isDraft -ne 'false') { throw "No published release for $tag." }
+gh release upload $tag "${output}.zip#Windows x64 (unsigned ZIP)" --repo deniaiapp/openusage
+```
+
 ## Not in this port yet
 
 macOS-only pieces left out on purpose:

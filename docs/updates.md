@@ -1,5 +1,7 @@
 # Updates
 
+This page describes macOS. Windows x64 ZIPs are [updated manually](windows.md#download-from-github-releases).
+
 OpenUsage updates itself with [Sparkle](https://sparkle-project.org). It verifies every update before
 installing it.
 
