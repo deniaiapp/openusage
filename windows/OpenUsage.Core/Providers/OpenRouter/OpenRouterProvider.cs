@@ -75,11 +75,16 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
 
     private readonly AppHttp _http;
     private readonly ApiKeyStore _keys;
+    private readonly OpenRouterActivity _activity;
 
     public OpenRouterProvider(AppHttp http, ApiKeyStore keys)
+        : this(http, keys, TimeProvider.System) { }
+
+    internal OpenRouterProvider(AppHttp http, ApiKeyStore keys, TimeProvider clock)
     {
         _http = http;
         _keys = keys;
+        _activity = new OpenRouterActivity(GetAsync, clock);
     }
 
     public string ProviderId => Provider.Id;
@@ -96,6 +101,8 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
         WidgetDescriptor.Values("openrouter.today", Provider, "Today", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.week", Provider, "This Week", isUsagePeriod: true),
         WidgetDescriptor.Values("openrouter.month", Provider, "This Month", isUsagePeriod: true),
+        WidgetDescriptor.Values("openrouter.yesterday", Provider, "Yesterday", isUsagePeriod: true),
+        WidgetDescriptor.Values("openrouter.prior30", Provider, "Prior 30 Days", isUsagePeriod: true),
         WidgetDescriptor.BoundedDollars("openrouter.keyLimit", Provider, "Key Limit", 100)
     ];
 
@@ -132,11 +139,13 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
                 var keyResponse = await GetAsync(KeyUrl, key, cancellationToken);
                 if (keyResponse.IsSuccess && JsonUtil.Object(keyResponse.Json?["data"]) is { } data)
                 {
-                    var management = requireKey && JsonUtil.Bool(data["is_management_key"]) == true;
-                    var metrics = OpenRouterUsageMapper.KeyMetrics(data, includeSpend: !management);
+                    var management = JsonUtil.Bool(data["is_management_key"]) == true;
+                    var listSpend = requireKey && management;
+                    var metrics = OpenRouterUsageMapper.KeyMetrics(data, includeSpend: !listSpend);
                     plan = metrics.Plan;
                     lines.AddRange(metrics.Lines);
-                    if (management) lines.AddRange(await ListedKeysSpendAsync(key, cancellationToken));
+                    if (listSpend) lines.AddRange(await ListedKeysSpendAsync(key, cancellationToken));
+                    if (management) lines.AddRange(await _activity.ReadAsync(key, cancellationToken));
                 }
                 else if (requireKey)
                 {

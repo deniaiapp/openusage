@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
-using OpenUsage.Core.Providers;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.OpenCode;
@@ -43,9 +42,8 @@ public static class OpenCodePaths
 
 public static class OpenCodeErrors
 {
-    public const string NotLoggedIn = "OpenCode not detected. Log in with OpenCode Go or use OpenCode locally first.";
+    public const string NotLoggedIn = "OpenCode Go not detected. Log in with OpenCode Go and refresh.";
     public const string CredentialsUnreadable = "Couldn't read OpenCode's auth.json. Check its file permissions or log into OpenCode Go again.";
-    public const string DatabaseUnreadable = "Couldn't read OpenCode's local database. Quit OpenCode and refresh, or check the data directory's permissions.";
     public const string Unauthorized = "OpenCode Go key was rejected. Log into OpenCode Go again.";
     public const string NoGoSubscription = "No OpenCode Go subscription on this key.";
 }
@@ -94,13 +92,14 @@ public sealed class OpenCodeAuthStore
         string? failure = null;
         foreach (var path in OpenCodePaths.DatabaseFiles(dir))
         {
-            var tables = OpenCodeDatabase.Tables(path);
+            var tables = SqliteReader.QueryValue(path,
+                "SELECT 'tables:' || COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('migration','credential');");
             if (tables is null)
             {
                 failure = Path.GetFileName(path);
                 continue;
             }
-            if (!tables.Contains("migration") || !tables.Contains("credential")) continue;
+            if (tables != "tables:2") continue;
             var imported = SqliteReader.QueryValue(path, ImportedSql);
             if (imported is null)
             {
@@ -217,15 +216,12 @@ public static class OpenCodeUsageMapper
 public sealed class OpenCodeProvider : IProviderRuntime
 {
     public static readonly Uri UsageUrl = new("https://opencode.ai/zen/go/v1/usage");
-    private const string SourceNote = "From your OpenCode usage history";
     private readonly OpenCodeAuthStore _auth;
     private readonly AppHttp _http;
-    private readonly string? _dataDirectory;
 
     public OpenCodeProvider(AppHttp http, string? dataDirectory = null)
     {
         _http = http;
-        _dataDirectory = dataDirectory;
         _auth = new OpenCodeAuthStore(dataDirectory);
     }
 
@@ -240,76 +236,42 @@ public sealed class OpenCodeProvider : IProviderRuntime
         WidgetDescriptor.Percent("opencode.monthly", Provider, "Monthly")
     ];
 
-    public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
-    [
-        ..GoWidgetDescriptors,
-        ..SpendTileMapper.HistoryWidgets(Provider)
-    ];
+    public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => GoWidgetDescriptors;
 
     /// <summary>
-    /// Same sources as <see cref="RefreshAsync"/>: the local Go key or hosted usage in the local databases.
-    /// Unreadable credentials are themselves an OpenCode footprint, so refresh can surface the error.
+    /// Unreadable credentials still count as detected so refresh can surface the error.
     /// </summary>
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
         Task.Run(() =>
         {
             try
             {
-                if (_auth.GoApiKey() is not null) return true;
+                return _auth.GoApiKey() is not null;
             }
             catch (Exception)
             {
                 return true;
             }
-            return OpenCodeUsageScanner.HasHostedUsage(_dataDirectory);
         }, cancellationToken);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
         var refreshedAt = DateTimeOffset.Now;
-        string? key = null;
-        string? authError = null;
+        string? key;
         try { key = await Task.Run(() => _auth.GoApiKey(), cancellationToken); }
-        catch (Exception ex) when (ex is not OperationCanceledException) { authError = ex.Message; }
-
-        var lines = new List<MetricLine>();
-        string? plan = null;
-        string? goError = null;
-        if (key is not null)
-        {
-            var (meters, error) = await FetchGoMeters(key, cancellationToken);
-            if (meters is not null)
-            {
-                lines.AddRange(meters);
-                plan = "Go";
-            }
-            else if (error is not null)
-            {
-                // A failed meters request must not hide local spend tiles; it surfaces only when there
-                // is nothing else to show.
-                goError = error;
-                AppLog.Warn("opencode", $"Go meters unavailable: {error}");
-            }
-        }
-
-        LogUsageScan? scan;
-        try { scan = await Task.Run(() => OpenCodeUsageScanner.Scan(now: refreshedAt, dataDirectory: _dataDirectory), cancellationToken); }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            if (lines.Count == 0) return ProviderSnapshot.Error(Provider, ex);
-            AppLog.Warn("opencode", $"local database unreadable; showing Go meters only: {ex.Message}");
-            scan = null;
+            return ProviderSnapshot.Error(Provider, ex);
         }
-        SpendTileMapper.AppendAll(scan, lines, refreshedAt, SourceNote, estimated: false);
+        if (key is null) return ProviderSnapshot.Error(Provider, OpenCodeErrors.NotLoggedIn);
 
-        if (lines.Count == 0)
-        {
-            if (goError is not null) return ProviderSnapshot.Error(Provider, goError);
-            if (key is not null) return ProviderSnapshot.Error(Provider, OpenCodeErrors.NoGoSubscription);
-            if (scan is null) return ProviderSnapshot.Error(Provider, authError ?? OpenCodeErrors.NotLoggedIn);
-        }
-        MetricLine.AppendNoDataIfNeeded(lines);
-        return ProviderSnapshot.Make(Provider, plan, lines, refreshedAt);
+        var (meters, error) = await FetchGoMeters(key, cancellationToken);
+        if (meters is not null)
+            return ProviderSnapshot.Make(Provider, "Go", meters, refreshedAt);
+
+        var reason = error ?? OpenCodeErrors.NoGoSubscription;
+        AppLog.Warn("opencode", $"Go meters unavailable: {reason}");
+        return ProviderSnapshot.Error(Provider, reason);
     }
 
     internal async Task<ProviderSnapshot> RefreshWithApiKeyAsync(string key, CancellationToken ct)

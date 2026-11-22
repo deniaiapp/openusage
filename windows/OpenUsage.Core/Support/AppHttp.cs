@@ -45,11 +45,14 @@ public sealed class AppHttp : IDisposable
         _client = client ?? CreateDefaultClient();
     }
 
-    public static HttpClient CreateDefaultClient()
+    public static HttpClient CreateDefaultClient() => CreateDefaultClient(allowRedirects: true);
+
+    internal static HttpClient CreateDefaultClient(bool allowRedirects)
     {
         var handler = new HttpClientHandler
         {
-            AutomaticDecompression = DecompressionMethods.All
+            AutomaticDecompression = DecompressionMethods.All,
+            AllowAutoRedirect = allowRedirects
         };
         ApplyProxy(handler);
         return new HttpClient(handler)

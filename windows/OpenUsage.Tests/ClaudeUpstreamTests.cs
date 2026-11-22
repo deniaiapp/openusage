@@ -178,6 +178,18 @@ public class ClaudeUpstreamTests
         Assert.Null(ClaudeUsageMapper.ResetGrantsLine(null, Now));
     }
 
+    [Theory]
+    [InlineData("""[{"resets_left":1001,"ends_at":"2026-10-20T00:00:00Z"}]""")]
+    [InlineData("""[{"resets_left":600},{"resets_left":401}]""")]
+    [InlineData("""[{"resets_left":1e20}]""")]
+    [InlineData("""[{"resets_left":"unavailable"}]""")]
+    public void ResetGrants_RejectsInvalidCountsBeforeAllocatingDeadlines(string grants)
+    {
+        var block = new JsonObject { ["eligible"] = true, ["grants"] = JsonNode.Parse(grants) };
+        var failure = Assert.Throws<InvalidOperationException>(() => ClaudeUsageMapper.ResetGrantsLine(block, Now));
+        Assert.Equal(ProviderErrors.InvalidResponse, failure.Message);
+    }
+
     [Fact]
     public void HeldResetGrants_DropResetsPastTheirDeadline()
     {
@@ -382,6 +394,28 @@ public class ClaudeUpstreamTests
         Assert.Equal(2, handler.ResetGrantCalls);
     }
 
+    [Fact]
+    public async Task Provider_KeepsLastKnownResetsWhenTheNextCountIsInvalid()
+    {
+        using var dir = new TempDir();
+        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
+        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"token"}}""");
+        var handler = new FakeAnthropic();
+        var clock = Now;
+        var provider = new ClaudeProvider(new AppHttp(new HttpClient(handler)), store, () => clock);
+
+        var first = await provider.RefreshAsync();
+        Assert.Equal(1, Assert.IsType<MetricLine.ValuesLine>(first.Line(ClaudeUsageMapper.RateLimitResetsLabel)).Items[0].Number);
+
+        clock = Now.AddMinutes(61);
+        handler.ResetCount = "1e20";
+        var second = await provider.RefreshAsync();
+        Assert.Equal(2, handler.ResetGrantCalls);
+        var held = Assert.IsType<MetricLine.ValuesLine>(second.Line(ClaudeUsageMapper.RateLimitResetsLabel));
+        Assert.Equal(1, held.Items[0].Number);
+        Assert.Single(held.ExpiriesAt!);
+    }
+
     private sealed class TempDir : IDisposable
     {
         public string Path { get; } = Directory.CreateTempSubdirectory("openusage-claude-").FullName;
@@ -395,6 +429,7 @@ public class ClaudeUpstreamTests
         public int ProfileCalls;
         public bool FailResetGrants;
         public bool DisconnectResetGrants;
+        public string ResetCount = "1";
         public string? RetryAfter;
         public List<string> UsageAgents { get; } = [];
 
@@ -415,7 +450,7 @@ public class ClaudeUpstreamTests
                 if (DisconnectResetGrants)
                     throw new HttpRequestException(HttpRequestError.ConnectionError, "Fixture connection failure");
                 status = FailResetGrants ? HttpStatusCode.TooManyRequests : HttpStatusCode.OK;
-                body = """{ "cedar_ember": { "eligible": true, "grants": [ { "resets_left": 1, "ends_at": "2026-12-01T00:00:00Z" } ] } }""";
+                body = $$"""{ "cedar_ember": { "eligible": true, "grants": [ { "resets_left": {{ResetCount}}, "ends_at": "2026-12-01T00:00:00Z" } ] } }""";
             }
             else
             {
