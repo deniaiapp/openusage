@@ -42,6 +42,9 @@ Antigravity reads the `gemini:antigravity` Windows credential (or a cached Googl
 
 When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
 
+In **Customize → Antigravity**, use **Sign In with Google** and finish in your browser. OpenUsage only replaces the connection once it can read that account's quota and encrypt its sign-in for your Windows user. An existing Windows Antigravity connection still works if you haven't signed in through OpenUsage. **Sign In Again** keeps the current layout and pins.
+
+
 OpenUsage encrypts its cached Antigravity sign-in for your Windows user. On refresh, it removes the old unencrypted cache only after saving a protected copy.
 
 
