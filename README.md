@@ -106,6 +106,8 @@ On Windows, ChatGPT's Credits row shows a reported balance, including zero, and 
 
 OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
 
+Copilot sign-in keeps the same GitHub device code through a brief network interruption.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App
