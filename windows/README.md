@@ -22,6 +22,8 @@ In **Priority**, **Use It or Lose It** shows unpinned multi-day limits with most
 
 On first launch a welcome screen lists the AI tools already signed in on this PC. Pick the ones to follow and click **Connect Selected**, or **Skip for Now** and turn providers on later in **Customize**. Closing the welcome window quits the app; it shows again next time.
 
+If metrics are all hidden for the providers that are on, the dashboard links to **Customize** so you can turn them back on without reconnecting.
+
 ## What it reads
 
 Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For Ollama, OpenCode Go, OpenRouter, and Z.ai, use **Additional Accounts** in Customize to connect API keys.
@@ -32,7 +34,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Claude | `%USERPROFILE%\.claude\.credentials.json`, Windows Credential Manager (`Claude Code-credentials`), `CLAUDE_CODE_OAUTH_TOKEN` |
 | Codex | **Customize → Codex → Sign In with ChatGPT** (requires device code authorization enabled in ChatGPT), or an existing Codex CLI sign-in |
 | Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |
-| Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com), or existing editor and GitHub CLI credentials |
+| Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com) |
 | Grok | **Customize → Grok → Sign In with Grok**, or an existing Grok CLI sign-in |
 | Muse Code | **Customize → Muse Code → Sign In with Meta** |
 | OpenCode | Go API key in Customize, or `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
@@ -40,6 +42,8 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Ollama | Cloud API key in Customize. Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
 | Devin | Browser sign-in from **Customize → Devin**; the session is stored by OpenUsage |
 | OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
+
+OpenRouter management keys show Yesterday and Prior 30 Days spend when you expand the account card. These periods count only completed days in UTC.
 
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
@@ -69,7 +73,7 @@ dotnet run --project OpenUsage.Cli -- codex
 
 The CLI emits `openusage.limits.v2` JSON for enabled providers. Selecting a provider such as `openrouter`
 includes all its enabled accounts; use an exact `provider@id` from the output to select one account.
-The CLI does not open the app, refresh usage, or read credentials. Data becomes stale after ten minutes.
+The CLI does not open the app, refresh usage, or read credentials. Data becomes stale after two configured refresh intervals (ten minutes by default).
 Use `--help` for usage or `--version` for the CLI build version; neither reads saved limits.
 The legacy `--force` flag is accepted but ignored. Exit codes are 0 for saved data, 2 for invalid
 arguments or a disabled provider or account, and 4 when there's no saved data yet.
@@ -84,5 +88,10 @@ macOS-only pieces left out on purpose:
 - iCloud spend sync
 - Sparkle auto-update
 - Share-screenshot cards
+
+CLIProxyAPI hubs are not yet available in Customize. The Windows core can validate hub addresses
+and read a login list, but saving hubs and mirroring their accounts are not implemented.
+The core uses HTTPS, or HTTP for loopback, local network, and Tailscale addresses, without
+following redirects on management requests.
 
 Proxy support still honors `~\.openusage\config.json` (or `%APPDATA%\OpenUsage\config.json`) with a `proxy` URL.

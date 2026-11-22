@@ -234,6 +234,12 @@ public partial class DashboardWindow : Window
             return;
         }
 
+        if (!_container.Layout.HasVisibleMetrics)
+        {
+            ContentHost.Children.Add(HiddenMetricsDashboard());
+            return;
+        }
+
         if (PriorityTab.IsChecked == true)
         {
             RenderPriorityBoard();

@@ -169,13 +169,17 @@ public sealed partial class GrokProvider : IProviderRuntime
         return ProviderSnapshot.Error(Provider, last ?? new InvalidOperationException("Grok refresh failed."));
     }
 
-    private async Task<ProviderSnapshot> ProbeAsync(GrokAuthState auth, CancellationToken ct)
+    internal async Task<ProviderSnapshot> ProbeAsync(GrokAuthState auth, CancellationToken ct)
     {
         var token = auth.Token;
         if (!string.IsNullOrEmpty(auth.RefreshToken) && Jwt.Expiration(token) is { } exp &&
             exp - DateTimeOffset.UtcNow <= TimeSpan.FromMinutes(5))
         {
-            token = await RefreshTokenAsync(auth, ct);
+            try { token = await RefreshTokenAsync(auth, ct); }
+            catch (ProviderRequestException ex) when (!ct.IsCancellationRequested && exp > DateTimeOffset.UtcNow)
+            {
+                AppLog.Warn("grok", $"early token renewal failed; keeping the current token: {ex.Message}");
+            }
         }
 
         var credits = await ReadCreditsAsync(token, ct);
@@ -225,11 +229,15 @@ public sealed partial class GrokProvider : IProviderRuntime
             "POST", RefreshUrl,
             new Dictionary<string, string> { ["Content-Type"] = "application/x-www-form-urlencoded" },
             Encoding.UTF8.GetBytes(body), 15), ct);
+        if (response.StatusCode is 400 or 401 or 403 && JsonUtil.String(response.Json?["error"]) == "invalid_grant")
+            throw new ProviderRequestException("Grok auth expired. Run `grok login` again.");
+        if (response.StatusCode == 429)
+            throw new ProviderRequestException("Grok is limiting sign-in requests. Try again later.");
         if (!response.IsSuccess)
-            throw new InvalidOperationException("Grok auth expired. Run `grok login` again.");
+            throw new ProviderRequestException($"Grok token renewal failed (HTTP {response.StatusCode}). Try again later.");
         var access = JsonUtil.String(response.Json?["access_token"]);
-        if (string.IsNullOrEmpty(access))
-            throw new InvalidOperationException("Grok auth expired. Run `grok login` again.");
+        if (string.IsNullOrWhiteSpace(access))
+            throw new ProviderRequestException("Grok returned an invalid sign-in response. Try again later.");
         return access;
     }
 
