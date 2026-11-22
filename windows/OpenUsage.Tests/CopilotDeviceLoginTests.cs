@@ -225,19 +225,47 @@ public sealed class CopilotDeviceLoginTests
         return Task.CompletedTask;
     }
 
-    private static AppHttp MakeHttp(Func<HttpRequestMessage, string, (int Status, string Body)> respond) =>
-        new(new HttpClient(new StubHandler(respond)));
+    [Theory]
+    [InlineData(403, "X-RateLimit-Remaining", "0", "rate-limiting")]
+    [InlineData(403, "Retry-After", "30", "rate-limiting")]
+    [InlineData(429, null, null, "rate-limiting")]
+    [InlineData(403, "X-RateLimit-Remaining", "15", "Copilot seat")]
+    [InlineData(401, "Retry-After", "30", "Copilot seat")]
+    public async Task GitHubUsageDistinguishesRateLimitsFromRejectedSignIn(int status, string? header, string? value,
+        string expected)
+    {
+        using var http = MakeHttp((request, _) =>
+        {
+            if (request.RequestUri == CopilotProvider.UsageUrl) return (status, "{}");
+            return request.RequestUri!.AbsolutePath == "/login/device/code"
+                ? (200, DeviceResponse) : (200, TokenResponse);
+        }, header, value);
+        var path = Path.Combine(Path.GetTempPath(), $"openusage-rate-limit-{Guid.NewGuid():N}.bin");
+        var copilot = new CopilotProvider(http, new ApiKeyStore(path), new CopilotDeviceLogin(http, NoWait));
+        var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
+            copilot.ConnectAsync(_ => { }, CancellationToken.None));
+        Assert.Contains(expected, error.Message);
+        Assert.False(File.Exists(path));
+    }
 
-    private sealed class StubHandler(Func<HttpRequestMessage, string, (int Status, string Body)> respond) : HttpMessageHandler
+    private static AppHttp MakeHttp(Func<HttpRequestMessage, string, (int Status, string Body)> respond,
+        string? header = null, string? value = null) =>
+        new(new HttpClient(new StubHandler(respond, header, value)));
+
+    private sealed class StubHandler(Func<HttpRequestMessage, string, (int Status, string Body)> respond,
+        string? header, string? value) : HttpMessageHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var form = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
             var (status, body) = respond(request, form);
-            return new HttpResponseMessage((HttpStatusCode)status)
+            var response = new HttpResponseMessage((HttpStatusCode)status)
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
             };
+            if (header is not null && request.RequestUri == CopilotProvider.UsageUrl)
+                response.Headers.TryAddWithoutValidation(header, value);
+            return response;
         }
     }
 

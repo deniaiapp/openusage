@@ -23,6 +23,8 @@ public static class DefaultLayout
 
         "grok.weekly", "grok.payAsYouGo",
 
+        "muse.session", "muse.weekly",
+
         "ollama.session", "ollama.weekly", "ollama.monthly", "ollama.purchasedCredits",
 
         "opencode.session", "opencode.weekly", "opencode.monthly", "opencode.trend",
@@ -41,6 +43,7 @@ public static class DefaultLayout
         "codex.session", "codex.weekly",
         "cursor.auto", "cursor.api",
         "copilot.premium",
+        "muse.session",
         "ollama.monthly",
         "openrouter.credits",
         "zai.session", "zai.weekly"
@@ -71,6 +74,6 @@ public static class DefaultLayout
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
-        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits"])
+        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly"])
         .ToArray();
 }

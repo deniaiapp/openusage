@@ -256,6 +256,8 @@ public sealed class CopilotProvider : IProviderRuntime
                 ["X-Github-Api-Version"] = "2025-04-01"
             },
             TimeoutSeconds: 15), cancellationToken);
+        if (ProviderErrors.IsRateLimited(response))
+            throw new ProviderRequestException(ProviderErrors.RateLimited);
         if (appCredential && domain != CopilotDomain.Public && response.StatusCode is (401 or 403 or 404))
             throw new ProviderRequestException($"GitHub did not confirm a Copilot seat on {domain.Host}. Check your account or ask your GitHub admin.");
         if (response.StatusCode is 401 or 403)
