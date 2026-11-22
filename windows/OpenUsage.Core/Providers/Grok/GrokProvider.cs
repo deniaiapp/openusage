@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Grok;
@@ -116,7 +117,7 @@ public static class GrokUsageMapper
         "Team accounts have no personal quota.";
 }
 
-public sealed class GrokProvider : IProviderRuntime
+public sealed partial class GrokProvider : IProviderRuntime
 {
     public static readonly Uri SettingsUrl = new("https://cli-chat-proxy.grok.com/v1/settings");
     public static readonly Uri RefreshUrl = new("https://auth.x.ai/oauth2/token");
@@ -125,7 +126,11 @@ public sealed class GrokProvider : IProviderRuntime
     private readonly GrokAuthStore _auth = new();
     private readonly AppHttp _http;
 
-    public GrokProvider(AppHttp http) => _http = http;
+    public GrokProvider(AppHttp http, ApiKeyStore? keys = null)
+    {
+        _http = http;
+        _keys = keys;
+    }
 
     public Provider Provider { get; } = new(
         "grok", "Grok", "grok",
@@ -138,13 +143,19 @@ public sealed class GrokProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(_auth.HasUsableCredentials());
+        Task.FromResult(HasAppCredential || _auth.HasUsableCredentials());
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
+        if (HasAppCredential)
+        {
+            try { return await RefreshConnectedAsync(cancellationToken); }
+            catch (Exception ex) when (!cancellationToken.IsCancellationRequested) { return ProviderSnapshot.Error(Provider, ex); }
+        }
+
         var candidates = _auth.LoadCandidates();
         if (candidates.Count == 0)
-            return ProviderSnapshot.Error(Provider, "Grok not logged in. Run `grok login`.");
+            return ProviderSnapshot.Error(Provider, "Sign in to Grok in Customize → Grok.");
         Exception? last = null;
         foreach (var auth in candidates)
         {
@@ -171,8 +182,15 @@ public sealed class GrokProvider : IProviderRuntime
             }
         }
 
-        var credits = await _http.SendAsync(new AppHttpRequest(
-            "GET", CreditsConfigUrl, AuthHeaders(token), TimeoutSeconds: 10), ct);
+        var credits = await ReadCreditsAsync(token, ct);
+        return await MapUsageAsync(credits, token, "Grok auth expired. Run `grok login` again.", ct);
+    }
+
+    private Task<AppHttpResponse> ReadCreditsAsync(string token, CancellationToken ct) =>
+        _http.SendAsync(new AppHttpRequest("GET", CreditsConfigUrl, AuthHeaders(token), TimeoutSeconds: 10), ct);
+
+    private async Task<ProviderSnapshot> MapUsageAsync(AppHttpResponse credits, string token, string expiredMessage, CancellationToken ct)
+    {
         List<MetricLine> lines;
         string? warning = null;
         if (GrokUsageMapper.IsTeamBillingUnavailable(credits))
@@ -184,7 +202,7 @@ public sealed class GrokProvider : IProviderRuntime
         else
         {
             AuthRetry.RequireSuccess(credits,
-                new InvalidOperationException("Grok auth expired. Run `grok login` again."),
+                new ProviderRequestException(expiredMessage),
                 status => new InvalidOperationException($"Grok billing request failed (HTTP {status}). Try again later."));
             if (credits.Json is not { } body)
                 throw new InvalidOperationException("Grok billing response changed.");
