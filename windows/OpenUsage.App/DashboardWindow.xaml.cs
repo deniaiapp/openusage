@@ -235,8 +235,11 @@ public partial class DashboardWindow : Window
         var provider = runtime.Provider;
         var snapshot = _container.Data.Snapshot(provider.Id);
         var open = _container.Layout.IsCardOpen(provider.Id);
-        var always = _container.Data.ResolveCardRows(_container.Layout.VisibleMetrics(provider.Id, false));
-        var onDemand = _container.Data.ResolveCardRows(_container.Layout.OnDemandMetrics(provider.Id));
+        var metrics = _container.Data.ResolveCardRows(_container.Layout.VisibleMetrics(provider.Id, includeOnDemand: open));
+        var links = provider.VisibleLinks;
+        var hasExpandedContent = links.Count > 0 || (open
+            ? metrics.Any(row => _container.Layout.IsOnDemand(row.Descriptor.Id))
+            : _container.Data.ResolveCardRows(_container.Layout.OnDemandMetrics(provider.Id)).Count > 0);
         var card = Card();
         var stack = new StackPanel();
 
@@ -282,13 +285,10 @@ public partial class DashboardWindow : Window
 
         stack.Children.Add(header);
 
-        foreach (var (descriptor, data) in always)
+        foreach (var (descriptor, data) in metrics)
             stack.Children.Add(MetricRow(descriptor, data));
 
-        // The caret sits at the bottom of the card: below Always Visible when collapsed, and below a
-        // thin line, the On Demand rows, and the quick links when open.
-        var hasExpandedContent = onDemand.Count > 0 || provider.VisibleLinks.Count > 0;
-        if (hasExpandedContent && open)
+        if (open && links.Count > 0)
         {
             stack.Children.Add(new Border
             {
@@ -296,20 +296,15 @@ public partial class DashboardWindow : Window
                 Background = (Brush)FindResource("SeparatorBrush"),
                 Margin = new Thickness(14, 5, 14, 5)
             });
-            foreach (var (descriptor, data) in onDemand)
-                stack.Children.Add(MetricRow(descriptor, data));
-            if (provider.VisibleLinks.Count > 0)
+            var linkPanel = new WrapPanel { Margin = new Thickness(10, 4, 10, 0) };
+            foreach (var link in links)
             {
-                var links = new WrapPanel { Margin = new Thickness(10, 4, 10, 0) };
-                foreach (var link in provider.VisibleLinks)
-                {
-                    var btn = new Button { Content = link.Label, Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 0, 6, 4) };
-                    var url = link.Url;
-                    btn.Click += (_, _) => OpenUrl(url);
-                    links.Children.Add(btn);
-                }
-                stack.Children.Add(links);
+                var btn = new Button { Content = link.Label, Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 0, 6, 4) };
+                var url = link.Url;
+                btn.Click += (_, _) => OpenUrl(url);
+                linkPanel.Children.Add(btn);
             }
+            stack.Children.Add(linkPanel);
         }
         if (hasExpandedContent)
             stack.Children.Add(CardCaret(provider.Id, open));
@@ -534,7 +529,7 @@ public partial class DashboardWindow : Window
             Grid.SetColumn(toggle, 2);
             grid.Children.Add(icon);
             grid.Children.Add(name);
-            grid.Children.Add(toggle);
+            if (!runtime.IsAccountTemplate) grid.Children.Add(toggle);
             var button = new Button { Style = (Style)FindResource("GhostButton"), Padding = new Thickness(0), HorizontalContentAlignment = HorizontalAlignment.Stretch };
             button.Content = grid;
             button.Click += (_, _) =>
@@ -570,7 +565,7 @@ public partial class DashboardWindow : Window
                 row.Child = button;
             }
             row.Margin = new Thickness(0, 0, 0, 8);
-            row.Opacity = _container.Layout.IsProviderEnabled(provider.Id) ? 1 : 0.55;
+            row.Opacity = runtime.IsAccountTemplate || _container.Layout.IsProviderEnabled(provider.Id) ? 1 : 0.55;
             ContentHost.Children.Add(row);
         }
     }
@@ -600,10 +595,12 @@ public partial class DashboardWindow : Window
 
         if (ApiKeyAccounts.Supports(runtime.Provider.Id))
         {
-            ContentHost.Children.Add(SectionTitle("Additional Accounts"));
+            ContentHost.Children.Add(SectionTitle(runtime.IsAccountTemplate ? "Accounts" : "Additional Accounts"));
             _accountEditor = new ApiKeyAccountsView(_container, runtime.Provider.Id);
             ContentHost.Children.Add(_accountEditor);
         }
+
+        if (runtime.IsAccountTemplate) return;
 
         if (runtime is IDeviceSignInProvider deviceProvider)
         {
