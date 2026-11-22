@@ -83,7 +83,7 @@ Antigravity, Claude, Codex, and Grok show live limits without reading local sess
 Cursor history shows the on-demand charges and tokens Cursor reports, not a model-price estimate. Included and nonbillable requests contribute tokens but no charge.
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
-[command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
+[command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed. Its output marks data stale after two configured refresh intervals.
 
 For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when available, including zero.
 The CLI lists expiries from the usage response if the separate reset list disagrees.

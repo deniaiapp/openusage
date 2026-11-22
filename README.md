@@ -119,6 +119,8 @@ On Windows, Copilot and Antigravity distinguish provider throttling from sign-in
 
 If Claude's first check for rate limit resets can't connect, the next refresh tries again.
 
+The Windows CLI marks saved limits stale after two refresh intervals.
+
 Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
 
 Cursor's usage history shows actual on-demand charges and reported tokens, not estimated spend.
