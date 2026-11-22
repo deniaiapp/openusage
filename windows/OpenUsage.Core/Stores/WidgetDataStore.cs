@@ -9,6 +9,8 @@ namespace OpenUsage.Core.Stores;
 
 public sealed class WidgetDataStore
 {
+    private static readonly int[] OfflineRetrySeconds = [2, 4, 8, 16, 32];
+
     private readonly LayoutStore _layout;
     private readonly AppSettings _settings;
     private readonly ConcurrentDictionary<string, ProviderSnapshot> _snapshots = new(StringComparer.Ordinal);
@@ -86,9 +88,10 @@ public sealed class WidgetDataStore
 
     public WidgetData Resolve(WidgetDescriptor descriptor)
     {
-        var line = Snapshot(descriptor.ProviderId)?.Line(descriptor.MetricLabel);
-        return WidgetData.Resolve(descriptor, line, _settings.MeterStyle, _settings.ResetDisplay,
+        var snapshot = Snapshot(descriptor.ProviderId);
+        var data = WidgetData.Resolve(descriptor, snapshot?.Line(descriptor.MetricLabel), _settings.MeterStyle, _settings.ResetDisplay,
             _settings.AlwaysShowPacing, _settings.PriorityLimits);
+        return descriptor.PlanTitle?.Invoke(snapshot?.Plan) is { } title ? data with { Title = title } : data;
     }
 
     public void NotifyPresentationChanged() => Raise();
@@ -165,12 +168,25 @@ public sealed class WidgetDataStore
         bool IsCurrent() => _providerRefreshes.TryGetValue(providerId, out var active) && active == refresh;
         try
         {
-            var snapshot = await provider.RefreshAsync(cancellationToken);
-            lock (_gate)
+            for (var retry = 0; IsCurrent() && !cancellationToken.IsCancellationRequested; retry++)
             {
-                if (IsCurrent() && !cancellationToken.IsCancellationRequested) ApplySnapshot(providerId, snapshot);
+                var snapshot = await ReadSnapshotAsync(provider, cancellationToken);
+                if (!snapshot.IsError || snapshot.ErrorCategory != ProviderSnapshot.OfflineCategory
+                    || retry == OfflineRetrySeconds.Length)
+                {
+                    lock (_gate)
+                    {
+                        if (IsCurrent() && !cancellationToken.IsCancellationRequested) ApplySnapshot(providerId, snapshot);
+                    }
+                    return;
+                }
+                if (!IsCurrent()) return;
+                var delay = OfflineRetrySeconds[retry];
+                AppLog.Warn(providerId, $"No network path. Retrying the refresh in {delay}s.");
+                await Task.Delay(TimeSpan.FromSeconds(delay), _clock, cancellationToken);
             }
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception ex)
         {
             AppLog.Error(providerId, "refresh failed", ex);
@@ -183,6 +199,12 @@ public sealed class WidgetDataStore
         {
             _providerRefreshes.TryRemove(new KeyValuePair<string, Lazy<Task>>(providerId, refresh));
         }
+    }
+
+    private static async Task<ProviderSnapshot> ReadSnapshotAsync(IProviderRuntime provider, CancellationToken ct)
+    {
+        try { return await provider.RefreshAsync(ct); }
+        catch (Exception ex) when (ProviderErrors.IsOffline(ex)) { return ProviderSnapshot.Error(provider.Provider, ex); }
     }
 
     private void ApplySnapshot(string providerId, ProviderSnapshot snapshot)
