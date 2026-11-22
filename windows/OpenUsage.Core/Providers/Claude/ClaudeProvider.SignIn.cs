@@ -21,7 +21,7 @@ public sealed partial class ClaudeProvider
         var keys = _keys ?? throw new InvalidOperationException("Claude sign-in storage is unavailable.");
         var oauth = await new ClaudeLogin(_http, _now).AuthorizeAsync(openBrowser, pastedCode, ct);
         await _authGate.WaitAsync(ct);
-        var previous = (_lastGood, _rateLimitedUntil, _livePlan, _resetGrantsCheck);
+        var previous = (_lastGood, _rateLimit, _livePlan, _resetGrantsCheck);
         try
         {
             var snapshot = await ProbeAsync(oauth, ct, appOwned: true, validateReplacement: true);
@@ -33,7 +33,7 @@ public sealed partial class ClaudeProvider
         }
         catch
         {
-            (_lastGood, _rateLimitedUntil, _livePlan, _resetGrantsCheck) = previous;
+            (_lastGood, _rateLimit, _livePlan, _resetGrantsCheck) = previous;
             ct.ThrowIfCancellationRequested();
             throw;
         }
