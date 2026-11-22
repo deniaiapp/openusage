@@ -34,7 +34,22 @@ public static class CodexUsageMapper
         if (ReadCreditsRemaining(response, body) is { } remaining)
             lines.Add(MetricLine.Values("Credits", CreditValues(remaining)));
 
+        if (ReadCreditLimit(body) is { } creditLimit)
+            lines.Add(creditLimit);
+
         return (FormatPlan(JsonUtil.String(body["plan_type"])), lines);
+    }
+
+    private static MetricLine? ReadCreditLimit(JsonObject body)
+    {
+        var limit = JsonUtil.Object(JsonUtil.Object(body["spend_control"])?["individual_limit"]);
+        if (JsonUtil.Number(limit?["used"]) is not (>= 0 and var used) ||
+            JsonUtil.Number(limit?["limit"]) is not (>= 0 and var cap))
+            return null;
+
+        var reset = JsonUtil.Number(limit?["reset_at"]) is >= -62135596800d and <= 253402300799d and var seconds
+            ? DateTimeOffset.FromUnixTimeSeconds((long)seconds) : (DateTimeOffset?)null;
+        return MetricLine.Progress("Credit Limit", used, cap, ProgressFormat.Count("credits"), reset);
     }
 
     public static IReadOnlyList<MetricValue> CreditValues(double remaining)

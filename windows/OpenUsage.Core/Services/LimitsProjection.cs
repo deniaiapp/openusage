@@ -25,6 +25,7 @@ internal static class LimitsProjection
         ["codex.spark"] = new("spark", "percent"),
         ["codex.sparkWeekly"] = new("sparkWeekly", "percent"),
         ["codex.credits"] = new("credits", "credits", false, MetricKind.Count, "credits", true),
+        ["codex.creditLimit"] = new("creditLimit", "credits"),
         ["codex.rateLimitResets"] = ResetSpec,
         ["cursor.usage"] = new("totalUsage", "percent"),
         ["cursor.auto"] = new("autoUsage", "percent"),

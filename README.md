@@ -89,6 +89,8 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
 
+On Windows, a Codex account shows **Credit Limit** when its ChatGPT workspace reports a member limit.
+
 ```powershell
 cd windows
 dotnet run --project OpenUsage.App
