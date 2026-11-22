@@ -91,7 +91,11 @@ See the [Windows README](../windows/README.md) for how to build it and which pro
 For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when available, including zero.
 The CLI lists expiries from the usage response if the separate reset list disagrees.
 
-CLIProxyAPI hub connections are not available in the Windows UI yet. The connection service saves a new hub or replacement key only after the hub returns a valid login list. Saved addresses and keys are encrypted for the current Windows user.
+## CLIProxyAPI hubs
+
+Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management key, and choose **Connect**. OpenUsage saves a connection or replacement key only after the hub returns a valid login list. Saved addresses and keys are encrypted for the current Windows user.
+
+**Replace Key** keeps the old key if verification fails. **Disconnect** removes only the saved connection on this PC; it does not change the hub. Hub accounts do not appear on the Windows dashboard yet.
 
 ## Privacy Mode
 

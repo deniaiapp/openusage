@@ -4,7 +4,7 @@ using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Stores;
 
-internal sealed record CliProxyHub(Guid Id, Uri Address);
+public sealed record CliProxyHub(Guid Id, Uri Address);
 
 internal sealed class CliProxyHubStore(string? path = null)
 {

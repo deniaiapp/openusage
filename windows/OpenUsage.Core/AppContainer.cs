@@ -15,11 +15,14 @@ public sealed class AppContainer : IDisposable
     public const string Version = "0.7.15-beta.1";
 
     private readonly AppHttp _http;
+    private readonly CliProxyHubClient _hubClient = new();
+    private readonly CliProxyHubConnections _hubConnections;
     private readonly CancellationTokenSource _cts = new();
     private Task? _refreshLoop;
 
     public AppContainer()
     {
+        _hubConnections = new CliProxyHubConnections(_hubClient, new CliProxyHubStore());
         Settings = AppSettings.Load();
         Keys = new ApiKeyStore();
         _http = new AppHttp();
@@ -77,6 +80,22 @@ public sealed class AppContainer : IDisposable
     }
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
+
+    public IReadOnlyList<CliProxyHub> CliProxyHubs() => _hubConnections.List();
+
+    public async Task ConnectCliProxyHubAsync(string address, string key, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        await _hubConnections.ConnectAsync(address, key, linked.Token);
+    }
+
+    public async Task ReplaceCliProxyHubKeyAsync(Guid id, string key, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        await _hubConnections.ReplaceKeyAsync(id, key, linked.Token);
+    }
+
+    public bool RemoveCliProxyHub(Guid id) => _hubConnections.Remove(id);
 
     public async Task ConnectAntigravityAsync(AntigravityProvider provider, Action<Uri> openBrowser, CancellationToken ct)
     {
@@ -177,5 +196,6 @@ public sealed class AppContainer : IDisposable
     {
         _cts.Cancel();
         _http.Dispose();
+        _hubClient.Dispose();
     }
 }
