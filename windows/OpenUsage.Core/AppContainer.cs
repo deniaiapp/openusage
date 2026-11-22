@@ -1,5 +1,7 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Claude;
+using OpenUsage.Core.Providers.Codex;
+using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Copilot;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Stores;
@@ -83,11 +85,28 @@ public sealed class AppContainer : IDisposable
         Data.ReplaceAccountSnapshot(snapshot);
     }
 
-    public async Task ConnectCopilotAsync(Action<string> showCode, CancellationToken cancellationToken)
+    public async Task ConnectDevinAsync(DevinProvider provider, Action<Uri> openBrowser, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        var snapshot = await provider.ConnectAsync(openBrowser, linked.Token);
+        if (!Layout.IsProviderEnabled(provider.Provider.Id))
+            Layout.SetProviderEnabled(provider.Provider.Id, true);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
+
+    public async Task ConnectCodexAsync(Action<string> showCode, CancellationToken cancellationToken)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var codex = Providers.OfType<CodexProvider>().Single();
+        var snapshot = await codex.ConnectAsync(showCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
+    }
+
+    public async Task ConnectCopilotAsync(string address, Action<string, Uri> showCode, CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
         var copilot = Providers.OfType<CopilotProvider>().Single();
-        var snapshot = await copilot.ConnectAsync(showCode, linked.Token);
+        var snapshot = await copilot.ConnectAsync(address, showCode, linked.Token);
         Data.ReplaceAccountSnapshot(snapshot);
     }
 

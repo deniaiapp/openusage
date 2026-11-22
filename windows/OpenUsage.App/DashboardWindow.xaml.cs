@@ -12,6 +12,7 @@ using OpenUsage.App.Views;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
@@ -40,6 +41,8 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private DevinSignInView? _devinSignIn;
+    private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
     private ClaudeSignInView? _claudeSignInEditor;
     public event Action<string?>? HotkeyChanged;
@@ -71,9 +74,9 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_copilotLoginEditor?.ResumeIfPending() == true || _claudeSignInEditor?.ResumeIfPending() == true)
+        if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true || _claudeSignInEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
-        else
+        else if (_devinSignIn?.IsPending != true)
         {
             _screen = DashboardScreen.Dashboard;
             Render();
@@ -187,8 +190,11 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _copilotLoginEditor is not null || _claudeSignInEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null || _claudeSignInEditor is not null)) return;
         _accountEditor = null;
+        _devinSignIn?.Cancel();
+        _devinSignIn = null;
+        _codexLoginEditor = null;
         _copilotLoginEditor = null;
         _claudeSignInEditor = null;
         ContentHost.Children.Clear();
@@ -474,6 +480,13 @@ public partial class DashboardWindow : Window
             Grid.SetColumn(value, 1);
             unbounded.Children.Add(value);
             panel.Children.Add(unbounded);
+            foreach (var expiry in data.ResetExpiryLabels(now))
+                panel.Children.Add(new TextBlock
+                {
+                    Text = expiry,
+                    Style = (Style)FindResource("MutedText"),
+                    Margin = new Thickness(0, 2, 0, 0)
+                });
         }
 
         return panel;
@@ -586,6 +599,18 @@ public partial class DashboardWindow : Window
             ContentHost.Children.Add(SectionTitle("Claude Sign-In"));
             _claudeSignInEditor = new ClaudeSignInView(_container, claude, (Style)FindResource("GhostButton"));
             ContentHost.Children.Add(_claudeSignInEditor);
+        }
+        if (runtime is DevinProvider devin)
+        {
+            ContentHost.Children.Add(SectionTitle("Devin Account"));
+            _devinSignIn = new DevinSignInView(_container, devin);
+            ContentHost.Children.Add(_devinSignIn);
+        }
+        if (runtime is OpenUsage.Core.Providers.Codex.CodexProvider codex)
+        {
+            ContentHost.Children.Add(SectionTitle("ChatGPT Sign-In"));
+            _codexLoginEditor = new CodexLoginView(_container, codex, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_codexLoginEditor);
         }
         if (runtime is OpenUsage.Core.Providers.Copilot.CopilotProvider copilot)
         {

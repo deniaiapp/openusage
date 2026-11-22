@@ -30,15 +30,15 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 |---|---|
 | Amp | Device-code sign-in in Customize (Windows user encryption); does not read the Amp CLI credentials |
 | Claude | **Customize → Claude → Sign In with Claude**, or existing Claude CLI credentials if not connected in OpenUsage |
-| Codex | `%USERPROFILE%\.codex\auth.json`, `%USERPROFILE%\.config\codex\auth.json`, Credential Manager (`cli\|<home hash>.Codex Auth`, the per-home key Codex itself writes) |
+| Codex | **Customize → Codex → Sign In with ChatGPT** (requires device code authorization enabled in ChatGPT), or an existing Codex CLI sign-in |
 | Cursor | `%APPDATA%\Cursor\User\globalStorage\state.vscdb`, Credential Manager (`cursor-access-token`) |
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com), or existing editor and GitHub CLI credentials |
 | Grok | `%USERPROFILE%\.grok\auth.json` |
 | Muse Code | **Customize → Muse Code → Sign In with Meta** |
 | OpenCode | Go API key in Customize, or `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
-| Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a short-lived cache under `%APPDATA%\OpenUsage\antigravity` |
+| Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a DPAPI-protected cache under `%APPDATA%\OpenUsage\antigravity` |
 | Ollama | Cloud API key in Customize. Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
-| Devin | `credentials.toml` under `.local\share\devin` / `%LOCALAPPDATA%\devin`, or the Devin/Windsurf `state.vscdb` |
+| Devin | Browser sign-in from **Customize → Devin**; the session is stored by OpenUsage |
 | OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
 
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
@@ -51,7 +51,7 @@ instead of renewing that sign-in twice.
 If a refresh fails, OpenUsage keeps that account's last successful data and waits before automatically trying again.
 Other accounts update normally. You can still retry manually.
 
-OpenUsage renews its own Claude connection without touching the CLI login. For existing Claude and Codex credentials, the app only renews tokens that came from a file and leaves the rest of that file intact. Tokens from Credential Manager are left for the CLI to refresh.
+OpenUsage renews its own Claude and ChatGPT sign-ins without touching the CLI login. For CLI-based Claude or Codex logins, OpenUsage only refreshes tokens that came from a file, keeping the rest of that file intact. Tokens from Credential Manager are left for the CLI to refresh.
 
 When an update adds a new default metric, it's turned on once for existing layouts too. If you turn it off, it stays off.
 

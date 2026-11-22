@@ -22,12 +22,12 @@ public static class ProviderCatalog
     public static IReadOnlyList<IProviderRuntime> Make(AppHttp http, ApiKeyStore keys) =>
     [
         new ClaudeProvider(http, keys: keys),
-        new CodexProvider(http),
+        new CodexProvider(http, keys),
         new CursorProvider(http),
         new AmpProvider(http, keys),
         new AntigravityProvider(http),
         new CopilotProvider(http, keys),
-        new DevinProvider(http),
+        new DevinProvider(http, keys),
         new GrokProvider(http),
         new MuseProvider(http, keys),
         new OllamaProvider(http),

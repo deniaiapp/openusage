@@ -31,7 +31,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[ChatGPT](docs/providers.md#chatgpt)**: session, weekly, Spark, extra usage, credit limit, rate-limit resets, daily tokens
 - **[Cursor](docs/providers.md#cursor)**: total usage, model usage, extra usage, requests, credits, daily spend and tokens
 - **[Amp](docs/providers.md#amp)**: agent usage, orb hours, Amp Free, credits; on Windows, [connect in Customize](docs/windows.md#amp-on-windows)
-- **[Antigravity](docs/providers.md#antigravity)**: Gemini, Argon, and Claude quotas
+- **[Antigravity](docs/providers.md#antigravity)**: Gemini, Argon, and Claude quotas; Windows no longer reads local conversation history
 - **[Copilot](docs/providers.md#copilot)**: credits, extra usage, chat, completions, organization billing, GitHub Enterprise on GHE.com
 - **[Devin](docs/providers.md#devin)**: daily and weekly quota, extra usage
 - **[Grok](docs/providers.md#grok)**: weekly limit, extra usage
@@ -59,7 +59,8 @@ files, or logs. See [Accounts](docs/accounts.md). Coming from 0.7.x? See
 - **Rate-limit resets.** See and spend Claude and ChatGPT resets.
 - **Share.** Copy a picture of your usage to the clipboard.
 - **Notifications.** A heads-up before a limit runs out, or before a weekly limit resets with most of
-  it unused.
+  it unused. On Windows, [usage notifications](docs/windows.md) can open the dashboard from
+  a banner or Notification Center.
 - **Priority limits.** Choose how much left turns a limit orange or red, see limits you're burning
   through too fast while they still have plenty left, and see limits about to reset mostly unused.
 - **Global shortcut.** Toggle the panel from anywhere.
@@ -92,10 +93,18 @@ On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
 On Windows, ChatGPT uses the latest usage response for the available reset count when possible.
 
-Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
+Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
+
+Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
+
+Windows reset countdowns show calendar months and years for longer waits.
+
+Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known. Priority also shows which accounts are waiting for their first reading.
 Priority also lists unpinned limits you can use before they reset.
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
+
+OpenRouter Key Limit shows when a daily, weekly, or monthly limit resets.
 
 ```powershell
 cd windows
@@ -110,11 +119,15 @@ If Claude's first check for rate limit resets can't connect, the next refresh tr
 
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
-On Windows, connect Claude in Customize using your browser. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
+On Windows, connect Claude in Customize using your browser, or connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
 
 Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
 Windows shows purchased credits as a remaining balance when OpenRouter supplies both totals, not as a spending limit.
+
+Windows shows available Z.ai Limit Resets when you expand the account card.
+
+OpenUsage encrypts its Antigravity sign-in cache for your Windows user.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
