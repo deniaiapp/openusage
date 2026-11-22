@@ -34,7 +34,6 @@ public sealed class CursorBrowserLoginTests
         var result = await new CursorBrowserLogin(http, NoWait).AuthorizeAsync(url => browser = url, CancellationToken.None);
         Assert.Equal("https://cursor.com/loginDeepControl", browser!.GetLeftPart(UriPartial.Path));
         Assert.Equal(3, polls);
-        Assert.Equal(CursorProvider.BrowserCredentialSource, result.Source);
         Assert.Equal("fixture-access", result.AccessToken);
         Assert.Equal("fixture-refresh", result.RefreshToken);
     }
@@ -126,6 +125,30 @@ public sealed class CursorBrowserLoginTests
         finally { directory.Delete(recursive: true); }
     }
 
+    [Fact]
+    public async Task MissingAppSignInDoesNotDiscoverCredentialsOrRequestUsage()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        try
+        {
+            var calls = 0;
+            using var http = MakeHttp(_ =>
+            {
+                calls++;
+                throw new InvalidOperationException("Unsigned Cursor must not request usage.");
+            });
+            var cursor = new CursorProvider(http, historyStore: new(directory.FullName),
+                keys: new ApiKeyStore(Path.Combine(directory.FullName, "keys.bin")));
+            Assert.False(cursor.HasAppCredential);
+            Assert.False(await cursor.HasLocalCredentialsAsync());
+            var snapshot = await cursor.RefreshAsync();
+            Assert.True(snapshot.IsError);
+            Assert.Contains("Customize", Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+            Assert.Equal(0, calls);
+        }
+        finally { directory.Delete(recursive: true); }
+    }
+
     private const string Usage = """{"enabled":true,"planUsage":{"totalPercentUsed":55}}""";
 
     private static CursorAuthState Account(string label, DateTimeOffset expiry)
@@ -134,8 +157,7 @@ public sealed class CursorBrowserLoginTests
         return new CursorAuthState
         {
             AccessToken = $"{label}.{claims}.fixture",
-            RefreshToken = $"{label}-refresh",
-            Source = CursorProvider.BrowserCredentialSource
+            RefreshToken = $"{label}-refresh"
         };
     }
 

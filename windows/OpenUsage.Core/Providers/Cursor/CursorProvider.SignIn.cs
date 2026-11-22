@@ -7,7 +7,6 @@ namespace OpenUsage.Core.Providers.Cursor;
 
 public sealed partial class CursorProvider
 {
-    internal const string BrowserCredentialSource = "openusage";
     private const string BrowserCredentialKey = "cursor.browser-sign-in";
     private static readonly TimeSpan BrowserRenewalLead = TimeSpan.FromDays(7);
     private readonly object _browserCredentialGate = new();
@@ -40,7 +39,7 @@ public sealed partial class CursorProvider
         if (CursorBrowserLogin.Token(json?["AccessToken"]) is not { } access ||
             CursorBrowserLogin.Token(json?["RefreshToken"]) is not { } refresh)
             throw new ProviderRequestException("OpenUsage couldn't read your Cursor sign-in. Sign in again in Customize.");
-        var state = new CursorAuthState { AccessToken = access, RefreshToken = refresh, Source = BrowserCredentialSource };
+        var state = new CursorAuthState { AccessToken = access, RefreshToken = refresh };
         return ProbeAsync(state, ct, renewed =>
         {
             lock (_browserCredentialGate)
@@ -57,8 +56,6 @@ public sealed partial class CursorProvider
     private static string SerializeCredential(CursorAuthState state) =>
         JsonSerializer.Serialize(new { state.AccessToken, state.RefreshToken });
 
-    private static ProviderRequestException SignInExpired(CursorAuthState state) =>
-        new(state.Source == BrowserCredentialSource
-            ? "Cursor sign-in expired. Sign in again in Customize."
-            : "Cursor sign-in expired. Sign in in Customize or in the Cursor app.");
+    private static ProviderRequestException SignInExpired() =>
+        new("Cursor sign-in expired. Sign in again in Customize.");
 }

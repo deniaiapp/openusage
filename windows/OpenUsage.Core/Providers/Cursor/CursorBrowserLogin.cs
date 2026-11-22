@@ -7,6 +7,7 @@ namespace OpenUsage.Core.Providers.Cursor;
 
 internal sealed class CursorBrowserLogin(AppHttp http, Func<TimeSpan, CancellationToken, Task>? wait = null)
 {
+    internal const string ClientId = "KbZUR41cY7W6zRSdpSUJ7I7mLYBKOCmB";
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(5);
     private readonly Func<TimeSpan, CancellationToken, Task> _wait = wait ?? Task.Delay;
@@ -37,7 +38,7 @@ internal sealed class CursorBrowserLogin(AppHttp http, Func<TimeSpan, Cancellati
                 var json = response.Json;
                 if (Token(json?["accessToken"]) is not { } access || Token(json?["refreshToken"]) is not { } refresh)
                     throw new ProviderRequestException("Cursor returned an invalid sign-in response. Try again.");
-                return new CursorAuthState { AccessToken = access, RefreshToken = refresh, Source = CursorProvider.BrowserCredentialSource };
+                return new CursorAuthState { AccessToken = access, RefreshToken = refresh };
             }
         }
         catch (Exception ex) when ((ex is OperationCanceledException or ProviderRequestException) && linked.IsCancellationRequested)
