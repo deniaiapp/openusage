@@ -72,7 +72,7 @@ Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsa
 
 For Grok, choose **Customize → Grok → Sign In with Grok**, then open xAI to confirm the device code. **Sign In Again** replaces the encrypted OpenUsage connection only after usage is verified. Existing Grok CLI sign-ins still work if you haven't connected Grok in OpenUsage.
 
-Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown; Cursor's provider-reported history is unchanged.
+Antigravity, Claude, Codex, and Grok show live limits without reading local session logs. Estimated spend and usage trends from those logs are no longer shown; Cursor's provider-reported history is unchanged.
 
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
