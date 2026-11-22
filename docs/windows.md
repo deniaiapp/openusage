@@ -63,6 +63,9 @@ Claude, Codex, and Grok show live limits without reading local session logs. Est
 See the [Windows README](../windows/README.md) for how to build it and which providers are wired up. The
 [command-line helper](../windows/README.md#command-line) replaces the legacy loopback HTTP API and reads saved limits even when the tray app is closed.
 
+For ChatGPT, **Rate Limit Resets** uses the latest usage response's count when available, including zero.
+The CLI lists expiries from the usage response if the separate reset list disagrees.
+
 ## Priority Limits
 
 In **Settings → Priority Limits**, choose when the dashboard and tray icon warn about low limits. The defaults are 30% left for orange and 10% left for red. A limit that's on pace to run out can still turn red earlier.
