@@ -13,6 +13,68 @@ public class ClaudeUpstreamTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
 
+    [Theory]
+    [InlineData(" 600 ", 600)]
+    [InlineData("Wed, 14 Oct 2026 12:15:00 GMT", 900)]
+    [InlineData("999999999999999999999999", 3600)]
+    [InlineData("Wed, 14 Oct 2026 13:15:00 GMT", 3600)]
+    [InlineData("Wed, 14 Oct 2026 11:59:00 GMT", null)]
+    [InlineData("not a date", null)]
+    [InlineData("0", null)]
+    [InlineData("-1", null)]
+    public void RetryAfter_ParsesPositiveDelaysAndCapsThemAtAnHour(string header, int? seconds)
+    {
+        var response = new AppHttpResponse(429, [], new Dictionary<string, string> { ["retry-after"] = header });
+        Assert.Equal(seconds is { } delay ? TimeSpan.FromSeconds(delay) : (TimeSpan?)null, response.RetryAfter(Now));
+    }
+
+    [Fact]
+    public async Task Provider_HoldsLastReadingThroughRetryAfterAndResumesAtTheDeadline()
+    {
+        using var dir = new TempDir();
+        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
+        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-access"}}""");
+        var clock = Now;
+        var handler = new FakeAnthropic();
+        using var http = new AppHttp(new HttpClient(handler));
+        var provider = new ClaudeProvider(http, store, () => clock);
+        var initial = await provider.RefreshAsync();
+        Assert.NotNull(initial.Line("Session"));
+
+        handler.RetryAfter = "1200";
+        var held = await provider.RefreshAsync();
+        Assert.Equal(ClaudeUsageMapper.RateLimitedWarning, held.Warning);
+        Assert.Equal(initial.Line("Session"), held.Line("Session"));
+        Assert.Equal(2, handler.PlainUsageCalls);
+
+        handler.RetryAfter = null;
+        clock = Now.AddMinutes(19);
+        Assert.Equal(ClaudeUsageMapper.RateLimitedWarning, (await provider.RefreshAsync()).Warning);
+        Assert.Equal(2, handler.PlainUsageCalls);
+        clock = Now.AddMinutes(20);
+        Assert.Null((await provider.RefreshAsync()).Warning);
+        Assert.Equal(3, handler.PlainUsageCalls);
+    }
+
+    [Fact]
+    public async Task Provider_HonorsTheFirstThrottleWithoutBlockingADifferentCliLogin()
+    {
+        using var dir = new TempDir();
+        var store = new ClaudeAuthStore(dir.Path, readCredentialManager: false);
+        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-first"}}""");
+        var handler = new FakeAnthropic { RetryAfter = "1800" };
+        using var http = new AppHttp(new HttpClient(handler));
+        var provider = new ClaudeProvider(http, store, () => Now);
+        Assert.True((await provider.RefreshAsync()).IsError);
+        Assert.True((await provider.RefreshAsync()).IsError);
+        Assert.Equal(1, handler.PlainUsageCalls);
+
+        File.WriteAllText(store.CredentialsPath(), """{"claudeAiOauth":{"accessToken":"fixture-second"}}""");
+        handler.RetryAfter = null;
+        Assert.False((await provider.RefreshAsync()).IsError);
+        Assert.Equal(2, handler.PlainUsageCalls);
+    }
+
     // MARK: - Rate Limit Resets (cedar_ember)
 
     [Fact]
@@ -294,6 +356,7 @@ public class ClaudeUpstreamTests
         public bool FailResetGrants;
         public bool DisconnectResetGrants;
         public string ResetCount = "1";
+        public string? RetryAfter;
         public List<string> UsageAgents { get; } = [];
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -319,6 +382,12 @@ public class ClaudeUpstreamTests
             {
                 PlainUsageCalls++;
                 UsageAgents.Add(string.Join(" ", request.Headers.GetValues("User-Agent")));
+                if (RetryAfter is not null)
+                {
+                    var throttled = new HttpResponseMessage(HttpStatusCode.TooManyRequests) { Content = new StringContent("{}") };
+                    throttled.Headers.TryAddWithoutValidation("Retry-After", RetryAfter);
+                    return Task.FromResult(throttled);
+                }
                 body = """{ "five_hour": { "utilization": 10 }, "seven_day": { "utilization": 20 }, "cedar_ember": null }""";
             }
             return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
