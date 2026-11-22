@@ -12,6 +12,8 @@ using OpenUsage.App.Views;
 using OpenUsage.Core;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers;
+using OpenUsage.Core.Providers.Antigravity;
+using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Services;
 using OpenUsage.Core.Support;
 using Application = System.Windows.Application;
@@ -40,10 +42,12 @@ public partial class DashboardWindow : Window
     private DashboardScreen _screen = DashboardScreen.Dashboard;
     private string? _detailProviderId;
     private ApiKeyAccountsView? _accountEditor;
+    private DevinSignInView? _devinSignIn;
     private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
     public event Action<string?>? HotkeyChanged;
     private DeviceLoginView? _deviceLoginEditor;
+    private AntigravitySignInView? _antigravitySignInEditor;
 
     public DashboardWindow(AppContainer container)
     {
@@ -60,7 +64,7 @@ public partial class DashboardWindow : Window
 
     public void ToggleFromTray()
     {
-        if (!IsVisible && _deviceLoginEditor?.ResumeIfPending() == true)
+        if (!IsVisible && (_deviceLoginEditor?.ResumeIfPending() == true || _antigravitySignInEditor?.IsPending == true))
         {
             ShowAnchored();
             Activate();
@@ -73,7 +77,7 @@ public partial class DashboardWindow : Window
         }
         if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
-        else
+        else if (_devinSignIn?.IsPending != true)
         {
             _screen = DashboardScreen.Dashboard;
             Render();
@@ -166,8 +170,10 @@ public partial class DashboardWindow : Window
 
     private void Render(bool preserveEditor = false)
     {
-        if (preserveEditor && _deviceLoginEditor is not null) return;
+        if (preserveEditor && (_deviceLoginEditor is not null || _antigravitySignInEditor is not null)) return;
         _deviceLoginEditor = null;
+        _antigravitySignInEditor?.Cancel();
+        _antigravitySignInEditor = null;
         var remaining = _container.Data.NextRefresh - DateTimeOffset.Now;
         RefreshLabel.Text = _container.Data.IsRefreshing
             ? "Updating…"
@@ -187,11 +193,14 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null)) return;
         _accountEditor = null;
+        _devinSignIn?.Cancel();
+        _devinSignIn = null;
         _codexLoginEditor = null;
         _copilotLoginEditor = null;
         ContentHost.Children.Clear();
+        if (ShowPrivacyPlaceholder()) return;
         switch (_screen)
         {
             case DashboardScreen.Dashboard:
@@ -325,7 +334,7 @@ public partial class DashboardWindow : Window
         {
             Margin = new Thickness(12, data.IsBounded ? 8 : 4, 12, data.IsBounded ? 8 : 4),
             Background = Brushes.Transparent,
-            ContextMenu = MetricContextMenu(descriptor)
+            ContextMenu = _container.Settings.PrivacyMode ? null : MetricContextMenu(descriptor)
         };
 
         var labelLine = new Grid();
@@ -504,6 +513,17 @@ public partial class DashboardWindow : Window
 
     private void RenderCustomize()
     {
+        if (_container.ApiKeyAccountStore.HasUnreadableAccounts)
+        {
+            ContentHost.Children.Add(new TextBlock
+            {
+                Text = "This version couldn’t read some saved accounts. They’re still saved and encrypted.",
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)FindResource("MutedText"),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+        }
+
         var layout = _container.Layout;
         var undo = new Button
         {
@@ -588,6 +608,18 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is AntigravityProvider antigravity)
+        {
+            ContentHost.Children.Add(SectionTitle("Google Sign-In"));
+            _antigravitySignInEditor = new AntigravitySignInView(_container, antigravity, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_antigravitySignInEditor);
+        }
+        if (runtime is DevinProvider devin)
+        {
+            ContentHost.Children.Add(SectionTitle("Devin Account"));
+            _devinSignIn = new DevinSignInView(_container, devin);
+            ContentHost.Children.Add(_devinSignIn);
+        }
         if (runtime is OpenUsage.Core.Providers.Codex.CodexProvider codex)
         {
             ContentHost.Children.Add(SectionTitle("ChatGPT Sign-In"));
@@ -718,6 +750,8 @@ public partial class DashboardWindow : Window
                 _container.Settings.Save();
             }));
 
+        RenderPrivacySettings();
+
         ContentHost.Children.Add(SectionTitle("Usage Notifications"));
         ContentHost.Children.Add(SettingToggle("Burning Fast", _container.Settings.NotifyBurningFast, value =>
         {
@@ -741,7 +775,7 @@ public partial class DashboardWindow : Window
             }
         };
         ContentHost.Children.Add(reset);
-        ContentHost.Children.Add(new TextBlock
+        if (!_container.Settings.PrivacyMode) ContentHost.Children.Add(new TextBlock
         {
             Text = $"Logs: {AppPaths.LogFile}",
             Style = (Style)FindResource("MutedText"),
