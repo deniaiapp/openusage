@@ -13,6 +13,7 @@ public sealed class AppSettings
     public ResetDisplayMode ResetDisplay { get; set; } = ResetDisplayMode.Relative;
     public bool AlwaysShowPacing { get; set; }
     public PriorityLimits PriorityLimits { get; set; } = PriorityLimits.Default;
+    public bool ShowUnusedQuotaInPriority { get; set; } = true;
     public bool LaunchAtLogin { get; set; }
     public string? GlobalHotkey { get; set; }
     public int RefreshIntervalSeconds { get; set; } = 300;
@@ -20,12 +21,14 @@ public sealed class AppSettings
     /// <summary>True from a fresh install until the user leaves the welcome screen.</summary>
     public bool WelcomePending { get; set; }
     public HashSet<string> EnabledProviders { get; set; } = new(StringComparer.Ordinal);
-    public HashSet<string> EnabledMetrics { get; set; } = new(StringComparer.Ordinal);
-    public HashSet<string> ExpandedMetrics { get; set; } = new(StringComparer.Ordinal);
-    public HashSet<string> PinnedMetrics { get; set; } = new(StringComparer.Ordinal);
+    public HashSet<string> EnabledMetrics { get; set; } = new(DefaultLayout.MetricIds, StringComparer.Ordinal);
+    public HashSet<string> ExpandedMetrics { get; set; } = new(DefaultLayout.ExpandedMetricIds, StringComparer.Ordinal);
+    public HashSet<string> PinnedMetrics { get; set; } = new(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal);
     public HashSet<string> OpenCards { get; set; } = new(StringComparer.Ordinal);
     public List<string> ProviderOrder { get; set; } = [];
     public bool CustomizeHintDismissed { get; set; }
+    public bool NotifyBurningFast { get; set; }
+    public bool NotifyUseItOrLoseIt { get; set; }
     /// <summary>Default metric IDs this layout has already been offered; null on layouts saved before tracking.</summary>
     public HashSet<string>? SeededDefaultMetrics { get; set; }
 
@@ -46,9 +49,9 @@ public sealed class AppSettings
                 {
                     loaded.FilePath = path;
                     loaded.EnabledProviders ??= new HashSet<string>(StringComparer.Ordinal);
-                    loaded.EnabledMetrics ??= new HashSet<string>(StringComparer.Ordinal);
-                    loaded.ExpandedMetrics ??= new HashSet<string>(StringComparer.Ordinal);
-                    loaded.PinnedMetrics ??= new HashSet<string>(StringComparer.Ordinal);
+                    loaded.EnabledMetrics ??= new(DefaultLayout.MetricIds, StringComparer.Ordinal);
+                    loaded.ExpandedMetrics ??= new(DefaultLayout.ExpandedMetricIds, StringComparer.Ordinal);
+                    loaded.PinnedMetrics ??= new(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal);
                     loaded.OpenCards ??= new HashSet<string>(StringComparer.Ordinal);
                     loaded.ProviderOrder ??= [];
                     loaded.PriorityLimits ??= PriorityLimits.Default;
@@ -69,10 +72,6 @@ public sealed class AppSettings
     /// <summary>A fresh install starts with no providers on; the welcome screen turns on the user's picks.</summary>
     public static AppSettings Fresh() => new()
     {
-        EnabledProviders = new HashSet<string>(StringComparer.Ordinal),
-        EnabledMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal),
-        ExpandedMetrics = new HashSet<string>(DefaultLayout.ExpandedMetricIds, StringComparer.Ordinal),
-        PinnedMetrics = new HashSet<string>(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal),
         SeededDefaultMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal)
     };
 

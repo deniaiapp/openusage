@@ -120,6 +120,12 @@ public sealed class ProviderRequestException : Exception
 
 public static class ProviderErrors
 {
+    internal const string RateLimited = "Provider is rate-limiting usage requests. Try again later.";
+
+    internal static bool IsRateLimited(AppHttpResponse response) =>
+        response.StatusCode == 429 || (response.StatusCode == 403 &&
+            (response.Header("x-ratelimit-remaining")?.Trim() == "0" || response.Header("retry-after") is not null));
+
     public static string ConnectionFailed => "Couldn't reach the provider. Check your connection.";
     public static string InvalidResponse => "Usage data unavailable. Try again later.";
     public static string RequestFailed(int status) => $"Request failed (HTTP {status}).";

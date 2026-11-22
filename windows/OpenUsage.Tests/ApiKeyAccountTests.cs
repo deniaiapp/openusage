@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text.Json;
 using OpenUsage.Core.Models;
+using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Ollama;
+using OpenUsage.Core.Providers.OpenCode;
 using OpenUsage.Core.Providers.OpenRouter;
 using OpenUsage.Core.Providers.Zai;
 using OpenUsage.Core.Services;
@@ -13,10 +15,123 @@ namespace OpenUsage.Tests;
 
 public sealed class ApiKeyAccountTests : IDisposable
 {
+    private const string OpenCodeUsage = """
+        {"usage":{
+            "rolling":{"percent":12,"resetsAt":"2026-12-01T05:00:00Z"},
+            "weekly":{"percent":20,"resetsAt":"2026-12-07T00:00:00Z"},
+            "monthly":{"percent":30,"resetsAt":"2027-01-01T00:00:00Z"}
+        }}
+        """;
     private readonly string _directory = Directory.CreateTempSubdirectory("openusage-accounts-").FullName;
     private string AccountFile => Path.Combine(_directory, "accounts.bin");
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);
+
+    [Fact]
+    public void ZaiLimitResetsSeedInOrderWithoutOverwritingAnExistingAccountsPreferences()
+    {
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new ZaiProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+        var settingsPath = Path.Combine(_directory, "settings.json");
+        var settings = AppSettings.Load(settingsPath);
+        var account = new ApiKeyAccount(Guid.NewGuid(), "zai", "Work");
+        var accountRuntime = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile)).MakeRuntime(account, provider);
+        var accountMetric = accountRuntime.WidgetDescriptors.Last().Id;
+        settings.ProviderOrder = [account.CardId];
+        settings.EnabledMetrics.Add("zai.session");
+        settings.SeededDefaultMetrics = new HashSet<string>(DefaultLayout.MigrationBaselineMetricIds);
+        var layout = new LayoutStore(settings, [provider]);
+        layout.RegisterAccount(accountRuntime, "zai");
+
+        Assert.Equal(["Session", "Weekly", "Web Searches", "Limit Resets"],
+            provider.WidgetDescriptors.Select(descriptor => descriptor.Title));
+        foreach (var id in new[] { ZaiProvider.ResetsMetricId, accountMetric })
+        {
+            Assert.True(layout.IsMetricEnabled(id));
+            Assert.True(layout.IsOnDemand(id));
+            Assert.DoesNotContain(id, settings.PinnedMetrics);
+        }
+
+        layout.SetMetricEnabled(accountMetric, false);
+        var restored = new LayoutStore(AppSettings.Load(settingsPath), [provider]);
+        restored.RegisterAccount(accountRuntime, "zai");
+        Assert.False(restored.IsMetricEnabled(accountMetric));
+    }
+
+    [Fact]
+    public async Task ZaiResetBalanceUsesAnHourlyListAndRemovesExpiredResetsBetweenReads()
+    {
+        var now = DateTimeOffset.Parse("2026-11-21T03:00:00Z");
+        var requests = 0;
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal(ZaiResetBalance.ListUrl, request.RequestUri);
+            Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+            requests++;
+            return (200, """
+                {"success":true,"data":{
+                    "fiveHourResets":[
+                        {"available":true,"expireTime":"2026-11-21 11:10:00"},
+                        {"available":false,"expireTime":"2026-12-01 01:00:00"},
+                        {"available":true,"expireTime":"2026-11-21 10:00:00"}],
+                    "weekResets":[{"available":true,"expireTime":"2026-11-22 04:00:00"}]
+                }}
+                """);
+        });
+        var balance = new ZaiResetBalance(http, () => now);
+
+        var first = Assert.IsType<MetricLine.ValuesLine>(await balance.ReadAsync("fixture-key", default));
+        Assert.Equal(2, Assert.Single(first.Items).Number);
+        Assert.Equal(now.AddMinutes(10), first.ExpiriesAt!.First());
+        var provider = new ZaiProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+        var data = WidgetData.Resolve(provider.WidgetDescriptors.Last(), first,
+            WidgetDisplayMode.Remaining, ResetDisplayMode.Relative, false);
+        var labels = data.ResetExpiryLabels(now).ToArray();
+        Assert.Equal(2, labels.Length);
+        Assert.Equal("Expires in 10m", labels[0]);
+
+        now = now.AddMinutes(10);
+        Assert.Equal("Expires in 16h 50m", Assert.Single(data.ResetExpiryLabels(now)));
+        var held = Assert.IsType<MetricLine.ValuesLine>(await balance.ReadAsync("fixture-key", default));
+        Assert.Equal(1, Assert.Single(held.Items).Number);
+        Assert.Equal(1, requests);
+
+        now = now.AddMinutes(50);
+        Assert.NotNull(await balance.ReadAsync("fixture-key", default));
+        Assert.Equal(2, requests);
+    }
+
+    [Fact]
+    public async Task ZaiResetListFailureDoesNotHideQuotaAndIsIsolatedFromAnotherAccount()
+    {
+        var listRequests = 0;
+        using var http = MakeHttp(request =>
+        {
+            if (request.RequestUri == ZaiProvider.QuotaUrl)
+                return (200, """{"data":{"limits":[{"type":"TOKENS_LIMIT","unit":3,"number":5,"percentage":20}]}}""");
+            if (request.RequestUri == ZaiProvider.SubscriptionUrl) return (200, "{}");
+            Assert.Equal(ZaiResetBalance.ListUrl, request.RequestUri);
+            listRequests++;
+            return request.Headers.Authorization?.Parameter == "fixture-denied"
+                ? (403, "{}")
+                : (200, """{"data":{"weekResets":[]}}""");
+        });
+        var provider = new ZaiProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+        var denied = provider.AccountRefresh();
+        var other = provider.AccountRefresh();
+        for (var i = 0; i < 2; i++)
+        {
+            var snapshot = await denied("fixture-denied", default);
+            Assert.False(snapshot.IsError);
+            Assert.NotNull(snapshot.Line("Session"));
+            Assert.Null(snapshot.Line(ZaiResetBalance.Label));
+        }
+
+        var connected = await other("fixture-allowed", default);
+        Assert.Equal(0, LimitsProjection.Project(connected, provider.WidgetDescriptors)["rateLimitResets"].Available);
+        Assert.Equal(2, listRequests);
+    }
 
     [Theory]
     [InlineData("ollama", 401, "{}", "rejected")]
@@ -50,7 +165,7 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [Fact]
-    public async Task OllamaApiKeyRefreshDoesNotUseLocalSignIn()
+    public async Task OllamaRefreshUsesBearerAuthentication()
     {
         var requests = new List<(HttpMethod, string)>();
         using var http = MakeHttp(request =>
@@ -65,7 +180,7 @@ public sealed class ApiKeyAccountTests : IDisposable
                 ? (200, """{"included":{},"purchased":{"balance_usd":5}}""")
                 : (200, """{"Plan":"pro"}""");
         });
-        var provider = new OllamaProvider(http, () => throw new InvalidOperationException("Local key was consulted"));
+        var provider = new OllamaProvider(http);
 
         var snapshot = await provider.RefreshWithApiKeyAsync("fixture-key", default);
 
@@ -99,16 +214,51 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [Fact]
-    public async Task OpenRouterDoesNotUseAnEnvironmentKey()
+    public async Task OllamaTemplateCannotBeEnabledButCloudAccountsCan()
     {
-        const string variable = "OPENROUTER_API_KEY";
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new OllamaProvider(http);
+        var settings = AppSettings.Load(Path.Combine(_directory, "settings.json"));
+        settings.EnabledProviders.Add(provider.Provider.Id);
+        var layout = new LayoutStore(settings, [provider]);
+        Assert.Empty(layout.VisibleProviders);
+        layout.SetProviderEnabled(provider.Provider.Id, true);
+        Assert.Empty(layout.VisibleProviders);
+        var data = new WidgetDataStore(layout, settings, Path.Combine(_directory, "cache"));
+        Assert.Empty(new FirstLaunchSetup(layout, data, settings).Choices);
+        Assert.True((await provider.RefreshAsync()).IsError);
+
+        var account = new ApiKeyAccount(Guid.NewGuid(), provider.Provider.Id, "Cloud");
+        var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+        layout.RegisterAccount(service.MakeRuntime(account, provider), account.ProviderId);
+        Assert.Equal(account.CardId, Assert.Single(layout.VisibleProviders).Provider.Id);
+        Assert.Equal(account.CardId + ".monthly", Assert.Single(layout.PinnedDescriptors()).Id);
+
+        layout.TogglePin(account.CardId + ".monthly");
+        var second = new ApiKeyAccount(Guid.NewGuid(), provider.Provider.Id, "Second");
+        layout.RegisterAccount(service.MakeRuntime(second, provider), second.ProviderId);
+        var restored = new LayoutStore(AppSettings.Load(Path.Combine(_directory, "settings.json")), [provider]);
+        restored.RegisterAccount(service.MakeRuntime(account, provider), account.ProviderId);
+        restored.RegisterAccount(service.MakeRuntime(second, provider), second.ProviderId);
+        Assert.Empty(restored.PinnedDescriptors());
+        restored.ResetToDefault();
+        Assert.Equal(account.CardId + ".monthly", Assert.Single(restored.PinnedDescriptors()).Id);
+    }
+
+    [Theory]
+    [InlineData("openrouter", "OPENROUTER_API_KEY")]
+    [InlineData("zai", "ZAI_API_KEY")]
+    public async Task MainAccountDoesNotUseAnEnvironmentKey(string providerId, string variable)
+    {
         var previous = Environment.GetEnvironmentVariable(variable);
         try
         {
             Environment.SetEnvironmentVariable(variable, "fixture-environment-key");
             using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
-            var provider = new OpenRouterProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
-            Assert.Null(provider.LoadKey());
+            var keys = new ApiKeyStore(Path.Combine(_directory, "keys.bin"));
+            IProviderRuntime provider = providerId == "zai"
+                ? new ZaiProvider(http, keys) : new OpenRouterProvider(http, keys);
+            Assert.Null(Assert.IsAssignableFrom<IApiKeyManaging>(provider).LoadKey());
             Assert.False(await provider.HasLocalCredentialsAsync());
             Assert.True((await provider.RefreshAsync()).IsError);
         }
@@ -118,6 +268,84 @@ public sealed class ApiKeyAccountTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(401, "{}", "rejected")]
+    [InlineData(403, """{"error":{"type":"EntitlementError"}}""", "No OpenCode Go subscription")]
+    [InlineData(200, """{"usage":{}}""", "unavailable")]
+    public async Task OpenCodeRejectsUnverifiedCredentials(int status, string body, string message)
+    {
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal(OpenCodeProvider.UsageUrl, request.RequestUri);
+            Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+            return (status, body);
+        });
+        var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+
+        var error = await Assert.ThrowsAsync<ProviderRequestException>(() =>
+            service.ConnectAsync("opencode", "Work", "fixture-key"));
+
+        Assert.Contains(message, error.Message);
+        Assert.False(File.Exists(AccountFile));
+    }
+
+    [WindowsFact]
+    public async Task OpenCodeRestoresAnAppSavedAccountWithoutReadingLocalOpenCodeData()
+    {
+        using var http = MakeHttp(request =>
+        {
+            Assert.Equal(HttpMethod.Get, request.Method);
+            Assert.Equal(OpenCodeProvider.UsageUrl, request.RequestUri);
+            Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
+            Assert.False(request.Headers.Contains("x-opencode-org-id"));
+            return (200, OpenCodeUsage);
+        });
+        var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
+        var connected = await service.ConnectAsync("opencode", "Work", "fixture-key");
+        File.WriteAllText(Path.Combine(_directory, "auth.json"), "invalid local credential file");
+
+        var loaded = new ApiKeyAccountStore(AccountFile);
+        var restored = Assert.Single(loaded.List());
+        Assert.Equal(connected, restored);
+        var template = new OpenCodeProvider(http, _directory);
+        var runtime = new ApiKeyAccounts(http, loaded).MakeRuntime(restored, template);
+        Assert.Equal(new[] { "Session", "Weekly", "Monthly" }, runtime.WidgetDescriptors.Select(d => d.Title));
+        var snapshot = await runtime.RefreshAsync();
+        Assert.Equal(restored.CardId, snapshot.ProviderId);
+        Assert.Equal("OpenCode · Work", snapshot.DisplayName);
+        Assert.Null(snapshot.Plan);
+        Assert.Equal(12, Assert.IsType<MetricLine.ProgressLine>(snapshot.Line("Session")).Used);
+    }
+
+    [Theory]
+    [InlineData("""{"total_credits":50,"total_usage":12.5}""", 37.5)]
+    [InlineData("""{"total_credits":50,"total_usage":50}""", 0.0)]
+    [InlineData("""{"total_usage":12.5}""", null)]
+    [InlineData("""{"total_credits":50}""", null)]
+    public async Task OpenRouterCard_OmitsOnlyTheMissingBalance(string totals, double? expected)
+    {
+        using var http = MakeHttp(request => request.RequestUri == OpenRouterProvider.CreditsUrl
+            ? (200, $$"""{"data":{{totals}}}""")
+            : (200, """{"data":{"limit":10,"limit_remaining":4}}"""));
+        var provider = new OpenRouterProvider(http, new ApiKeyStore(Path.Combine(_directory, "keys.bin")));
+        var settings = new AppSettings();
+        var store = new WidgetDataStore(new LayoutStore(settings, [provider]), settings, _directory);
+        store.ReplaceAccountSnapshot(await provider.RefreshWithKeyAsync("fixture-key", default));
+
+        var configured = provider.WidgetDescriptors.Where(d =>
+            d.Id is "openrouter.balance" or "openrouter.today" or "openrouter.keyLimit").ToArray();
+        var rows = store.ResolveCardRows(configured);
+
+        Assert.Equal(expected.HasValue ? new[] { "Balance", "Today", "Key Limit" } : ["Today", "Key Limit"],
+            rows.Select(r => r.Descriptor.Title));
+        if (expected is { } value)
+            Assert.Equal(value, Assert.Single(rows[0].Data.SelectedValues).Number);
+        Assert.False(rows[^2].Data.HasData);
+        var limit = rows[^1].Data;
+        Assert.Equal(10, limit.Limit);
+        Assert.Equal(4, limit.Limit - limit.Used);
+    }
+
     [WindowsFact]
     public async Task OpenRouterStillUsesTheSavedKeyAfterRestart()
     {
@@ -125,6 +353,17 @@ public sealed class ApiKeyAccountTests : IDisposable
         new ApiKeyStore(path).Set("openrouter", "fixture-saved-key");
         using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
         var provider = new OpenRouterProvider(http, new ApiKeyStore(path));
+        Assert.Equal("fixture-saved-key", provider.LoadKey());
+        Assert.True(await provider.HasLocalCredentialsAsync());
+    }
+
+    [WindowsFact]
+    public async Task ZaiStillUsesTheSavedKeyAfterRestart()
+    {
+        var path = Path.Combine(_directory, "keys.bin");
+        new ApiKeyStore(path).Set("zai", "fixture-saved-key");
+        using var http = MakeHttp(_ => throw new InvalidOperationException("Unexpected network request"));
+        var provider = new ZaiProvider(http, new ApiKeyStore(path));
         Assert.Equal("fixture-saved-key", provider.LoadKey());
         Assert.True(await provider.HasLocalCredentialsAsync());
     }
