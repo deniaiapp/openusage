@@ -81,6 +81,31 @@ public sealed class CliProxyHubAccountRuntimeTests
     }
 
     [Fact]
+    public async Task ClaudeRetriesTheProfileAndReadsPlanChangesWithoutSeeingTheHubToken()
+    {
+        var profileAvailable = false;
+        var organizationType = "claude_enterprise";
+        using var handler = new FixtureHub(
+            managementStatusFor: upstream => upstream.AbsolutePath.EndsWith("/profile") && !profileAvailable
+                ? HttpStatusCode.BadGateway : HttpStatusCode.OK,
+            profile: () => JsonSerializer.Serialize(new { organization = new { organization_type = organizationType } }));
+        using var client = new CliProxyHubClient(new AppHttp(new HttpClient(handler)));
+        using var runtime = new CliProxyHubAccountRuntime(client, Hub, Account("claude"), () => "fixture-key");
+
+        var first = await runtime.RefreshAsync();
+        Assert.False(first.IsError);
+        Assert.Null(first.Plan);
+
+        profileAvailable = true;
+        var recovered = await runtime.RefreshAsync();
+        Assert.Equal("Enterprise", recovered.Plan);
+        Assert.Equal("Spend", runtime.WidgetDescriptors.Single(d => d.PlanTitle is not null).PlanTitle!(recovered.Plan));
+
+        organizationType = "claude_pro";
+        Assert.Equal("Pro", (await runtime.RefreshAsync()).Plan);
+    }
+
+    [Fact]
     public async Task AntigravitySurfacesTheHubErrorWhenNeitherEndpointIsReachable()
     {
         using var handler = new FixtureHub(hubStatus: HttpStatusCode.BadGateway);
@@ -172,7 +197,7 @@ public sealed class CliProxyHubAccountRuntimeTests
 
     private sealed class FixtureHub(
         int status = 200, HttpStatusCode hubStatus = HttpStatusCode.OK,
-        Func<Uri, HttpStatusCode>? managementStatusFor = null) : HttpMessageHandler
+        Func<Uri, HttpStatusCode>? managementStatusFor = null, Func<string>? profile = null) : HttpMessageHandler
     {
         public List<JsonObject> Calls { get; } = [];
         public List<string?> ManagementKeys { get; } = [];
@@ -192,7 +217,7 @@ public sealed class CliProxyHubAccountRuntimeTests
             var body = upstream.Host switch
             {
                 "api.anthropic.com" when upstream.AbsolutePath.EndsWith("/usage") => """{"five_hour":{"utilization":10}}""",
-                "api.anthropic.com" when upstream.AbsolutePath.EndsWith("/profile") => "{}",
+                "api.anthropic.com" when upstream.AbsolutePath.EndsWith("/profile") => profile?.Invoke() ?? "{}",
                 "chatgpt.com" when upstream.AbsolutePath.EndsWith("/usage") => """{"rate_limit":{"primary_window":{"used_percent":31}}}""",
                 "chatgpt.com" when upstream.AbsolutePath.EndsWith("/rate-limit-reset-credits") ||
                     upstream.AbsolutePath.EndsWith("/daily-workspace-usage-counts") => "{}",
