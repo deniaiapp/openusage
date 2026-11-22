@@ -1,5 +1,6 @@
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Antigravity;
+using OpenUsage.Core.Providers.Claude;
 using OpenUsage.Core.Providers.Codex;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Copilot;
@@ -81,21 +82,13 @@ public sealed class AppContainer : IDisposable
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
 
-    public IReadOnlyList<CliProxyHub> CliProxyHubs() => _hubConnections.List();
-
-    public async Task ConnectCliProxyHubAsync(string address, string key, CancellationToken ct)
+    public async Task ConnectClaudeAsync(Action<Uri> openBrowser, Task<string> pastedCode, CancellationToken cancellationToken)
     {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
-        await _hubConnections.ConnectAsync(address, key, linked.Token);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
+        var claude = Providers.OfType<ClaudeProvider>().Single();
+        var snapshot = await claude.ConnectAsync(openBrowser, pastedCode, linked.Token);
+        Data.ReplaceAccountSnapshot(snapshot);
     }
-
-    public async Task ReplaceCliProxyHubKeyAsync(Guid id, string key, CancellationToken ct)
-    {
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
-        await _hubConnections.ReplaceKeyAsync(id, key, linked.Token);
-    }
-
-    public bool RemoveCliProxyHub(Guid id) => _hubConnections.Remove(id);
 
     public async Task ConnectAntigravityAsync(AntigravityProvider provider, Action<Uri> openBrowser, CancellationToken ct)
     {
@@ -191,6 +184,22 @@ public sealed class AppContainer : IDisposable
         var snapshot = await provider.ConnectAsync(prompt, linked.Token);
         Data.ReplaceAccountSnapshot(snapshot);
     }
+
+    public IReadOnlyList<CliProxyHub> CliProxyHubs() => _hubConnections.List();
+
+    public async Task ConnectCliProxyHubAsync(string address, string key, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        await _hubConnections.ConnectAsync(address, key, linked.Token);
+    }
+
+    public async Task ReplaceCliProxyHubKeyAsync(Guid id, string key, CancellationToken ct)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, ct);
+        await _hubConnections.ReplaceKeyAsync(id, key, linked.Token);
+    }
+
+    public bool RemoveCliProxyHub(Guid id) => _hubConnections.Remove(id);
 
     public void Dispose()
     {
