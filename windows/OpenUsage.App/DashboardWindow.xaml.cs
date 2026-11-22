@@ -45,6 +45,7 @@ public partial class DashboardWindow : Window
     private DevinSignInView? _devinSignIn;
     private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
+    private CursorLoginView? _cursorLoginEditor;
     public event Action<string?>? HotkeyChanged;
     private DeviceLoginView? _deviceLoginEditor;
     private AntigravitySignInView? _antigravitySignInEditor;
@@ -75,7 +76,7 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true)
+        if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true || _cursorLoginEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
         else if (_devinSignIn?.IsPending != true)
         {
@@ -193,12 +194,13 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null || _cursorLoginEditor is not null)) return;
         _accountEditor = null;
         _devinSignIn?.Cancel();
         _devinSignIn = null;
         _codexLoginEditor = null;
         _copilotLoginEditor = null;
+        _cursorLoginEditor = null;
         ContentHost.Children.Clear();
         if (ShowPrivacyPlaceholder()) return;
         switch (_screen)
@@ -637,6 +639,12 @@ public partial class DashboardWindow : Window
             ContentHost.Children.Add(SectionTitle("GitHub Sign-In"));
             _copilotLoginEditor = new CopilotLoginView(_container, copilot, (Style)FindResource("GhostButton"));
             ContentHost.Children.Add(_copilotLoginEditor);
+        }
+        if (runtime is OpenUsage.Core.Providers.Cursor.CursorProvider cursor)
+        {
+            ContentHost.Children.Add(SectionTitle("Cursor Sign-In"));
+            _cursorLoginEditor = new CursorLoginView(_container, cursor, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_cursorLoginEditor);
         }
         if (runtime is IApiKeyManaging keys)
         {
