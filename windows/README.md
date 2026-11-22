@@ -49,11 +49,16 @@ Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
 Z.ai shows token windows of a day or longer on the Weekly row, with the reported reset time.
 
+
+Expand Antigravity to see Argon Weekly immediately after Weekly when the account has a separate Argon quota. The CLI reports it as `argonWeekly`.
+
 If a manual and scheduled refresh overlap for one provider, OpenUsage shares the same request
 instead of renewing that sign-in twice.
 
 If a refresh fails, OpenUsage keeps that account's last successful data and waits before automatically trying again.
 Other accounts update normally. You can still retry manually.
+
+Cursor keeps using the last known billing plan for the current sign-in if the plan lookup fails.
 
 OpenUsage renews its own ChatGPT sign-in without touching the CLI login. For CLI-based Claude or Codex logins, OpenUsage only refreshes tokens that came from a file, keeping the rest of that file intact. Tokens from Credential Manager are left for the CLI to refresh.
 
