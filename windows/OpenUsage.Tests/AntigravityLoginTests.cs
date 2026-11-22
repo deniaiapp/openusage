@@ -90,6 +90,32 @@ public sealed class AntigravityLoginTests
         Assert.Equal("fixture-refresh", tokens.Refresh);
     }
 
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "Sign in again")]
+    [InlineData(HttpStatusCode.Forbidden, "Couldn't read Antigravity usage")]
+    public async Task RefusedSignInReportsAnActionableErrorWithoutSaving(HttpStatusCode status, string message)
+    {
+        var dir = Directory.CreateTempSubdirectory();
+        try
+        {
+            var path = Path.Combine(dir.FullName, "keys.bin");
+            using var http = new AppHttp(new HttpClient(new Handler((request, _) =>
+            {
+                Assert.Contains(":retrieveUserQuotaSummary", request.RequestUri!.AbsolutePath);
+                return Task.FromResult(Response(status, """{"error":"fixture-denied"}"""));
+            })));
+            var provider = new AntigravityProvider(http, new ApiKeyStore(path));
+            var oauth = new AntigravitySignIn("fixture-rejected", "fixture-refresh", DateTimeOffset.UtcNow.AddHours(1));
+
+            var error = await Assert.ThrowsAsync<ProviderRequestException>(() => provider.ValidateAndSaveAsync(oauth, default));
+
+            Assert.Contains(message, error.Message);
+            Assert.False(provider.IsSignedIn);
+            Assert.False(File.Exists(path));
+        }
+        finally { dir.Delete(recursive: true); }
+    }
+
     [WindowsFact]
     public async Task RejectedReplacementKeepsEncryptedSignInAndRestartsWithTheSameAccount()
     {

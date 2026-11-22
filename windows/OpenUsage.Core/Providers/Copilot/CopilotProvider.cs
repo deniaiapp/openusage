@@ -5,76 +5,6 @@ using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Copilot;
 
-public sealed class CopilotAuthStore
-{
-    public static IEnumerable<string> EditorConfigPaths()
-    {
-        yield return AppPaths.Expand("~/.config/github-copilot/apps.json");
-        yield return AppPaths.Expand("~/.config/github-copilot/hosts.json");
-        yield return Path.Combine(AppPaths.AppData, "GitHub Copilot", "apps.json");
-        yield return Path.Combine(AppPaths.LocalAppData, "github-copilot", "apps.json");
-    }
-
-    public static IEnumerable<string> GhHostsPaths()
-    {
-        yield return AppPaths.Expand("~/.config/gh/hosts.yml");
-        yield return Path.Combine(AppPaths.AppData, "GitHub CLI", "hosts.yml");
-        yield return Path.Combine(AppPaths.LocalAppData, "GitHub CLI", "hosts.yml");
-    }
-
-    public string? LoadToken() =>
-        LoadFromEditorConfig() ?? LoadFromGhConfig() ?? LoadFromGhCredential();
-
-    private static string? LoadFromEditorConfig()
-    {
-        foreach (var path in EditorConfigPaths())
-        {
-            if (!File.Exists(path)) continue;
-            try
-            {
-                var obj = JsonUtil.ParseObject(File.ReadAllText(path));
-                if (obj is null) continue;
-                foreach (var property in obj)
-                {
-                    if (property.Value is JsonObject entry)
-                    {
-                        var token = JsonUtil.String(entry["oauth_token"]) ?? JsonUtil.String(entry["token"]);
-                        if (!string.IsNullOrEmpty(token)) return token;
-                    }
-                }
-            }
-            catch (Exception ex) { AppLog.Warn("copilot", $"editor config unreadable: {ex.Message}"); }
-        }
-        return null;
-    }
-
-    private static string? LoadFromGhConfig()
-    {
-        foreach (var path in GhHostsPaths())
-        {
-            if (!File.Exists(path)) continue;
-            try
-            {
-                foreach (var line in File.ReadAllLines(path))
-                {
-                    var trimmed = line.Trim();
-                    if (trimmed.StartsWith("oauth_token:", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var token = trimmed["oauth_token:".Length..].Trim().Trim('"', '\'');
-                        if (!string.IsNullOrEmpty(token)) return token;
-                    }
-                }
-            }
-            catch (Exception ex) { AppLog.Warn("copilot", $"gh hosts unreadable: {ex.Message}"); }
-        }
-        return null;
-    }
-
-    private static string? LoadFromGhCredential() =>
-        WindowsCredentialStore.UnwrapGoKeyring(
-            WindowsCredentialStore.ReadAny("gh:github.com", "gh:github.com:oauth_token"));
-}
-
 public static class CopilotUsageMapper
 {
     public static (string? Plan, List<MetricLine> Lines) Map(JsonObject body)
@@ -163,7 +93,6 @@ public sealed class CopilotProvider : IProviderRuntime
     private static readonly Provider PublicProvider = new(
         "copilot", "Copilot", "copilot",
         [new ProviderLink("Dashboard", "https://github.com/settings/copilot")]);
-    private readonly CopilotAuthStore _auth = new();
     private readonly AppHttp _http;
     private readonly ApiKeyStore? _keys;
     private readonly CopilotDeviceLogin _signIn;
@@ -187,7 +116,7 @@ public sealed class CopilotProvider : IProviderRuntime
         var keys = _keys ?? throw new InvalidOperationException("OpenUsage could not open its credentials store.");
         var token = await _signIn.AuthorizeAsync(code => showCode(code, domain.WebUrl("/login/device")), ct, domain);
         ProviderSnapshot snapshot;
-        try { snapshot = await FetchUsageAsync(token, domain, true, ct); }
+        try { snapshot = await FetchUsageAsync(token, domain, ct); }
         catch (ProviderRequestException) when (ct.IsCancellationRequested)
         {
             throw new OperationCanceledException(ct);
@@ -211,22 +140,21 @@ public sealed class CopilotProvider : IProviderRuntime
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(HasAppCredential || _auth.LoadToken() is not null);
+        Task.FromResult(HasAppCredential);
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var connectedToken = _keys?.Get(CredentialKey);
-        var token = connectedToken ?? _auth.LoadToken();
+        var token = _keys?.Get(CredentialKey);
         if (token is null)
             return ProviderSnapshot.Error(Provider, "Sign in to GitHub in Customize → Copilot.");
-        var separator = connectedToken?.IndexOf('\n') ?? -1;
-        var domain = ReadDomain(connectedToken);
+        var separator = token.IndexOf('\n');
+        var domain = ReadDomain(token);
         if (domain is null)
             return ProviderSnapshot.Error(Provider, "GitHub address invalid. Sign in again in Customize → Copilot.");
 
         try
         {
-            return await FetchUsageAsync(token[(separator + 1)..], domain, connectedToken is not null, cancellationToken);
+            return await FetchUsageAsync(token[(separator + 1)..], domain, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -242,7 +170,7 @@ public sealed class CopilotProvider : IProviderRuntime
         return CopilotDomain.Parse(host) is { } domain && domain.Host == host ? domain : null;
     }
 
-    private async Task<ProviderSnapshot> FetchUsageAsync(string token, CopilotDomain domain, bool appCredential, CancellationToken cancellationToken)
+    private async Task<ProviderSnapshot> FetchUsageAsync(string token, CopilotDomain domain, CancellationToken cancellationToken)
     {
         var response = await _http.SendAsync(new AppHttpRequest(
             "GET", domain.ApiUrl("/copilot_internal/user"),
@@ -258,18 +186,16 @@ public sealed class CopilotProvider : IProviderRuntime
             TimeoutSeconds: 15), cancellationToken);
         if (ProviderErrors.IsRateLimited(response))
             throw new ProviderRequestException(ProviderErrors.RateLimited);
-        if (appCredential && domain != CopilotDomain.Public && response.StatusCode is (401 or 403 or 404))
+        if (domain != CopilotDomain.Public && response.StatusCode is (401 or 403 or 404))
             throw new ProviderRequestException($"GitHub did not confirm a Copilot seat on {domain.Host}. Check your account or ask your GitHub admin.");
         if (response.StatusCode is 401 or 403)
-            throw new ProviderRequestException(appCredential
-                ? "GitHub rejected this sign-in. Verify that the account has a Copilot seat and sign in again in Customize."
-                : "GitHub token invalid or expired. Sign in to GitHub in Customize → Copilot, or run gh auth login.");
+            throw new ProviderRequestException("GitHub rejected this sign-in. Verify that the account has a Copilot seat and sign in again in Customize.");
         if (!response.IsSuccess)
             throw new ProviderRequestException(ProviderErrors.RequestFailed(response.StatusCode));
         if (response.Json is not { } body)
             throw new ProviderRequestException("Copilot usage response invalid. Try again later.");
         var mapped = CopilotUsageMapper.Map(body);
-        if (appCredential && mapped.Plan is null && mapped.Lines.Count == 0)
+        if (mapped.Plan is null && mapped.Lines.Count == 0)
             throw new ProviderRequestException("GitHub did not return any Copilot usage information. Check that the account has a Copilot seat.");
         MetricLine.AppendNoDataIfNeeded(mapped.Lines);
         return ProviderSnapshot.Make(Provider, mapped.Plan, mapped.Lines, DateTimeOffset.Now);
