@@ -86,6 +86,19 @@ arguments or a disabled provider or account, and 4 when there's no saved data ye
 To run the helper directly, run `.\build.ps1` and use the path printed after `CLI:`. Keep it with its
 companion files and on a separate path from the tray app.
 
+## Self-contained build
+
+From this folder on Windows x64 with the .NET 8 SDK, publish to a directory that does not exist yet:
+
+```powershell
+.\package.ps1 -OutputDirectory ..\dist\windows-x64
+..\dist\windows-x64\app\OpenUsage.exe
+..\dist\windows-x64\cli\openusage.exe --version
+```
+
+Keep each executable with the files in its own folder. The target PC does not need the .NET runtime.
+This is an unsigned local build, not an installer or an automatic update channel.
+
 ## Not in this port yet
 
 macOS-only pieces left out on purpose:

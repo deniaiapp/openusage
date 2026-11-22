@@ -2,6 +2,8 @@
 
 Windows builds live in [`windows/`](../windows/README.md) as a .NET 8 system-tray app. They are a port of the Swift menu-bar app, not a replacement for it.
 
+For local testing without an installed .NET runtime, developers can make a [self-contained x64 build](../windows/README.md#self-contained-build). It does not install or update OpenUsage.
+
 The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, and global shortcut. Use Customize to connect each provider.
 
 The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Accounts without a saved reading appear under **Waiting for Usage** until their first refresh finishes; failures are reported separately. Both tabs respect which providers and metrics you have turned on. If every metric is hidden, choose **Customize** on the dashboard to turn metrics back on without reconnecting.
