@@ -14,6 +14,7 @@ public sealed class CodexProvider : IProviderRuntime
 
     private readonly CodexAuthStore _auth = new();
     private readonly AppHttp _http;
+    private readonly CodexTokenHistory _history = new();
 
     public CodexProvider(AppHttp http) => _http = http;
 
@@ -32,8 +33,21 @@ public sealed class CodexProvider : IProviderRuntime
         WidgetDescriptor.Percent("codex.sparkWeekly", Provider, "Spark Weekly"),
         WidgetDescriptor.Values("codex.credits", Provider, "Credits") with { HideWhenMissing = true },
         WidgetDescriptor.Values("codex.rateLimitResets", Provider, "Rate Limit Resets",
-            valueWord: "available", traySuffix: "resets", showsResetExpiries: true)
+            valueWord: "available", traySuffix: "resets", showsResetExpiries: true),
+        TokenHistoryDescriptor("codex.tokensToday", "Today"),
+        TokenHistoryDescriptor("codex.tokensYesterday", "Yesterday"),
+        TokenHistoryDescriptor("codex.tokensLast30", "Last 30 Days")
     ];
+
+    private WidgetDescriptor TokenHistoryDescriptor(string id, string title)
+    {
+        var descriptor = WidgetDescriptor.Values(id, Provider, title, isUsagePeriod: true, traySuffix: "tokens");
+        return descriptor with
+        {
+            HideWhenMissing = true,
+            Sample = descriptor.Sample with { Kind = MetricKind.Count, CountSuffix = "tokens" }
+        };
+    }
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult(_auth.HasUsableCredentials());
@@ -57,7 +71,7 @@ public sealed class CodexProvider : IProviderRuntime
         return ProviderSnapshot.Error(Provider, last ?? new InvalidOperationException("Codex refresh failed."));
     }
 
-    private async Task<ProviderSnapshot> ProbeAsync(CodexAuth auth, CancellationToken ct)
+    internal async Task<ProviderSnapshot> ProbeAsync(CodexAuth auth, CancellationToken ct)
     {
         AdoptLiveAuth(auth);
         if (NeedsRefresh(auth) && !string.IsNullOrEmpty(auth.RefreshToken))
@@ -99,8 +113,19 @@ public sealed class CodexProvider : IProviderRuntime
 
         var mapped = CodexUsageMapper.Map(usage, resets, DateTimeOffset.Now);
         var lines = mapped.Lines.ToList();
+        var history = await _history.RefreshAsync(auth.AccessToken!, auth.AccountId, DateTimeOffset.UtcNow,
+            (url, token) => SendAuthGet(url, auth, token, timeoutSeconds: 5), ct);
+        AddTokenCount("Today", history.Today);
+        AddTokenCount("Yesterday", history.Yesterday);
+        AddTokenCount("Last 30 Days", history.Last30);
         MetricLine.AppendNoDataIfNeeded(lines);
         return ProviderSnapshot.Make(Provider, mapped.Plan, lines, DateTimeOffset.Now);
+
+        void AddTokenCount(string label, double? value)
+        {
+            if (value is { } count)
+                lines.Add(MetricLine.Values(label, [new MetricValue(count, MetricKind.Count, "tokens")]));
+        }
     }
 
     /// <summary>
@@ -168,7 +193,8 @@ public sealed class CodexProvider : IProviderRuntime
         catch (Exception ex) { AppLog.Error("codex", "could not persist rotated credentials", ex); }
     }
 
-    private Task<AppHttpResponse> SendAuthGet(Uri url, CodexAuth auth, CancellationToken ct, bool extra = false)
+    private Task<AppHttpResponse> SendAuthGet(
+        Uri url, CodexAuth auth, CancellationToken ct, bool extra = false, int timeoutSeconds = 10)
     {
         var headers = new Dictionary<string, string>
         {
@@ -183,6 +209,6 @@ public sealed class CodexProvider : IProviderRuntime
             headers["OpenAI-Beta"] = "codex-1";
             headers["originator"] = "Codex Desktop";
         }
-        return _http.SendAsync(new AppHttpRequest("GET", url, headers, TimeoutSeconds: 10), ct);
+        return _http.SendAsync(new AppHttpRequest("GET", url, headers, TimeoutSeconds: timeoutSeconds), ct);
     }
 }
