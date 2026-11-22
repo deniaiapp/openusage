@@ -95,6 +95,8 @@ On Windows, ChatGPT uses the latest usage response for the available reset count
 
 Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
 
+Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
+
 Windows reset countdowns show calendar months and years for longer waits.
 
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
