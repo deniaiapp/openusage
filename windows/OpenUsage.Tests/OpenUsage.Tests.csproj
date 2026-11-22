@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\OpenUsage.Core\OpenUsage.Core.csproj" />
+    <Compile Include="..\OpenUsage.App\Services\NotificationRequest.cs" Link="NotificationRequest.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\OpenUsage.Core\Resources\*.json" Link="Resources\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
