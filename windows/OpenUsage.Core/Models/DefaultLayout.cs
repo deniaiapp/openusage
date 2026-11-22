@@ -4,6 +4,8 @@ public static class DefaultLayout
 {
     public static readonly string[] MetricIds =
     [
+        "amp.agent", "amp.orbHours", "amp.free", "amp.credits",
+
         "antigravity.geminiPro", "antigravity.geminiWeekly", "antigravity.claude", "antigravity.claudeWeekly",
         "antigravity.trend", "antigravity.today", "antigravity.yesterday", "antigravity.last30",
 
@@ -23,6 +25,8 @@ public static class DefaultLayout
 
         "grok.weekly", "grok.payAsYouGo",
 
+        "muse.session", "muse.weekly",
+
         "ollama.session", "ollama.weekly", "ollama.monthly", "ollama.purchasedCredits",
 
         "opencode.session", "opencode.weekly", "opencode.monthly", "opencode.trend",
@@ -41,6 +45,7 @@ public static class DefaultLayout
         "codex.session", "codex.weekly",
         "cursor.auto", "cursor.api",
         "copilot.premium",
+        "muse.session",
         "ollama.monthly",
         "openrouter.credits",
         "zai.session", "zai.weekly"
@@ -48,6 +53,7 @@ public static class DefaultLayout
 
     public static readonly string[] ExpandedMetricIds =
     [
+        "amp.orbHours", "amp.credits",
         "antigravity.claude", "antigravity.claudeWeekly",
         "antigravity.today", "antigravity.yesterday", "antigravity.last30",
         "claude.sonnet", "claude.rateLimitResets",
@@ -71,6 +77,6 @@ public static class DefaultLayout
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
-        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits"])
+        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly", "amp.agent", "amp.orbHours", "amp.free", "amp.credits"])
         .ToArray();
 }

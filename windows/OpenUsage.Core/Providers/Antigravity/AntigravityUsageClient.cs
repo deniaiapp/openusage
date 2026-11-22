@@ -9,15 +9,24 @@ public sealed class AntigravityUsageClient(AppHttp http)
     {
         var buckets = new Dictionary<string, MetricLine>(StringComparer.Ordinal);
         string? plan = null;
+        var rateLimited = false;
+        var authRejected = false;
         foreach (var baseUrl in AntigravityProvider.CloudCodeUrls)
         {
             var response = await SendAsync(baseUrl, "/v1internal:retrieveUserQuotaSummary", token, ct);
-            if (response is not { IsSuccess: true, Json: { } body }) continue;
+            if (response is not { IsSuccess: true, Json: { } body })
+            {
+                if (response is not null && ProviderErrors.IsRateLimited(response)) rateLimited = true;
+                else if (response is { StatusCode: 401 or 403 }) authRejected = true;
+                continue;
+            }
             plan ??= AntigravityUsageMapper.PlanName(body);
             foreach (var line in AntigravityUsageMapper.ParseQuotaSummary(body) ?? [])
                 buckets.TryAdd(line.Label, line);
             if (buckets.Count == AntigravityUsageMapper.SummaryBuckets.Length) break;
         }
+        if (buckets.Count == 0 && rateLimited && !authRejected)
+            throw new ProviderRequestException(ProviderErrors.RateLimited);
         return (AntigravityUsageMapper.SummaryBuckets
             .Select(bucket => buckets.GetValueOrDefault(bucket.Label)).OfType<MetricLine>().ToList(), plan);
     }
