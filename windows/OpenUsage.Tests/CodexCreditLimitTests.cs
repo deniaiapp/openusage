@@ -39,8 +39,10 @@ public class CodexCreditLimitTests
     public void Map_OmitsMissingOrInvalidWorkspaceLimit(string individualLimit) =>
         Assert.DoesNotContain(Map(individualLimit), line => line.Label == "Credit Limit");
 
-    [Fact]
-    public void Card_OnlyShowsReportedLimitBetweenExistingRowsWithoutDefaultPin()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Card_OnlyShowsReportedLimitBetweenExistingRowsWithoutDefaultPin(bool legacyLayout)
     {
         var dir = Directory.CreateTempSubdirectory("openusage-codex-limit-");
         try
@@ -48,8 +50,13 @@ public class CodexCreditLimitTests
             var settingsPath = Path.Combine(dir.FullName, "settings.json");
             var settings = AppSettings.Load(settingsPath);
             settings.EnabledMetrics.Remove("codex.creditLimit");
+            settings.EnabledMetrics.Remove("codex.spark");
             settings.ExpandedMetrics.Remove("codex.creditLimit");
-            settings.SeededDefaultMetrics!.Remove("codex.creditLimit");
+            settings.PinnedMetrics.Remove("codex.session");
+            if (legacyLayout)
+                settings.SeededDefaultMetrics = null;
+            else
+                settings.SeededDefaultMetrics!.Remove("codex.creditLimit");
             settings.Save();
 
             var provider = new CodexProvider(new AppHttp());
@@ -58,6 +65,8 @@ public class CodexCreditLimitTests
             var data = new WidgetDataStore(layout, settings, dir.FullName);
             var rows = layout.OnDemandMetrics(provider.Provider.Id);
             Assert.DoesNotContain("codex.creditLimit", settings.PinnedMetrics);
+            Assert.DoesNotContain("codex.session", settings.PinnedMetrics);
+            Assert.False(layout.IsMetricEnabled("codex.spark"));
             Assert.DoesNotContain(layout.VisibleMetrics(provider.Provider.Id, false), row => row.Id == "codex.creditLimit");
 
             var reported = ProviderSnapshot.Make(provider.Provider, null, Map("""{"used":0,"limit":100}"""),
@@ -76,6 +85,9 @@ public class CodexCreditLimitTests
             Assert.DoesNotContain(data.ResolveCardRows(rows), row => row.Descriptor.Title == "Credit Limit");
             Assert.DoesNotContain(LimitsProjection.Project(missing, provider.WidgetDescriptors).Keys,
                 key => key == "creditLimit");
+
+            layout.SetMetricEnabled("codex.creditLimit", false);
+            Assert.False(new LayoutStore(AppSettings.Load(settingsPath), [provider]).IsMetricEnabled("codex.creditLimit"));
         }
         finally
         {

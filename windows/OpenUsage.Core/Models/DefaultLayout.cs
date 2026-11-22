@@ -74,6 +74,7 @@ public static class DefaultLayout
     /// <see cref="MetricIds"/> beyond this list is new to those users and gets added once.
     /// </summary>
     public static readonly string[] MigrationBaselineMetricIds = MetricIds
-        .Except(["claude.rateLimitResets", "ollama.monthly", "ollama.purchasedCredits", "muse.session", "muse.weekly"])
+        .Except(["claude.rateLimitResets", "codex.creditLimit", "ollama.monthly", "ollama.purchasedCredits",
+            "muse.session", "muse.weekly"])
         .ToArray();
 }
