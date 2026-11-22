@@ -15,9 +15,11 @@ public partial class DashboardWindow
     private void RenderPriorityBoard()
     {
         var now = DateTimeOffset.Now;
-        var board = PriorityBoard.Make(_container.Layout, _container.Data, now);
+        var board = PriorityBoard.Make(_container.Layout, _container.Data, now,
+            _container.Settings.ShowUnusedQuotaInPriority);
         AddPrioritySection("Pinned", board.Pinned, now);
         AddPrioritySection("Running Out", board.RunningOut, now);
+        AddPrioritySection("Use It or Lose It", board.UseItOrLoseIt, now);
         AddPrioritySection("Used Up", board.UsedUp, now);
 
         if (board.WaitingForFirstRead.Count > 0)
@@ -40,7 +42,8 @@ public partial class DashboardWindow
             ? "Some accounts couldn't refresh. Check All Usage for details."
             : board.WaitingForFirstRead.Count > 0 ? null
             : !board.HasUsage ? "No usage data reported."
-            : board.RunningOut.Count == 0 && board.UsedUp.Count == 0 ? "No unpinned limits need attention." : null;
+            : board.RunningOut.Count == 0 && board.UsedUp.Count == 0 && board.UseItOrLoseIt.Count == 0
+                ? "No unpinned limits need attention." : null;
         if (summary is not null)
             ContentHost.Children.Add(new TextBlock
             {
