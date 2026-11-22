@@ -62,7 +62,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 - **Codex:** Pro 100 / 200 / 500 plan names. The Credits row shows a reported balance, including zero. It is hidden if ChatGPT says the account has no credits or does not report a balance.
 - **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, personal budgets show **Extra Usage** and team pools show **Team Spend**. If Cursor doesn't report a usable plan meter, OpenUsage shows the request count and cap. When Cursor supplies the request period start, the estimated reset is one calendar month later. Spend history is fetched day by day and finished days are cached per account.
 - **Devin:** Choose **Customize → Devin → Sign In to Devin** and finish in your browser. Windows keeps the resulting session in its encrypted app store. Previously detected Devin CLI and editor sign-ins need to connect once in Customize; those other apps are not signed out.
-- **Grok:** The pay-as-you-go limit is shown in dollars.
+- **Grok:** The pay-as-you-go limit is shown in dollars. A failed early token renewal keeps using the current token until it expires; a temporary renewal failure does not ask you to sign in again.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** Add a Go API key in **Customize → OpenCode → Additional Accounts** to see live Session, Weekly, and Monthly limits without a local OpenCode install. Existing local connections still work.
 - **OpenRouter:** Key Limit shows the next reset if OpenRouter reports a daily, weekly, or monthly interval. Limits reset at midnight UTC; weeks start on Monday.

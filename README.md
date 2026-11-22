@@ -143,6 +143,8 @@ Windows shows available Z.ai Limit Resets when you expand the account card.
 
 OpenUsage encrypts its Antigravity sign-in cache for your Windows user.
 
+Grok on Windows keeps using a still-valid sign-in if an early renewal fails.
+
 Saved Windows API-key accounts that this version cannot read stay encrypted when you edit other accounts.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
