@@ -509,6 +509,17 @@ public partial class DashboardWindow : Window
 
     private void RenderCustomize()
     {
+        if (_container.ApiKeyAccountStore.HasUnreadableAccounts)
+        {
+            ContentHost.Children.Add(new TextBlock
+            {
+                Text = "This version couldn’t read some saved accounts. They’re still saved and encrypted.",
+                TextWrapping = TextWrapping.Wrap,
+                Style = (Style)FindResource("MutedText"),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+        }
+
         var layout = _container.Layout;
         var undo = new Button
         {
