@@ -39,7 +39,7 @@ The app updates itself with signed, notarized [Sparkle](docs/updates.md) updates
 - **[Ollama](docs/providers.md#ollama)**: session, weekly, monthly, extra usage, daily usage and tokens
 - **[OpenCode](docs/providers.md#opencode)**: session, weekly, monthly
 - **[OpenRouter](docs/providers.md#openrouter)**: balance, spend, key limit, budget
-- **[Z.ai](docs/providers.md#zai)**: session, weekly, web searches, rate-limit resets
+- **[Z.ai](docs/providers.md#zai)**: session, weekly, web searches, rate-limit resets. On Windows, longer token windows use the Weekly row with the reset time Z.ai reports.
 - **[CLIProxyAPI hubs](docs/cliproxyapi.md)**: every Claude, ChatGPT, Antigravity, Devin, and Grok login on
   a [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) server
 
@@ -89,7 +89,7 @@ A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / W
 
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
-Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits.
+Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known.
 Priority also lists unpinned limits you can use before they reset.
 
 ```powershell
@@ -106,6 +106,8 @@ If Claude's first check for rate limit resets can't connect, the next refresh tr
 Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
 
 On Windows, add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
+
+Claude Enterprise shows **Spend** instead of **Extra Usage** on Windows.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
