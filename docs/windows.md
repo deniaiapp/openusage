@@ -40,6 +40,9 @@ Antigravity reads the `gemini:antigravity` Windows credential (or a cached Googl
 
 When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
 
+OpenUsage encrypts its cached Antigravity sign-in for your Windows user. On refresh, it removes the old unencrypted cache only after saving a protected copy.
+
+
 ### Amp on Windows
 
 Use **Customize → Amp → Sign In with Amp** to authorize with a device code. Turn on Amp in Customize to show its usage. You do not need the Amp CLI installed. The collapsed card shows Agent Usage and Amp Free. Expand it for Agent Usage, Orb Hours, Amp Free, and Individual Credits in that order. Amp Free shows the remaining allowance without a countdown because Amp does not report an exact reset time.
