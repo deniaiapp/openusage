@@ -18,6 +18,10 @@ internal sealed class CliProxyHubAccountRuntime : IProviderRuntime, IDisposable
     private readonly Func<CancellationToken, Task<ProviderSnapshot>> _read;
 
     internal CliProxyHubAccountRuntime(
+        CliProxyHubClient client, CliProxyHubStore store, CliProxyHub hub, CliProxyMirroredAccount account)
+        : this(client, hub, account, () => store.KeyFor(hub, account)) { }
+
+    internal CliProxyHubAccountRuntime(
         CliProxyHubClient client, CliProxyHub hub, CliProxyMirroredAccount account, Func<string?> key)
     {
         if (account.Link.HubId != hub.Id)
