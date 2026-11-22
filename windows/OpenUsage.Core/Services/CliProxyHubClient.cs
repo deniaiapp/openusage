@@ -69,9 +69,10 @@ internal sealed record CliProxyHubLogin(
     public bool IsUnsupported => !IsDisabled && ProviderId is null && Provider is not ("" or "unknown");
 }
 
-internal sealed class CliProxyHubClient : IDisposable
+internal sealed partial class CliProxyHubClient : IDisposable
 {
     private readonly AppHttp _http;
+    private readonly CliProxyHubGate _gate = new();
 
     public CliProxyHubClient() : this(new AppHttp(AppHttp.CreateDefaultClient(allowRedirects: false))) { }
 
