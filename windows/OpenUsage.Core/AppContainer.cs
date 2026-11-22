@@ -74,11 +74,11 @@ public sealed class AppContainer : IDisposable
 
     public Task RefreshNowAsync() => Data.RefreshAllAsync(true, _cts.Token);
 
-    public async Task ConnectCopilotAsync(Action<string> showCode, CancellationToken cancellationToken)
+    public async Task ConnectCopilotAsync(string address, Action<string, Uri> showCode, CancellationToken cancellationToken)
     {
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token, cancellationToken);
         var copilot = Providers.OfType<CopilotProvider>().Single();
-        var snapshot = await copilot.ConnectAsync(showCode, linked.Token);
+        var snapshot = await copilot.ConnectAsync(address, showCode, linked.Token);
         Data.ReplaceAccountSnapshot(snapshot);
     }
 

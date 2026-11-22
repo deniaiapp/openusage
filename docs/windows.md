@@ -59,7 +59,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 
 Z.ai shows token windows of a day or longer on the **Weekly** row, with the reset time it reports.
 
-For Copilot on GitHub.com, open **Customize → Copilot → Sign In with GitHub**. Copy the code into GitHub's device sign-in page, then turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. Choose **Sign In Again** to replace it without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
+For Copilot, open **Customize → Copilot**. Leave the address as `github.com`, or enter your organization's GitHub Enterprise Cloud address (for example, `octocorp.ghe.com`). Choose **Sign In with GitHub** and enter the code on the matching site. Turn on Copilot in Customize if it is off. OpenUsage saves the verified sign-in with Windows user encryption. **Sign In Again** replaces the connection without changing your card settings. Existing editor and GitHub CLI sign-ins still work if you haven't connected Copilot in OpenUsage.
 
 Claude and Codex logins stored in Credential Manager aren't refreshed by OpenUsage, so it never signs the CLI out. If the card says the session expired, run the CLI once.
 
