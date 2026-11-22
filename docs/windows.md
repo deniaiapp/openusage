@@ -111,6 +111,9 @@ Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management 
 
 **Replace Key** keeps the old key and saved logins if verification fails. **Disconnect** removes the saved connection and logins from this PC; it does not change the hub. Windows does not yet update the login list automatically or show hub accounts on the dashboard.
 
+The Windows core can read Claude, ChatGPT, Antigravity, Devin, and Grok usage through a hub without
+signing in to the providers locally. This is not wired into scheduled usage refreshes or the dashboard yet.
+
 ## Privacy Mode
 
 Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.

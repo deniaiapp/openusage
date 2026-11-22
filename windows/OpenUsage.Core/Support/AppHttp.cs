@@ -131,7 +131,7 @@ public sealed class AppHttp : IDisposable
     }
 }
 
-public sealed class ProviderRequestException : Exception
+public class ProviderRequestException : Exception
 {
     public ProviderRequestException(string message, Exception? inner = null) : base(message, inner) { }
 }

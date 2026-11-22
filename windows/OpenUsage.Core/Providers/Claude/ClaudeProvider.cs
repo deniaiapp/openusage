@@ -86,8 +86,12 @@ public sealed partial class ClaudeProvider : IProviderRuntime
         finally { _authGate.Release(); }
     }
 
+    internal Task<ProviderSnapshot> RefreshWithHubTokenAsync(string token, string expiredMessage, CancellationToken ct) =>
+        ProbeAsync(new ClaudeOAuth { AccessToken = token }, ct, allowRenewal: false, cacheLivePlan: false,
+            expiredMessage: expiredMessage);
+
     private async Task<ProviderSnapshot> ProbeAsync(ClaudeOAuth oauth, CancellationToken ct,
-        bool validateReplacement = false, bool allowRenewal = true)
+        bool validateReplacement = false, bool allowRenewal = true, bool cacheLivePlan = true, string? expiredMessage = null)
     {
         var fingerprint = CredentialFingerprint(oauth);
         if (!validateReplacement && _rateLimit is { } limit && limit.Fingerprint == fingerprint && _now() < limit.Until)
@@ -120,7 +124,7 @@ public sealed partial class ClaudeProvider : IProviderRuntime
                 oauth = await RenewAppCredentialAsync(oauth, ct);
                 return await ProbeAsync(oauth, ct, allowRenewal: false);
             }
-            throw new ProviderRequestException("Claude sign-in was not accepted. Sign in again in Customize → Claude.");
+            throw new ProviderRequestException(expiredMessage ?? "Claude sign-in was not accepted. Sign in again in Customize → Claude.");
         }
         if (!response.IsSuccess)
             throw new InvalidOperationException(ProviderErrors.RequestFailed(response.StatusCode));
@@ -136,7 +140,7 @@ public sealed partial class ClaudeProvider : IProviderRuntime
         // the resets row or the live plan label, never the bars.
         if (await ResetGrantsLineAsync(oauth, UsageUrl, ct) is { } resets) lines.Add(resets);
         if (!validateReplacement)
-            plan = await ResolveLivePlanAsync(oauth, UsageUrl, ct) ?? mapped.Plan;
+            plan = await ResolveLivePlanAsync(oauth, UsageUrl, ct, cacheByToken: cacheLivePlan) ?? mapped.Plan;
         _lastGood = (fingerprint, plan, lines);
         _rateLimit = null;
         return MakeSnapshot(plan, lines.ToList(), mapped.Warning);
@@ -196,10 +200,11 @@ public sealed partial class ClaudeProvider : IProviderRuntime
     /// The plan Anthropic's profile reports for this access token, looked up at most once per token
     /// (a failed lookup included, which keeps the stored plan until the token rotates).
     private async Task<string?> ResolveLivePlanAsync(ClaudeOAuth oauth, string usageUrl, CancellationToken ct,
-        bool requireProfile = false)
+        bool requireProfile = false, bool cacheByToken = true)
     {
         var fingerprint = Hash(oauth.AccessToken);
-        if (!requireProfile && _livePlan is { } cached && cached.AccessFingerprint == fingerprint) return cached.Plan;
+        if (cacheByToken && !requireProfile && _livePlan is { } cached && cached.AccessFingerprint == fingerprint)
+            return cached.Plan;
         try
         {
             var response = await _http.SendAsync(new AppHttpRequest(
@@ -219,7 +224,7 @@ public sealed partial class ClaudeProvider : IProviderRuntime
                 throw new InvalidOperationException(ProviderErrors.InvalidResponse);
             var plan = ClaudeUsageMapper.FormatLivePlan(profile, oauth);
             if (plan is null) AppLog.Info("claude", "live profile carries no organization plan; showing the stored plan");
-            _livePlan = (fingerprint, plan);
+            if (cacheByToken) _livePlan = (fingerprint, plan);
             return plan;
         }
         catch (Exception ex)
@@ -230,8 +235,9 @@ public sealed partial class ClaudeProvider : IProviderRuntime
                 throw new ProviderRequestException("Claude didn’t return your profile. Try signing in again.", ex);
             }
             if (ct.IsCancellationRequested) return null;
-            AppLog.Warn("claude", $"live plan lookup failed; showing the stored plan until the token rotates: {ex.Message}");
-            _livePlan = (fingerprint, null);
+            var retry = cacheByToken ? "when the token rotates" : "on the next refresh";
+            AppLog.Warn("claude", $"live plan lookup failed; retrying {retry}: {ex.Message}");
+            if (cacheByToken) _livePlan = (fingerprint, null);
             return null;
         }
     }

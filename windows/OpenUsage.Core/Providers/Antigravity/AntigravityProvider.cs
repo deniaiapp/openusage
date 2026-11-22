@@ -326,11 +326,23 @@ public sealed partial class AntigravityProvider : IProviderRuntime
         catch (AntigravityUsageClient.TokenRefused) { throw ExpiredSignIn(); }
     }
 
-    private async Task<(List<MetricLine> Lines, string? Plan)> ReadWithTokenAsync(string access, CancellationToken ct)
+    internal async Task<ProviderSnapshot> RefreshWithHubTokenAsync(string token, string expiredMessage, CancellationToken ct)
     {
-        var (lines, plan) = await _usage.QuotaAsync(access, ct);
+        try
+        {
+            var (lines, plan) = await ReadWithTokenAsync(token, ct, fromHub: true);
+            MetricLine.AppendNoDataIfNeeded(lines);
+            return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);
+        }
+        catch (AntigravityUsageClient.TokenRefused) { throw new ProviderRequestException(expiredMessage); }
+    }
+
+    private async Task<(List<MetricLine> Lines, string? Plan)> ReadWithTokenAsync(
+        string access, CancellationToken ct, bool fromHub = false)
+    {
+        var (lines, plan) = await _usage.QuotaAsync(access, ct, fromHub);
         if (lines.Count == 0)
-            plan ??= await _usage.FallbackPlanAsync(access, ct);
+            plan ??= await _usage.FallbackPlanAsync(access, ct, fromHub);
         return (lines, plan);
     }
 

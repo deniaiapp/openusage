@@ -112,7 +112,10 @@ public sealed class DevinProvider : IProviderRuntime
         finally { _credentialGate.Release(); }
     }
 
-    private async Task<ProviderSnapshot> ReadUsageAsync(string token, CancellationToken ct)
+    internal Task<ProviderSnapshot> RefreshWithHubTokenAsync(string token, string expiredMessage, CancellationToken ct) =>
+        ReadUsageAsync(token, ct, expiredMessage);
+
+    private async Task<ProviderSnapshot> ReadUsageAsync(string token, CancellationToken ct, string? expiredMessage = null)
     {
         var payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -133,7 +136,7 @@ public sealed class DevinProvider : IProviderRuntime
                 ["Content-Type"] = "application/json",
                 ["Connect-Protocol-Version"] = "1"
             }, payload), ct);
-        AuthRetry.RequireSuccess(response, new ProviderRequestException("Devin sign-in expired. Sign in again from Customize."),
+        AuthRetry.RequireSuccess(response, new ProviderRequestException(expiredMessage ?? "Devin sign-in expired. Sign in again from Customize."),
             status => new ProviderRequestException(ProviderErrors.RequestFailed(status)));
         if (response.Json is not { } body)
             throw new ProviderRequestException(ProviderErrors.InvalidResponse);
