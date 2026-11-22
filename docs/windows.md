@@ -121,7 +121,7 @@ Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management 
 
 **Replace Key** keeps the old key and saved logins if verification fails. **Disconnect** removes the saved connection and logins from this PC; it does not change the hub.
 
-OpenUsage refreshes connected hubs at startup, when you select **Refresh**, and on the first scheduled refresh at least an hour after the last successful check. A failed check keeps the saved logins and shows the error next to the hub in **Customize → CLIProxyAPI Hubs**. If a hub rejects the saved key, use **Replace Key** to resume automatic checks.
+OpenUsage checks the login list at startup, on **Refresh**, and before reading usage from a hub with enabled cards. Other connected hubs are checked about once an hour. A failed check keeps the saved logins and shows the error next to the hub in **Customize → CLIProxyAPI Hubs**. If a hub rejects the saved key, use **Replace Key** to resume automatic checks.
 
 Each supported Claude, ChatGPT, Antigravity, Devin, or Grok login gets its own dashboard card. Enabled cards
 refresh usage through the hub without a separate local sign-in. You can customize each card and pin its

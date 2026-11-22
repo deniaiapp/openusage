@@ -532,7 +532,7 @@ public partial class DashboardWindow : Window
         if (descriptor.Pinnable)
             context.Items.Add(Item(_container.Layout.IsPinned(descriptor.Id) ? "Unstar" : "Star for Tray",
                 () => { _container.Layout.TogglePin(descriptor.Id); Render(); }));
-        context.Items.Add(Item($"Refresh {descriptor.ProviderId}", () => _ = _container.Data.RefreshProviderAsync(descriptor.ProviderId)));
+        context.Items.Add(Item($"Refresh {descriptor.ProviderId}", () => _ = _container.RefreshProviderNowAsync(descriptor.ProviderId)));
         context.Items.Add(Item("Customize…", () =>
         {
             _detailProviderId = descriptor.ProviderId;

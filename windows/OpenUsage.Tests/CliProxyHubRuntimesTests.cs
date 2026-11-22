@@ -118,6 +118,45 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
         Assert.Equal(10, Used(CardId(account)));
     }
 
+    [WindowsFact]
+    public async Task ScheduledUsageListsActiveHubsBeforeUsingAnySavedLink()
+    {
+        var store = new CliProxyHubStore(Path.Combine(_directory.FullName, "hubs.bin"));
+        var hub = store.Add(new Uri("https://active.example/"), "fixture-key",
+            [new("stable-login", "first", "codex", "Fixture", true, false, "fixture-workspace")]);
+        store.Add(new Uri("https://idle.example/"), "fixture-key");
+        var sync = new CliProxyHubSync(_client, store, new FixedClock());
+        _handler.Index = "first";
+        _runtimes.Reconcile(store.ListRuntimeAccounts());
+        var account = Assert.Single(store.ListRuntimeAccounts());
+        var cardId = CardId(account);
+
+        Task Refresh() => _data.RefreshAllAsync(false, async ct =>
+        {
+            var active = _layout.VisibleProviders.OfType<CliProxyHubAccountRuntime>().Select(p => p.HubId).ToHashSet();
+            await sync.RefreshAsync(false, ct, active);
+            _runtimes.Reconcile(store.ListRuntimeAccounts());
+        }, default);
+
+        await Refresh();
+        Assert.Contains("idle.example", _handler.Listings);
+        var metric = _layout.Providers.Single().WidgetDescriptors.First();
+        Assert.True(_layout.TogglePin(metric.Id));
+        Assert.Equal(10, Used(cardId));
+
+        _handler.Calls.Clear();
+        _handler.Listings.Clear();
+        _handler.Index = "second";
+        await Refresh();
+
+        Assert.Equal([hub.Address.Host], _handler.Listings);
+        Assert.Equal((hub.Address.Host, "second", "fixture-workspace"), Assert.Single(_handler.Calls));
+        Assert.Equal(account.Account.AccountId, Assert.Single(store.ListRuntimeAccounts()).Account.AccountId);
+        Assert.True(_layout.IsPinned(metric.Id));
+        Assert.Null(_data.ProviderError(cardId));
+        Assert.Equal(20, Used(cardId));
+    }
+
     private double Used(string id) => Assert.IsType<MetricLine.ProgressLine>(_data.Snapshot(id)?.Line("Session")).Used;
 
     private static CliProxyHubRuntimeAccount Account(string label, string index)
@@ -147,10 +186,24 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
     private sealed class FixtureHub : HttpMessageHandler
     {
         public ConcurrentQueue<(string Hub, string Index, string? Workspace)> Calls { get; } = [];
+        public ConcurrentQueue<string> Listings { get; } = [];
+        public string? Index { get; set; }
         public Func<Task>? BeforeResponse { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
+            if (request.RequestUri!.AbsolutePath == "/v0/management/auth-files")
+            {
+                var host = request.RequestUri.Host;
+                Listings.Enqueue(host);
+                var files = host == "active.example"
+                    ? $$"""[{"id":"stable-login","provider":"codex","auth_index":"{{Index}}","id_token":{"chatgpt_account_id":"fixture-workspace"},"label":"Fixture"}]"""
+                    : "[]";
+                return new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent($$"""{"files":{{files}}}""", Encoding.UTF8, "application/json")
+                };
+            }
             Assert.Equal("/v0/management/api-call", request.RequestUri!.AbsolutePath);
             var call = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!.AsObject();
             var index = call["auth_index"]!.GetValue<string>();
@@ -160,6 +213,11 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
                 Calls.Enqueue((request.RequestUri.Host, index, (string?)call["header"]?["ChatGPT-Account-Id"]));
                 if (BeforeResponse is { } before) await before();
             }
+            if (Index is not null && index != Index)
+                return new HttpResponseMessage(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent("""{"error":"auth credential not found"}""", Encoding.UTF8, "application/json")
+                };
             var used = index == "first" ? 10 : 20;
             var body = usage
                 ? JsonSerializer.Serialize(new { rate_limit = new { primary_window = new { used_percent = used } } })
@@ -169,6 +227,19 @@ public sealed class CliProxyHubRuntimesTests : IDisposable
                 Content = new StringContent(JsonSerializer.Serialize(new { status_code = 200, body }),
                     Encoding.UTF8, "application/json")
             };
+        }
+    }
+
+    private sealed class FixedClock : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
+    }
+
+    private sealed class WindowsFactAttribute : FactAttribute
+    {
+        public WindowsFactAttribute()
+        {
+            if (!OperatingSystem.IsWindows()) Skip = "Requires Windows DPAPI.";
         }
     }
 }

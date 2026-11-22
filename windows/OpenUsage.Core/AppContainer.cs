@@ -95,12 +95,31 @@ public sealed class AppContainer : IDisposable
 
     public Task RefreshNowAsync() => RefreshAsync(true, _cts.Token);
 
+    public async Task RefreshProviderNowAsync(string providerId)
+    {
+        var ct = _cts.Token;
+        if (Layout.VisibleProviders.OfType<CliProxyHubAccountRuntime>()
+            .FirstOrDefault(runtime => runtime.Provider.Id == providerId) is { } account)
+        {
+            await _hubSync.RefreshHubAsync(account.HubId, ct);
+            OnCliProxyHubsRefreshed();
+        }
+        await Data.RefreshProviderAsync(providerId, ct);
+    }
+
     private Task RefreshAsync(bool force, CancellationToken ct) =>
         Data.RefreshAllAsync(force, token => RefreshCliProxyHubsAsync(force, token), ct);
 
     private async Task RefreshCliProxyHubsAsync(bool force, CancellationToken ct)
     {
-        await _hubSync.RefreshAsync(force, ct);
+        var activeHubs = Layout.VisibleProviders.OfType<CliProxyHubAccountRuntime>()
+            .Select(runtime => runtime.HubId).ToHashSet();
+        await _hubSync.RefreshAsync(force, ct, activeHubs);
+        OnCliProxyHubsRefreshed();
+    }
+
+    private void OnCliProxyHubsRefreshed()
+    {
         ReconcileHubAccounts();
         CliProxyHubSyncFinished?.Invoke();
     }

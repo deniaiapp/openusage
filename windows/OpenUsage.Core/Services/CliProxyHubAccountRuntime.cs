@@ -26,6 +26,7 @@ internal sealed class CliProxyHubAccountRuntime : IProviderRuntime, IDisposable
     {
         if (account.Link.HubId != hub.Id)
             throw new ArgumentException("The account does not belong to this hub.", nameof(account));
+        HubId = hub.Id;
         var address = CliProxyHubAddress.Parse(hub.Address.AbsoluteUri);
         if (address is null || address.BaseUrl.AbsoluteUri != hub.Address.AbsoluteUri)
             throw new ArgumentException("The saved CLIProxyAPI hub address is invalid.", nameof(hub));
@@ -71,6 +72,7 @@ internal sealed class CliProxyHubAccountRuntime : IProviderRuntime, IDisposable
     }
 
     public Provider Provider { get; }
+    internal Guid HubId { get; }
     public IReadOnlyList<WidgetDescriptor> WidgetDescriptors { get; }
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
