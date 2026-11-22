@@ -12,7 +12,7 @@ The ZIP includes the .NET runtime. It does not install or update itself. For a n
 
 ## Dashboard
 
-The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, local spend tiles and usage trend, and global shortcut. Providers still work with existing local sign-ins. OpenRouter and Z.ai can also have multiple accounts.
+The Windows tray app has its own dashboard, Customize, Settings, five-minute refresh, first-launch welcome screen, and global shortcut. Use Customize to connect each provider.
 
 The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Accounts without a saved reading appear under **Waiting for Usage** until their first refresh finishes; failures are reported separately. Both tabs respect which providers and metrics you have turned on. If every metric is hidden, choose **Customize** on the dashboard to turn metrics back on without reconnecting.
 
@@ -36,7 +36,7 @@ Your metric choices are saved even if you clear an entire group of settings, suc
 
 If Windows reports that there is no network path, OpenUsage retries that refresh for about a minute before showing an error. Other refresh failures keep the usual backoff.
 
-Existing credentials are read from Windows paths (AppData, `%USERPROFILE%` config files, and Credential Manager) instead of the macOS Keychain.
+Windows stores OpenUsage sign-ins and keys locally with Windows user encryption instead of the macOS Keychain.
 
 Enable **Usage Notifications** in Settings to get a Windows notification before a limit runs out at its current pace, or before a multi-day limit resets with more than half left. Notifications are off by default and don't fire on the first reading of a limit.
 
@@ -77,7 +77,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 - **Devin:** Choose **Customize → Devin → Sign In to Devin** and finish in your browser. Windows keeps the resulting session in its encrypted app store. Previously detected Devin CLI and editor sign-ins need to connect once in Customize; those other apps are not signed out.
 - **Grok:** The pay-as-you-go limit is shown in dollars. A failed early token renewal keeps using the current token until it expires; a temporary renewal failure does not ask you to sign in again.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
-- **OpenCode:** Add a Go API key in **Customize → OpenCode → Additional Accounts** to see live Session, Weekly, and Monthly limits without a local OpenCode install. Existing local connections still work. Windows no longer totals local Go or Zen session history.
+- **OpenCode:** Add a Go API key in **Customize → OpenCode → Accounts** to see live Session, Weekly, and Monthly limits. Keys already saved in OpenUsage keep working. If you relied on the OpenCode CLI's sign-in, add a key in Customize; OpenUsage no longer reads the CLI's credentials or session history.
 - **OpenRouter:** Management keys show spend across the keys they can list, on both the main card and additional accounts. Workspace keys can show workspace spend even when they can't read the account balance. Key Limit shows the next reset if OpenRouter reports a daily, weekly, or monthly interval. Limits reset at midnight UTC; weeks start on Monday.
 - **Z.ai:** Expand an account card to see available Limit Resets and their expiries. OpenUsage checks the balance hourly and does not spend resets. A rejected API key prompts you to replace it in Customize.
 

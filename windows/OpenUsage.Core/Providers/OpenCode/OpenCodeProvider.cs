@@ -5,146 +5,9 @@ using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.OpenCode;
 
-public static class OpenCodePaths
+internal static class OpenCodeErrors
 {
-    public static string DataDirectory()
-    {
-        if (AppPaths.Env("OPENCODE_DATA_DIR") is { } overrideDir) return AppPaths.Expand(overrideDir);
-        if (AppPaths.Env("XDG_DATA_HOME") is { } xdg) return Path.Combine(AppPaths.Expand(xdg), "opencode");
-        foreach (var candidate in new[]
-                 {
-                     Path.Combine(AppPaths.Home, ".local", "share", "opencode"),
-                     Path.Combine(AppPaths.LocalAppData, "opencode"),
-                     Path.Combine(AppPaths.AppData, "opencode")
-                 })
-        {
-            if (Directory.Exists(candidate)) return candidate;
-        }
-        return Path.Combine(AppPaths.Home, ".local", "share", "opencode");
-    }
-
-    public static string AuthFile(string dataDirectory) => Path.Combine(dataDirectory, "auth.json");
-
-    /// <summary>
-    /// Every <c>opencode*.db</c> in the data directory, path-sorted. OpenCode partitions its database by
-    /// release channel (<c>opencode.db</c>, <c>opencode-next.db</c>, …), so all channels are read. The
-    /// <c>.db</c> suffix excludes the <c>-wal</c>/<c>-shm</c> sidecars. A missing directory is empty.
-    /// </summary>
-    public static IReadOnlyList<string> DatabaseFiles(string dataDirectory)
-    {
-        if (!Directory.Exists(dataDirectory)) return [];
-        return Directory.GetFiles(dataDirectory, "opencode*.db")
-            .Where(p => p.EndsWith(".db", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(p => p, StringComparer.Ordinal)
-            .ToList();
-    }
-}
-
-public static class OpenCodeErrors
-{
-    public const string NotLoggedIn = "OpenCode Go not detected. Log in with OpenCode Go and refresh.";
-    public const string CredentialsUnreadable = "Couldn't read OpenCode's auth.json. Check its file permissions or log into OpenCode Go again.";
-    public const string Unauthorized = "OpenCode Go key was rejected. Log into OpenCode Go again.";
-    public const string NoGoSubscription = "No OpenCode Go subscription on this key.";
-}
-
-/// <summary>
-/// Reads the OpenCode Go key already on the machine. OpenCode 2 keeps it in each channel database's
-/// <c>credential</c> table; OpenCode 1 in <c>auth.json</c>. OpenCode 2 imports the file once per database
-/// (recorded as a migration) and never deletes it, so after that import later logins and logouts only
-/// show up in the table — and OpenCode 1.18+ already creates an empty table while still using the file.
-/// </summary>
-public sealed class OpenCodeAuthStore
-{
-    public const string CredentialsImportedMigration = "20260805200742_import_legacy_credentials";
-
-    private const string GoKeyPrefix = "key:";
-    private const string ImportedPrefix = "imported:";
-
-    private const string GoKeySql = $"""
-        SELECT '{GoKeyPrefix}' || COALESCE((
-          SELECT json_extract(value,'$.key')
-          FROM credential
-          WHERE integration_id = 'opencode-go' AND (active IS NULL OR active = 1)
-          ORDER BY active DESC, time_updated DESC, id DESC
-          LIMIT 1), '');
-        """;
-
-    private const string ImportedSql =
-        $"SELECT '{ImportedPrefix}' || EXISTS(SELECT 1 FROM migration WHERE id = '{CredentialsImportedMigration}');";
-
-    private readonly string? _dataDirectory;
-
-    public OpenCodeAuthStore(string? dataDirectory = null) => _dataDirectory = dataDirectory;
-
-    private string DataDirectory => _dataDirectory ?? OpenCodePaths.DataDirectory();
-
-    /// <summary>
-    /// The non-empty <c>opencode-go</c> key, or null when the user isn't logged into OpenCode Go. The
-    /// first imported database holding a key wins; <c>auth.json</c> stands in only when no database has
-    /// imported credentials, so an OpenCode 2 logout isn't revived by the stale file. Unreadable storage
-    /// throws so it's never mistaken for logout.
-    /// </summary>
-    public string? GoApiKey()
-    {
-        var dir = DataDirectory;
-        var hasCredentialTable = false;
-        string? failure = null;
-        foreach (var path in OpenCodePaths.DatabaseFiles(dir))
-        {
-            var tables = SqliteReader.QueryValue(path,
-                "SELECT 'tables:' || COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('migration','credential');");
-            if (tables is null)
-            {
-                failure = Path.GetFileName(path);
-                continue;
-            }
-            if (tables != "tables:2") continue;
-            var imported = SqliteReader.QueryValue(path, ImportedSql);
-            if (imported is null)
-            {
-                failure = Path.GetFileName(path);
-                continue;
-            }
-            if (imported != ImportedPrefix + "1") continue;
-            var value = SqliteReader.QueryValue(path, GoKeySql);
-            if (value is null || !value.StartsWith(GoKeyPrefix, StringComparison.Ordinal))
-            {
-                failure = Path.GetFileName(path);
-                continue;
-            }
-            hasCredentialTable = true;
-            var key = value[GoKeyPrefix.Length..].Trim();
-            if (key.Length > 0) return key;
-        }
-        if (failure is not null)
-        {
-            AppLog.Warn("opencode", $"credential database unreadable: {failure}");
-            throw new InvalidOperationException(OpenCodeErrors.CredentialsUnreadable);
-        }
-        if (hasCredentialTable) return null;
-        return AuthFileGoKey(dir);
-    }
-
-    private static string? AuthFileGoKey(string dir)
-    {
-        var path = OpenCodePaths.AuthFile(dir);
-        if (!File.Exists(path)) return null;
-        JsonObject? obj;
-        try { obj = JsonUtil.ParseObject(File.ReadAllText(path)); }
-        catch (Exception ex)
-        {
-            AppLog.Warn("opencode", $"auth.json unreadable: {ex.Message}");
-            throw new InvalidOperationException(OpenCodeErrors.CredentialsUnreadable, ex);
-        }
-        if (obj is null)
-        {
-            AppLog.Warn("opencode", "auth.json is not a JSON object");
-            throw new InvalidOperationException(OpenCodeErrors.CredentialsUnreadable);
-        }
-        // Reads only the `opencode-go` entry, tolerant of unrelated sibling entries.
-        return JsonUtil.String(JsonUtil.Object(obj["opencode-go"])?["key"]);
-    }
+    internal const string NoGoSubscription = "No OpenCode Go subscription on this key.";
 }
 
 public static class OpenCodeUsageMapper
@@ -213,74 +76,35 @@ public static class OpenCodeUsageMapper
     }
 }
 
-public sealed class OpenCodeProvider : IProviderRuntime
+public sealed class OpenCodeProvider(AppHttp http) : IProviderRuntime
 {
+    public const string Id = "opencode";
     public static readonly Uri UsageUrl = new("https://opencode.ai/zen/go/v1/usage");
-    private readonly OpenCodeAuthStore _auth;
-    private readonly AppHttp _http;
-
-    public OpenCodeProvider(AppHttp http, string? dataDirectory = null)
-    {
-        _http = http;
-        _auth = new OpenCodeAuthStore(dataDirectory);
-    }
 
     public Provider Provider { get; } = new(
-        "opencode", "OpenCode", "opencode",
+        Id, "OpenCode", "opencode",
         [new ProviderLink("Zen", "https://opencode.ai/")]);
 
-    internal IReadOnlyList<WidgetDescriptor> GoWidgetDescriptors =>
+    public bool IsAccountTemplate => true;
+
+    public IReadOnlyList<WidgetDescriptor> WidgetDescriptors =>
     [
         WidgetDescriptor.Percent("opencode.session", Provider, "Session", sessionStartSignal: SessionStartSignal.MissingResetDate),
         WidgetDescriptor.Percent("opencode.weekly", Provider, "Weekly"),
         WidgetDescriptor.Percent("opencode.monthly", Provider, "Monthly")
     ];
 
-    public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => GoWidgetDescriptors;
-
-    /// <summary>
-    /// Unreadable credentials still count as detected so refresh can surface the error.
-    /// </summary>
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
-        Task.Run(() =>
-        {
-            try
-            {
-                return _auth.GoApiKey() is not null;
-            }
-            catch (Exception)
-            {
-                return true;
-            }
-        }, cancellationToken);
+        Task.FromResult(false);
 
-    public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
-    {
-        var refreshedAt = DateTimeOffset.Now;
-        string? key;
-        try { key = await Task.Run(() => _auth.GoApiKey(), cancellationToken); }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            return ProviderSnapshot.Error(Provider, ex);
-        }
-        if (key is null) return ProviderSnapshot.Error(Provider, OpenCodeErrors.NotLoggedIn);
-
-        var (meters, error) = await FetchGoMeters(key, cancellationToken);
-        if (meters is not null)
-            return ProviderSnapshot.Make(Provider, "Go", meters, refreshedAt);
-
-        var reason = error ?? OpenCodeErrors.NoGoSubscription;
-        AppLog.Warn("opencode", $"Go meters unavailable: {reason}");
-        return ProviderSnapshot.Error(Provider, reason);
-    }
+    public Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(ProviderSnapshot.Error(Provider, "Add an OpenCode Go API key in Customize to see usage."));
 
     internal async Task<ProviderSnapshot> RefreshWithApiKeyAsync(string key, CancellationToken ct)
     {
         var (meters, error) = await FetchGoMeters(key, ct);
         if (meters is not null) return ProviderSnapshot.Make(Provider, null, meters, DateTimeOffset.Now);
-        return ProviderSnapshot.Error(Provider, error == OpenCodeErrors.Unauthorized
-            ? "OpenCode Go rejected this API key. Replace it in Customize."
-            : error ?? OpenCodeErrors.NoGoSubscription);
+        return ProviderSnapshot.Error(Provider, error ?? OpenCodeErrors.NoGoSubscription);
     }
 
     internal static AppHttpRequest UsageRequest(string key) =>
@@ -301,14 +125,14 @@ public sealed class OpenCodeProvider : IProviderRuntime
         AppHttpResponse response;
         try
         {
-            response = await _http.SendAsync(UsageRequest(key), ct);
+            response = await http.SendAsync(UsageRequest(key), ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             AppLog.Warn("opencode", $"Go usage request failed: {ex.Message}");
             return (null, ProviderErrors.ConnectionFailed);
         }
-        if (response.StatusCode == 401) return (null, OpenCodeErrors.Unauthorized);
+        if (response.StatusCode == 401) return (null, "OpenCode Go rejected this API key. Replace it in Customize.");
         if (IsNoGoSubscription(response))
         {
             AppLog.Info("opencode", "Go usage endpoint: no active subscription");

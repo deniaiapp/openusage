@@ -20,13 +20,13 @@ In **Priority → Running Out**, limits with a known usage pace are ordered by t
 
 In **Priority**, **Use It or Lose It** shows unpinned multi-day limits with most of their quota left and a reset within 24 hours. Turn it off in **Settings → Priority Limits**.
 
-On first launch a welcome screen lists the AI tools already signed in on this PC. Pick the ones to follow and click **Connect Selected**, or **Skip for Now** and turn providers on later in **Customize**. Closing the welcome window quits the app; it shows again next time.
+On first launch the welcome screen checks for OpenUsage sign-ins already saved on this PC. Pick the ones to follow and click **Connect Selected**, or **Skip for Now** and connect providers later in **Customize**. Closing the welcome window quits the app; it shows again next time.
 
 If metrics are all hidden for the providers that are on, the dashboard links to **Customize** so you can turn them back on without reconnecting.
 
 ## What it reads
 
-Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For Ollama, OpenCode Go, OpenRouter, and Z.ai, use **Additional Accounts** in Customize to connect API keys.
+Connect providers in Customize. For Ollama and OpenCode Go, open **Accounts** to add API keys. For OpenRouter and Z.ai, use **Additional Accounts**.
 
 | Provider | Windows credential sources |
 |---|---|
@@ -37,7 +37,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com) |
 | Grok | **Customize → Grok → Sign In with Grok**; Grok CLI credentials are not read |
 | Muse Code | **Customize → Muse Code → Sign In with Meta** |
-| OpenCode | Go API key in Customize, or `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
+| OpenCode | Go API key in **Customize → OpenCode → Accounts**. If you relied on an OpenCode CLI sign-in, add a key here. OpenUsage no longer reads the CLI's database or auth file |
 | Antigravity | **Customize → Antigravity → Sign In with Google**, or an existing OpenUsage sign-in cache. Windows Credential Manager is no longer read |
 | Ollama | Cloud API key in Customize. Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
 | Devin | Browser sign-in from **Customize → Devin**; the session is stored by OpenUsage |

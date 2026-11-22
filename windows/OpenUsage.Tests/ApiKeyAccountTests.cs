@@ -340,7 +340,7 @@ public sealed class ApiKeyAccountTests : IDisposable
     }
 
     [WindowsFact]
-    public async Task OpenCodeRestoresAnAppSavedAccountWithoutReadingLocalOpenCodeData()
+    public async Task OpenCodeRestoresAnAppSavedAccount()
     {
         using var http = MakeHttp(request =>
         {
@@ -352,12 +352,11 @@ public sealed class ApiKeyAccountTests : IDisposable
         });
         var service = new ApiKeyAccounts(http, new ApiKeyAccountStore(AccountFile));
         var connected = await service.ConnectAsync("opencode", "Work", "fixture-key");
-        File.WriteAllText(Path.Combine(_directory, "auth.json"), "invalid local credential file");
 
         var loaded = new ApiKeyAccountStore(AccountFile);
         var restored = Assert.Single(loaded.List());
         Assert.Equal(connected, restored);
-        var template = new OpenCodeProvider(http, _directory);
+        var template = new OpenCodeProvider(http);
         var runtime = new ApiKeyAccounts(http, loaded).MakeRuntime(restored, template);
         Assert.Equal(new[] { "Session", "Weekly", "Monthly" }, runtime.WidgetDescriptors.Select(d => d.Title));
         var snapshot = await runtime.RefreshAsync();
