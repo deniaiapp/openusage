@@ -1,11 +1,11 @@
 using System.Net;
 using System.Text;
-using Microsoft.Data.Sqlite;
 using Xunit;
 using OpenUsage.Core.Models;
 using OpenUsage.Core.Providers.Devin;
 using OpenUsage.Core.Providers.Ollama;
 using OpenUsage.Core.Providers.OpenCode;
+using OpenUsage.Core.Stores;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Tests;
@@ -168,83 +168,65 @@ public class MiscProvidersUpstreamTests
     }
 
     [Fact]
-    public void OpenCode_V1DatabaseWithEmptyCredentialTableKeepsAuthJson()
+    public async Task OpenCodeDoesNotReadExternalSignInsOrRefreshTheLegacyCard()
     {
-        using var dir = new TempDir();
-        dir.Db("opencode.db", "CREATE TABLE credential(id TEXT, integration_id TEXT, value TEXT, active INTEGER, time_updated INTEGER);");
-        dir.AuthJson("""{"opencode-go":{"key":"file-key"},"other":5}""");
-        Assert.Equal("file-key", new OpenCodeAuthStore(dir.Path).GoApiKey());
-    }
+        var directory = Directory.CreateTempSubdirectory("openusage-opencode-");
+        var previous = Environment.GetEnvironmentVariable("OPENCODE_DATA_DIR");
+        try
+        {
+            const string fixture = """{"opencode-go":{"key":"external-fixture-key"}}""";
+            var authFile = Path.Combine(directory.FullName, "auth.json");
+            File.WriteAllText(authFile, fixture);
+            File.WriteAllText(Path.Combine(directory.FullName, "opencode.db"), "fixture database");
+            Environment.SetEnvironmentVariable("OPENCODE_DATA_DIR", directory.FullName);
 
-    [Fact]
-    public void OpenCode_ImportedDatabaseWinsAndLogoutIsRespected()
-    {
-        using var dir = new TempDir();
-        dir.AuthJson("""{"opencode-go":{"key":"stale-file-key"}}""");
-        dir.Db("opencode.db", ImportedCredentialSchema +
-            "INSERT INTO credential VALUES('c1','opencode-go','{\"key\":\"db-key\"}',1,10);");
-        Assert.Equal("db-key", new OpenCodeAuthStore(dir.Path).GoApiKey());
+            var requests = 0;
+            using var http = new AppHttp(new HttpClient(new StubHandler(_ =>
+            {
+                requests++;
+                return (HttpStatusCode.OK, "{}");
+            })));
+            var provider = new OpenCodeProvider(http);
+            var settings = AppSettings.Load(Path.Combine(directory.FullName, "settings.json"));
+            settings.EnabledProviders.Add(provider.Provider.Id);
+            var layout = new LayoutStore(settings, [provider]);
 
-        dir.Exec("opencode.db", "DELETE FROM credential;");
-        Assert.Null(new OpenCodeAuthStore(dir.Path).GoApiKey());
-    }
-
-    [Fact]
-    public async Task OpenCode_LocalHistoryDoesNotDetectAnAccount()
-    {
-        using var dir = new TempDir();
-        WriteLocalUsage(dir);
-        var requests = 0;
-        var http = new AppHttp(new HttpClient(new StubHandler(_ => { requests++; return (HttpStatusCode.OK, "{}"); })));
-        var provider = new OpenCodeProvider(http, dir.Path);
-        Assert.False(await provider.HasLocalCredentialsAsync());
-        var snapshot = await provider.RefreshAsync();
-        Assert.True(snapshot.IsError);
-        Assert.Equal(OpenCodeErrors.NotLoggedIn, Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
-        Assert.Equal(0, requests);
+            Assert.False(await provider.HasLocalCredentialsAsync());
+            Assert.Empty(layout.VisibleProviders);
+            var snapshot = await provider.RefreshAsync();
+            Assert.True(snapshot.IsError);
+            Assert.Contains("Add an OpenCode Go API key", Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+            Assert.Equal(0, requests);
+            Assert.Equal(fixture, File.ReadAllText(authFile));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OPENCODE_DATA_DIR", previous);
+            directory.Delete(recursive: true);
+        }
     }
 
     [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task OpenCode_GoUsesApiWithoutFallingBackToLocalSpend(bool authorized)
+    [InlineData(HttpStatusCode.Unauthorized, "{}", "OpenCode Go rejected this API key. Replace it in Customize.")]
+    [InlineData(HttpStatusCode.Forbidden, """{"error":{"type":"EntitlementError"}}""", "No OpenCode Go subscription on this key.")]
+    public async Task OpenCodeAppOwnedKeyRejectionStaysOnItsUsageEndpoint(
+        HttpStatusCode status, string body, string message)
     {
-        using var dir = new TempDir();
-        WriteLocalUsage(dir);
-        dir.AuthJson("""{"opencode-go":{"key":"fixture-go-key"}}""");
-        var http = new AppHttp(new HttpClient(new StubHandler(request =>
+        var requests = 0;
+        using var http = new AppHttp(new HttpClient(new StubHandler(request =>
         {
+            requests++;
             Assert.Equal(OpenCodeProvider.UsageUrl, request.RequestUri);
-            Assert.Equal("fixture-go-key", request.Headers.Authorization?.Parameter);
-            return authorized
-                ? (HttpStatusCode.OK, GoUsage(25, Captured.AddHours(4)).ToJsonString())
-                : (HttpStatusCode.Unauthorized, "{}");
+            Assert.Equal("Bearer fixture-key", request.Headers.Authorization?.ToString());
+            return (status, body);
         })));
-        var provider = new OpenCodeProvider(http, dir.Path);
-        Assert.True(await provider.HasLocalCredentialsAsync());
-        var snapshot = await provider.RefreshAsync();
-        Assert.Equal(!authorized, snapshot.IsError);
-        Assert.Equal(["Session", "Weekly", "Monthly"], provider.WidgetDescriptors.Select(d => d.MetricLabel));
-        if (authorized)
-            Assert.Equal(["Session", "Weekly", "Monthly"], snapshot.Lines.Select(l => l.Label));
-        else
-            Assert.Equal(OpenCodeErrors.Unauthorized, Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
-    }
 
-    private static void WriteLocalUsage(TempDir dir)
-    {
-        var ms = DateTimeOffset.Now.AddMinutes(-5).ToUnixTimeMilliseconds();
-        dir.Db("opencode.db", $$$"""
-            CREATE TABLE message(id TEXT, time_created INTEGER, data TEXT);
-            INSERT INTO message VALUES('m1',{{{ms}}},'{"role":"assistant","providerID":"opencode-go","cost":1.25,"tokens":{"total":10}}');
-            """);
-    }
+        var snapshot = await new OpenCodeProvider(http).RefreshWithApiKeyAsync("fixture-key", default);
 
-    private const string ImportedCredentialSchema = $"""
-        CREATE TABLE migration(id TEXT);
-        INSERT INTO migration VALUES('{OpenCodeAuthStore.CredentialsImportedMigration}');
-        CREATE TABLE credential(id TEXT, integration_id TEXT, value TEXT, active INTEGER, time_updated INTEGER);
-        """;
+        Assert.Equal(1, requests);
+        Assert.True(snapshot.IsError);
+        Assert.Equal(message, Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+    }
 
     // MARK: Devin
 
@@ -293,35 +275,6 @@ public class MiscProvidersUpstreamTests
         {
             var (status, body) = respond(request);
             return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
-        }
-    }
-
-    private sealed class TempDir : IDisposable
-    {
-        public string Path { get; } = Directory.CreateTempSubdirectory("openusage-misc-").FullName;
-
-        public void AuthJson(string json) => File.WriteAllText(System.IO.Path.Combine(Path, "auth.json"), json);
-
-        public void Db(string name, string sql) => Exec(name, sql);
-
-        public void Exec(string name, string sql)
-        {
-            using (var connection = new SqliteConnection($"Data Source={System.IO.Path.Combine(Path, name)};Pooling=False"))
-            {
-                connection.Open();
-                using var command = connection.CreateCommand();
-                command.CommandText = sql;
-                command.ExecuteNonQuery();
-            }
-            SqliteConnection.ClearAllPools();
-        }
-
-        public void Dispose()
-        {
-            SqliteConnection.ClearAllPools();
-            try { Directory.Delete(Path, recursive: true); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
         }
     }
 }

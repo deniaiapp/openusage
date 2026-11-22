@@ -96,7 +96,7 @@ Expand the Codex card to see ChatGPT's reported tokens for Today, Yesterday, and
 
 OpenRouter management keys show the spend they can read across keys, including workspace spend.
 
-On Windows, OpenCode shows live Go limits instead of totaling local session history.
+On Windows, add a Go API key in **Customize → OpenCode → Accounts** to see live limits. OpenUsage does not read the OpenCode CLI's sign-in or session history.
 
 Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
 
