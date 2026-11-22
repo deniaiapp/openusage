@@ -2,7 +2,7 @@ namespace OpenUsage.Core.Services;
 
 internal sealed record CliProxyHubLink(Guid HubId, string LoginId, string AuthIndex, string? ChatGptAccountId);
 
-internal sealed record CliProxyMirroredAccount(Guid AccountId, string ProviderId, CliProxyHubLink Link);
+internal sealed record CliProxyMirroredAccount(Guid AccountId, string ProviderId, string Label, CliProxyHubLink Link);
 
 internal sealed record CliProxyHubAddition(string ProviderId, string Label, CliProxyHubLink Link);
 
@@ -50,5 +50,15 @@ internal sealed record CliProxyHubReconciliation(
                 added.Add(new(provider, login.Label, new(hubId, login.Id, index, login.ChatGptAccountId)));
         }
         return new(added, removed, relinked);
+    }
+
+    public IReadOnlyList<CliProxyMirroredAccount> Apply(IReadOnlyList<CliProxyMirroredAccount> accounts)
+    {
+        var removed = Removed.ToHashSet();
+        return accounts.Where(account => !removed.Contains(account.AccountId))
+            .Select(account => Relinked.TryGetValue(account.AccountId, out var link) ? account with { Link = link } : account)
+            .Concat(Added.Select(addition => new CliProxyMirroredAccount(
+                Guid.NewGuid(), addition.ProviderId, addition.Label, addition.Link)))
+            .ToArray();
     }
 }

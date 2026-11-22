@@ -95,7 +95,8 @@ macOS-only pieces left out on purpose:
 - Share-screenshot cards
 
 You can [connect and disconnect CLIProxyAPI hubs](../docs/windows.md#cliproxyapi-hubs) in Customize.
-Hub accounts are not yet mirrored. Management requests use HTTPS, or HTTP for loopback, local
+The app saves supported logins when you connect or replace the key, but does not run scheduled
+hub sync or show hub accounts yet. Management requests use HTTPS, or HTTP for loopback, local
 network, and Tailscale addresses, without following redirects. The core supports the hub's
 `api-call` transport, but provider refreshes do not use it yet.
 

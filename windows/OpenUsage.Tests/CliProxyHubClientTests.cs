@@ -127,7 +127,7 @@ public sealed class CliProxyHubClientTests
                 Assert.Equal("fixture-key", request.Headers.Authorization?.Parameter);
                 Assert.False(File.Exists(path));
                 calls++;
-                return Reply(HttpStatusCode.OK, """{"files":[{"id":"one","provider":"codex"}]}""");
+                return Reply(HttpStatusCode.OK, """{"files":[{"id":"one","provider":"codex","auth_index":"index-one"}]}""");
             });
             var service = new CliProxyHubConnections(client, new CliProxyHubStore(path));
             var (hub, logins) = await service.ConnectAsync(" hub.example/proxy/management.html ", " fixture-key ", default);
@@ -137,6 +137,10 @@ public sealed class CliProxyHubClientTests
             var reopened = new CliProxyHubStore(path);
             Assert.Equal(hub, Assert.Single(reopened.List()));
             Assert.Equal("fixture-key", reopened.KeyFor(hub));
+            var account = Assert.Single(reopened.ListAccounts());
+            Assert.Equal("codex", account.ProviderId);
+            Assert.Equal(hub.Id, account.Link.HubId);
+            Assert.Equal("index-one", account.Link.AuthIndex);
             await Assert.ThrowsAsync<ProviderRequestException>(() =>
                 service.ConnectAsync("https://HUB.example:443/proxy/v1", "duplicate-fixture", default));
             Assert.Equal(1, calls);
@@ -176,7 +180,9 @@ public sealed class CliProxyHubClientTests
         try
         {
             var store = new CliProxyHubStore(Path.Combine(directory.FullName, "hubs.bin"));
-            var hub = store.Add(new Uri("https://hub.example/prefix/"), "initial-fixture");
+            var hub = store.Add(new Uri("https://hub.example/prefix/"), "initial-fixture",
+                [new("original", "before", "codex", "Original label", true, false, "old-workspace")]);
+            var original = Assert.Single(store.ListAccounts());
             var requests = new List<string>();
             using var client = MakeClient(request =>
             {
@@ -185,18 +191,25 @@ public sealed class CliProxyHubClientTests
                 var key = request.Headers.Authorization!.Parameter!;
                 requests.Add(key);
                 return key == "replacement-fixture"
-                    ? Reply(HttpStatusCode.OK, """{"files":[]}""")
+                    ? Reply(HttpStatusCode.OK, """
+                        {"files":[{"id":"original","provider":"codex","auth_index":"after","label":"New label",
+                           "id_token":{"chatgpt_account_id":"new-workspace"}}]}
+                        """)
                     : Reply(HttpStatusCode.Forbidden, "{}");
             });
             var service = new CliProxyHubConnections(client, store);
             await Assert.ThrowsAsync<ProviderRequestException>(() =>
                 service.ReplaceKeyAsync(hub.Id, "rejected-fixture", default));
             Assert.Equal("initial-fixture", store.KeyFor(hub));
-            Assert.Empty(await service.ReplaceKeyAsync(hub.Id, "replacement-fixture", default));
+            Assert.Equal(original, Assert.Single(store.ListAccounts()));
+            Assert.Single(await service.ReplaceKeyAsync(hub.Id, "replacement-fixture", default));
             Assert.Equal(hub, Assert.Single(service.List()));
             Assert.Equal("replacement-fixture", store.KeyFor(hub));
+            Assert.Equal(original with { Link = original.Link with { AuthIndex = "after", ChatGptAccountId = "new-workspace" } },
+                Assert.Single(store.ListAccounts()));
             Assert.True(service.Remove(hub.Id));
             Assert.Empty(service.List());
+            Assert.Empty(new CliProxyHubStore(Path.Combine(directory.FullName, "hubs.bin")).ListAccounts());
             await Assert.ThrowsAsync<ProviderRequestException>(() =>
                 service.ReplaceKeyAsync(hub.Id, "stale-fixture", default));
             Assert.Equal(new[] { "rejected-fixture", "replacement-fixture" }, requests);
