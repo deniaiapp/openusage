@@ -235,8 +235,9 @@ public partial class DashboardWindow : Window
         var provider = runtime.Provider;
         var snapshot = _container.Data.Snapshot(provider.Id);
         var open = _container.Layout.IsCardOpen(provider.Id);
-        var always = _container.Layout.VisibleMetrics(provider.Id, false);
-        var onDemand = _container.Layout.OnDemandMetrics(provider.Id);
+        var metrics = _container.Layout.VisibleMetrics(provider.Id, includeOnDemand: open);
+        var links = provider.VisibleLinks;
+        var hasExpandedContent = links.Count > 0 || _container.Layout.OnDemandMetrics(provider.Id).Count > 0;
         var card = Card();
         var stack = new StackPanel();
 
@@ -282,13 +283,10 @@ public partial class DashboardWindow : Window
 
         stack.Children.Add(header);
 
-        foreach (var descriptor in always)
+        foreach (var descriptor in metrics)
             stack.Children.Add(MetricRow(descriptor));
 
-        // The caret sits at the bottom of the card: below Always Visible when collapsed, and below a
-        // thin line, the On Demand rows, and the quick links when open.
-        var hasExpandedContent = onDemand.Count > 0 || provider.VisibleLinks.Count > 0;
-        if (hasExpandedContent && open)
+        if (open && links.Count > 0)
         {
             stack.Children.Add(new Border
             {
@@ -296,20 +294,15 @@ public partial class DashboardWindow : Window
                 Background = (Brush)FindResource("SeparatorBrush"),
                 Margin = new Thickness(14, 5, 14, 5)
             });
-            foreach (var descriptor in onDemand)
-                stack.Children.Add(MetricRow(descriptor));
-            if (provider.VisibleLinks.Count > 0)
+            var linkPanel = new WrapPanel { Margin = new Thickness(10, 4, 10, 0) };
+            foreach (var link in links)
             {
-                var links = new WrapPanel { Margin = new Thickness(10, 4, 10, 0) };
-                foreach (var link in provider.VisibleLinks)
-                {
-                    var btn = new Button { Content = link.Label, Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 0, 6, 4) };
-                    var url = link.Url;
-                    btn.Click += (_, _) => OpenUrl(url);
-                    links.Children.Add(btn);
-                }
-                stack.Children.Add(links);
+                var btn = new Button { Content = link.Label, Style = (Style)FindResource("GhostButton"), Margin = new Thickness(0, 0, 6, 4) };
+                var url = link.Url;
+                btn.Click += (_, _) => OpenUrl(url);
+                linkPanel.Children.Add(btn);
             }
+            stack.Children.Add(linkPanel);
         }
         if (hasExpandedContent)
             stack.Children.Add(CardCaret(provider.Id, open));

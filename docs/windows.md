@@ -28,11 +28,15 @@ Ollama's local sign-in stays off until you turn it on in Customize — the local
 
 When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
 
+### Amp on Windows
+
+Use **Customize → Amp → Sign In with Amp** to authorize with a device code. Turn on Amp in Customize to show its usage. You do not need the Amp CLI installed. The collapsed card shows Agent Usage and Amp Free. Expand it for Agent Usage, Orb Hours, Amp Free, and Individual Credits in that order. Amp Free shows the remaining allowance without a countdown because Amp does not report an exact reset time.
+
 ### Muse Code on Windows
 
 In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the displayed code in your browser. OpenUsage checks that the account has a Muse Code subscription before saving its sign-in with Windows user encryption. Turn Muse Code on in Customize to see **Session** and **Weekly** limits; **Session** is pinned to the tray by default. Use **Sign In Again** to replace the connection without losing your layout.
 
-Provider details that match macOS:
+### Provider details that match macOS
 
 - **Claude:** Rate Limit Resets row (checked at most once an hour), plan badge from the live profile.
 - **Codex:** Pro 100 / 200 / 500 plan names.
