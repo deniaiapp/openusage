@@ -6,6 +6,8 @@ The Windows tray app has its own dashboard, Customize, Settings, five-minute ref
 
 The dashboard opens on **All Usage**. Switch to **Priority** for pinned metrics and limits that are running out or used up. Both tabs respect which providers and metrics you have turned on.
 
+**Running Out** puts the shortest projected time to exhaustion first. Limits without a usable pace follow, with the lowest remaining percentage first.
+
 To add one, open **Customize**, choose **OpenRouter** or **Z.ai**, and enter a name and API key under **Additional Accounts**. OpenUsage checks the key before saving it with Windows user encryption. New cards go after the provider's existing additional accounts or its visible main card. If neither exists, the new card goes at the bottom. Rename or remove the account in the same section. Existing API keys and provider settings stay in place.
 
 Ollama Cloud connects with API keys only. Get a key from [Ollama settings](https://ollama.com/settings/keys), then add it under **Customize → Ollama → Accounts**. The first new Ollama account gets the default Monthly tray pin. Existing API-key accounts keep their settings. If you used the old local Ollama sign-in, add a key to resume tracking cloud usage.
