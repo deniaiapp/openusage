@@ -9,14 +9,12 @@ internal sealed class CopilotDeviceLogin(AppHttp http, Func<TimeSpan, Cancellati
     // Public device-flow client used by the upstream Copilot connection.
     private const string ClientId = "Iv1.b507a08c87ecfe98";
     private const string Grant = "urn:ietf:params:oauth:grant-type:device_code";
-    private static readonly Uri DeviceCodeUrl = new("https://github.com/login/device/code");
-    private static readonly Uri AccessTokenUrl = new("https://github.com/login/oauth/access_token");
-    public const string VerificationUrl = "https://github.com/login/device";
     private readonly Func<TimeSpan, CancellationToken, Task> _wait = wait ?? Task.Delay;
 
-    public async Task<string> AuthorizeAsync(Action<string> showCode, CancellationToken ct)
+    public async Task<string> AuthorizeAsync(Action<string> showCode, CancellationToken ct, CopilotDomain? domain = null)
     {
-        var device = await PostAsync(DeviceCodeUrl, new()
+        domain ??= CopilotDomain.Public;
+        var device = await PostAsync(domain.WebUrl("/login/device/code"), new()
         {
             ["client_id"] = ClientId,
             ["scope"] = "read:user"
@@ -42,7 +40,7 @@ internal sealed class CopilotDeviceLogin(AppHttp http, Func<TimeSpan, Cancellati
                 JsonObject token;
                 try
                 {
-                    token = await PostAsync(AccessTokenUrl, new()
+                    token = await PostAsync(domain.WebUrl("/login/oauth/access_token"), new()
                     {
                         ["client_id"] = ClientId,
                         ["device_code"] = deviceCode,
