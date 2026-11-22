@@ -1,6 +1,6 @@
 namespace OpenUsage.Core.Models;
 
-public sealed record MetricValue(double Number, MetricKind Kind, string? Label = null);
+public sealed record MetricValue(double Number, MetricKind Kind, string? Label = null, string? CurrencyCode = null);
 
 public abstract record ValueSelection
 {
@@ -28,15 +28,18 @@ public sealed record ProgressFormat
 
     public Kind FormatKind { get; }
     public string? Suffix { get; }
+    public string? CurrencyCode { get; }
 
-    private ProgressFormat(Kind formatKind, string? suffix)
+    private ProgressFormat(Kind formatKind, string? suffix, string? currencyCode = null)
     {
         FormatKind = formatKind;
         Suffix = suffix;
+        CurrencyCode = currencyCode;
     }
 
     public static ProgressFormat Percent { get; } = new(Kind.Percent, null);
     public static ProgressFormat Dollars { get; } = new(Kind.Dollars, null);
+    public static ProgressFormat Currency(string? code) => code is null or "USD" ? Dollars : new(Kind.Dollars, null, code);
     public static ProgressFormat Count(string suffix) => new(Kind.Count, suffix);
 
     public MetricKind MetricKind => FormatKind switch
