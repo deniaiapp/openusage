@@ -187,8 +187,8 @@ internal sealed class CliProxyHubsView : StackPanel
                 _address.Clear();
                 ResetEditor();
                 _status.Text = "Hub connected.";
-                RefreshHubs();
             }
+            RefreshHubs();
         }
         catch (OperationCanceledException) { ResetEditor(); }
         catch (Exception ex) { ShowError(ex); }
