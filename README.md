@@ -110,7 +110,7 @@ Use **All Usage** for your full dashboard or **Priority** for pinned, low, and e
 Priority also lists unpinned limits you can use before they reset.
 If you hide every metric on Windows, the dashboard points you back to Customize to restore them.
 
-Windows shows separate account cards; [Unify Multiple Accounts](docs/dashboard.md#unify-multiple-accounts) is currently macOS-only.
+Windows shows separate account cards by default. You can [combine Claude or ChatGPT accounts](docs/windows.md#unify-multiple-accounts).
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 

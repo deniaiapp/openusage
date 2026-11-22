@@ -124,6 +124,12 @@ Open **Customize → CLIProxyAPI Hubs**, enter the hub's address and management 
 The Windows core can read Claude, ChatGPT, Antigravity, Devin, and Grok usage through a hub without
 signing in to the providers locally. This is not wired into scheduled usage refreshes or the dashboard yet.
 
+## Unify Multiple Accounts
+
+In **Customize**, open Claude or ChatGPT and turn on **Unify Multiple Accounts**. When at least two enabled accounts of that provider are available, **All Usage** shows one card. Expand it to see the individual accounts.
+
+The combined card pools compatible limits and shows the earliest reset. A combined limit appears once in **Priority** and in the tray. Hide or star a combined limit from its context menu to apply the change to every account in the card. Usage notifications still apply per account.
+
 ## Privacy Mode
 
 Turn on **Settings → Privacy → Privacy Mode** before sharing or recording your screen. When possible, Windows excludes the dashboard window from compatible captures. If Windows cannot protect the window, OpenUsage replaces the dashboard and Customize contents with a notice. While the setting is on, the tray icon and tooltip do not show usage and dashboard metric tooltips and right-click menus are disabled.

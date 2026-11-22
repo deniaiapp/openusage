@@ -28,6 +28,7 @@ public sealed class AppSettings
     public HashSet<string> ExpandedMetrics { get; set; } = new(DefaultLayout.ExpandedMetricIds, StringComparer.Ordinal);
     public HashSet<string> PinnedMetrics { get; set; } = new(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal);
     public HashSet<string> OpenCards { get; set; } = new(StringComparer.Ordinal);
+    public HashSet<string> UnifiedProviders { get; set; } = new(StringComparer.Ordinal);
     public List<string> ProviderOrder { get; set; } = [];
     public bool CustomizeHintDismissed { get; set; }
     public bool NotifyBurningFast { get; set; }
@@ -56,6 +57,7 @@ public sealed class AppSettings
                     loaded.ExpandedMetrics ??= new(DefaultLayout.ExpandedMetricIds, StringComparer.Ordinal);
                     loaded.PinnedMetrics ??= new(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal);
                     loaded.OpenCards ??= new HashSet<string>(StringComparer.Ordinal);
+                    loaded.UnifiedProviders ??= new HashSet<string>(StringComparer.Ordinal);
                     loaded.ProviderOrder ??= [];
                     loaded.PriorityLimits ??= PriorityLimits.Default;
                     loaded.RefreshIntervalSeconds = NormalizeRefreshInterval(loaded.RefreshIntervalSeconds);
