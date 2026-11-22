@@ -100,8 +100,13 @@ public sealed class CodexDeviceLoginTests
     public async Task RejectsUnverifiedReplacementAndPersistsRotatedTokens()
     {
         var directory = Directory.CreateTempSubdirectory();
+        var previousHome = Environment.GetEnvironmentVariable("CODEX_HOME");
         try
         {
+            Environment.SetEnvironmentVariable("CODEX_HOME", directory.FullName);
+            var cliPath = Path.Combine(directory.FullName, "auth.json");
+            const string cli = """{"tokens":{"access_token":"fixture-cli","refresh_token":"fixture-cli-refresh"}}""";
+            File.WriteAllText(cliPath, cli);
             var path = Path.Combine(directory.FullName, "keys.bin");
             var replacing = false;
             var rotated = false;
@@ -131,6 +136,7 @@ public sealed class CodexDeviceLoginTests
             Assert.Equal(1, renewals);
             Assert.False((await new CodexProvider(http, new ApiKeyStore(path)).RefreshAsync()).IsError);
             Assert.Equal(1, renewals);
+            Assert.Equal(cli, File.ReadAllText(cliPath));
 
             (int, string) ReadUnavailableHistory(HttpRequestMessage req)
             {
@@ -162,7 +168,44 @@ public sealed class CodexDeviceLoginTests
                 return replacing ? (401, "{}") : (200, UsageResponse);
             }
         }
-        finally { directory.Delete(true); }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CODEX_HOME", previousHome);
+            directory.Delete(true);
+        }
+    }
+
+    [Fact]
+    public async Task CliCredentialsDoNotEnableTheProviderOrCauseRequests()
+    {
+        var directory = Directory.CreateTempSubdirectory();
+        var previousHome = Environment.GetEnvironmentVariable("CODEX_HOME");
+        try
+        {
+            Environment.SetEnvironmentVariable("CODEX_HOME", directory.FullName);
+            var cliPath = Path.Combine(directory.FullName, "auth.json");
+            const string cli = """{"tokens":{"access_token":"fixture-cli","refresh_token":"fixture-cli-refresh","account_id":"fixture-account"}}""";
+            File.WriteAllText(cliPath, cli);
+            var calls = 0;
+            using var http = MakeHttp((_, _) =>
+            {
+                calls++;
+                throw new InvalidOperationException("CLI credentials must not cause a request.");
+            });
+            var provider = new CodexProvider(http, new ApiKeyStore(Path.Combine(directory.FullName, "keys.bin")));
+            Assert.False(provider.HasAppCredential);
+            Assert.False(await provider.HasLocalCredentialsAsync());
+            var snapshot = await provider.RefreshAsync();
+            Assert.True(snapshot.IsError);
+            Assert.Contains("Customize", Assert.IsType<MetricLine.BadgeLine>(Assert.Single(snapshot.Lines)).Message);
+            Assert.Equal(0, calls);
+            Assert.Equal(cli, File.ReadAllText(cliPath));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("CODEX_HOME", previousHome);
+            directory.Delete(true);
+        }
     }
 
     private static string MakeToken()

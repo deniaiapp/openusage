@@ -23,8 +23,7 @@ public sealed partial class CodexProvider
         await _credentialGate.WaitAsync(ct);
         try
         {
-            var usage = await SendAuthGet(UsageUrl, auth, ct);
-            var snapshot = await ReadAppUsageAsync(usage, auth, ct);
+            var snapshot = await FetchUsageAsync(auth, ct);
             if (snapshot.Plan is null && snapshot.Lines.All(line => line is MetricLine.BadgeLine))
                 throw new ProviderRequestException("ChatGPT did not return usage for this account.");
             ct.ThrowIfCancellationRequested();
