@@ -29,28 +29,12 @@ public sealed class AntigravityAuthStore
     internal const string ProtectedCacheRelative = "antigravity/auth.bin";
     private readonly string _legacyPath;
     private readonly string _protectedPath;
-    private readonly Func<string, string?> _readCredential;
+    public AntigravityAuthStore() : this(AppPaths.OpenUsageDir) { }
 
-    public AntigravityAuthStore() : this(AppPaths.OpenUsageDir, WindowsCredentialStore.Read) { }
-
-    internal AntigravityAuthStore(string appDirectory, Func<string, string?> readCredential)
+    internal AntigravityAuthStore(string appDirectory)
     {
         _legacyPath = Path.Combine(appDirectory, CacheRelative);
         _protectedPath = Path.Combine(appDirectory, ProtectedCacheRelative);
-        _readCredential = readCredential;
-    }
-
-    public (string? Access, string? Refresh, DateTimeOffset? Expiry)? Load(bool migrateCache = false)
-    {
-        foreach (var target in new[] { "gemini:antigravity", "gemini", "Antigravity" })
-        {
-            var raw = _readCredential(target);
-            var token = Extract(raw);
-            if (token is null) continue;
-            if (migrateCache && File.Exists(_legacyPath)) LoadCache(migrate: true);
-            return token;
-        }
-        return LoadCache(migrateCache);
     }
 
     public void SaveCache(string? access, string? refresh, DateTimeOffset? expiry)
@@ -75,7 +59,7 @@ public sealed class AntigravityAuthStore
         RemoveLegacyCache();
     }
 
-    private (string? Access, string? Refresh, DateTimeOffset? Expiry)? LoadCache(bool migrate)
+    public (string? Access, string? Refresh, DateTimeOffset? Expiry)? Load(bool migrateCache = false)
     {
         if (File.Exists(_protectedPath))
         {
@@ -85,7 +69,7 @@ public sealed class AntigravityAuthStore
                 var payload = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
                 if (JsonUtil.ParseObject(Encoding.UTF8.GetString(payload)) is { } json && FromObject(json) is { } token)
                 {
-                    if (migrate && File.Exists(_legacyPath)) RemoveLegacyCache();
+                    if (migrateCache && File.Exists(_legacyPath)) RemoveLegacyCache();
                     return token;
                 }
                 AppLog.Warn("antigravity", "the protected token cache is invalid");
@@ -99,7 +83,7 @@ public sealed class AntigravityAuthStore
         try
         {
             var token = Extract(File.ReadAllText(_legacyPath));
-            if (migrate && token is { } legacy)
+            if (migrateCache && token is { } legacy)
                 SaveCache(legacy.Access, legacy.Refresh, legacy.Expiry);
             return token;
         }
@@ -269,12 +253,15 @@ public sealed partial class AntigravityProvider : IProviderRuntime
     public const string GoogleClientId = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
     public const string GoogleClientSecret = "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";
 
-    private readonly AntigravityAuthStore _auth = new();
+    private readonly AntigravityAuthStore _auth;
     private readonly AppHttp _http;
     private readonly AntigravityUsageClient _usage;
 
-    public AntigravityProvider(AppHttp http, ApiKeyStore? keys = null)
+    public AntigravityProvider(AppHttp http, ApiKeyStore? keys = null) : this(http, keys, new()) { }
+
+    internal AntigravityProvider(AppHttp http, ApiKeyStore? keys, AntigravityAuthStore auth)
     {
+        _auth = auth;
         _http = http;
         _usage = new AntigravityUsageClient(http);
         _keys = keys;

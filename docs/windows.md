@@ -38,11 +38,13 @@ OpenRouter shows the remaining **Balance** from purchased credits only when it r
 
 A fresh install starts with no providers on and opens a welcome screen. It lists the providers already signed in on this PC (checked locally, nothing is sent anywhere) and preselects them; **Show All** lists the rest. **Connect Selected** turns them on one at a time; one that can't connect stays off, shows why, and offers **Retry**. **Skip for Now** opens an empty dashboard with a **Choose Providers** button. Closing the welcome window quits OpenUsage, and the welcome screen comes back on the next launch. Scheduled updates start once you leave it.
 
-Antigravity reads the `gemini:antigravity` Windows credential (or a cached Google token) and uses the active Cloud Code quota counters, falling back for missing quotas. If the quota service rejects an access token, OpenUsage tries to renew it once. A session with any usage shows its reset time.
+Antigravity uses the active Cloud Code quota counters, falling back for missing quotas. A session with any usage shows its reset time.
 
 When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
 
-In **Customize → Antigravity**, use **Sign In with Google** and finish in your browser. OpenUsage only replaces the connection once it can read that account's quota and encrypt its sign-in for your Windows user. An existing Windows Antigravity connection still works if you haven't signed in through OpenUsage. **Sign In Again** keeps the current layout and pins.
+In **Customize → Antigravity**, use **Sign In with Google** and finish in your browser. OpenUsage only replaces the connection once it can read that account's quota and encrypt its sign-in for your Windows user. **Sign In Again** keeps the current layout and pins.
+
+Existing OpenUsage connections and cached sign-ins still work. If you previously relied only on Windows Credential Manager, sign in through Customize. OpenUsage no longer reads that credential.
 
 Expanded provider cards keep the configured metric order instead of grouping On Demand rows beneath Always Visible rows. When Antigravity reports a separate Argon quota, expand its card to see **Argon Weekly** immediately after **Weekly**. The CLI reports it as `argonWeekly`.
 

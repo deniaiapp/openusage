@@ -148,7 +148,7 @@ Connect Grok from Customize without installing the Grok CLI.
 
 Connect Copilot in Customize; OpenUsage does not use editor or GitHub CLI sign-ins.
 
-To connect Antigravity on Windows, choose **Sign In with Google** in Customize.
+To connect Antigravity on Windows, choose **Sign In with Google** in Customize. Connections that used only Windows Credential Manager need to sign in there once.
 
 Windows shows available Z.ai Limit Resets when you expand the account card.
 

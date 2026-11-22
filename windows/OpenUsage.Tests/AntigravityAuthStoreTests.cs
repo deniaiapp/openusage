@@ -38,13 +38,11 @@ public sealed class AntigravityAuthStoreTests : IDisposable
     }
 
     [WindowsFact]
-    public void SavingRenewalKeepsCredentialManagerPriorityButStoresEncryptedFallback()
+    public void SavingRenewalReplacesThePreviousAppCacheWithProtectedTokens()
     {
         WriteLegacy();
-        var store = new AntigravityAuthStore(_directory, _ => "fixture-keyring");
-        store.SaveCache("fixture-renewed", "fixture-new-refresh", null);
+        CreateStore().SaveCache("fixture-renewed", "fixture-new-refresh", null);
 
-        Assert.Equal("fixture-keyring", store.Load(migrateCache: true)?.Access);
         Assert.False(File.Exists(LegacyPath));
         Assert.Equal(("fixture-renewed", "fixture-new-refresh", (DateTimeOffset?)null),
             CreateStore().Load()!.Value);
@@ -64,7 +62,7 @@ public sealed class AntigravityAuthStoreTests : IDisposable
         Assert.Equal(Path.GetFileName(LegacyPath), Path.GetFileName(onlyFile));
     }
 
-    private AntigravityAuthStore CreateStore() => new(_directory, _ => null);
+    private AntigravityAuthStore CreateStore() => new(_directory);
 
     private void WriteLegacy()
     {
