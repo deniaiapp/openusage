@@ -76,6 +76,8 @@ Weekly reset can be used.
 
 ### Unify Multiple Accounts
 
+This setting is available on macOS. Windows still shows each account separately.
+
 Right-click a Claude or ChatGPT card with two or more accounts and choose **Unify Multiple Accounts** to
 show them as one card. It's saved per provider and shows a checkmark while it's on. Choose it again to
 turn it off. The same setting has a switch per provider in [Settings → Display](settings.md#unify-accounts).

@@ -1,3 +1,4 @@
+using System.Reflection;
 using OpenUsage.Core.Providers;
 using OpenUsage.Core.Providers.Antigravity;
 using OpenUsage.Core.Providers.Claude;
@@ -14,7 +15,9 @@ namespace OpenUsage.Core;
 
 public sealed class AppContainer : IDisposable
 {
-    public const string Version = "0.7.15-beta.1";
+    public static string Version { get; } = typeof(AppContainer).Assembly
+        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()!
+        .InformationalVersion.Split('+', 2)[0];
 
     private readonly AppHttp _http;
     private readonly CliProxyHubClient _hubClient = new();

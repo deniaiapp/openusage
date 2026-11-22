@@ -86,7 +86,9 @@ How everything works, in [docs/](docs/README.md):
 
 ## Windows
 
-A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11 with the .NET 8 runtime (SDK to build). See [OpenUsage on Windows](docs/windows.md) and its [Privacy Mode](docs/windows.md#privacy-mode).
+A native system-tray port lives in [`windows/`](windows/README.md) (`.NET 8` / WPF) for Windows 10/11. [Download the unsigned x64 ZIP when available](docs/windows.md#download-from-github-releases) or [build with the .NET 8 SDK](windows/README.md#self-contained-build). See [Privacy Mode](docs/windows.md#privacy-mode) for sharing the dashboard.
+
+Developers can also [publish a self-contained x64 build](windows/README.md#self-contained-build) locally. This is not an installer or an update channel.
 
 On Windows, connect Ollama Cloud with an API key in **Customize → Ollama**.
 
@@ -96,7 +98,7 @@ Expand the Codex card to see ChatGPT's reported tokens for Today, Yesterday, and
 
 OpenRouter management keys show the spend they can read across keys, including workspace spend.
 
-On Windows, OpenCode shows live Go limits instead of totaling local session history.
+On Windows, add a Go API key in **Customize → OpenCode → Accounts** to see live limits. OpenUsage does not read the OpenCode CLI's sign-in or session history.
 
 Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
 
@@ -107,6 +109,8 @@ Windows reset countdowns show calendar months and years for longer waits.
 Use **All Usage** for your full dashboard or **Priority** for pinned, low, and exhausted limits. **Running Out** puts limits expected to run out soonest first when their pace is known. Priority also shows which accounts are waiting for their first reading.
 Priority also lists unpinned limits you can use before they reset.
 If you hide every metric on Windows, the dashboard points you back to Customize to restore them.
+
+Windows shows separate account cards; [Unify Multiple Accounts](docs/dashboard.md#unify-multiple-accounts) is currently macOS-only.
 
 On Windows, ChatGPT's Credits row shows a reported balance, including zero, and is hidden when no balance is available.
 

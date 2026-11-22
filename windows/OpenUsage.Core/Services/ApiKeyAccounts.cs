@@ -17,8 +17,8 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
         (provider, account.ProviderId) switch
         {
             (OllamaProvider ollama, "ollama") => new AccountRuntime(account, provider, store, ollama.RefreshWithApiKeyAsync),
-            (OpenCodeProvider openCode, "opencode") =>
-                new AccountRuntime(account, provider, store, openCode.RefreshWithApiKeyAsync, openCode.GoWidgetDescriptors),
+            (OpenCodeProvider openCode, OpenCodeProvider.Id) =>
+                new AccountRuntime(account, provider, store, openCode.RefreshWithApiKeyAsync),
             (OpenRouterProvider openRouter, "openrouter") =>
                 new AccountRuntime(account, provider, store, (key, ct) => openRouter.RefreshWithKeyAsync(key, ct, requireKey: true)),
             (ZaiProvider zai, "zai") => new AccountRuntime(account, provider, store, zai.AccountRefresh()),
@@ -110,8 +110,7 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
 
     private sealed class AccountRuntime(
         ApiKeyAccount account, IProviderRuntime template, ApiKeyAccountStore accounts,
-        Func<string, CancellationToken, Task<ProviderSnapshot>> refresh,
-        IReadOnlyList<WidgetDescriptor>? descriptors = null) : IProviderRuntime
+        Func<string, CancellationToken, Task<ProviderSnapshot>> refresh) : IProviderRuntime
     {
         public Provider Provider => template.Provider with
         {
@@ -119,7 +118,7 @@ public sealed class ApiKeyAccounts(AppHttp http, ApiKeyAccountStore store)
             DisplayName = $"{template.Provider.DisplayName} · {account.Label}"
         };
 
-        public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => (descriptors ?? template.WidgetDescriptors)
+        public IReadOnlyList<WidgetDescriptor> WidgetDescriptors => template.WidgetDescriptors
             .Select(d => d with
             {
                 Id = account.CardId + d.Id[template.Provider.Id.Length..],

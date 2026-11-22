@@ -19,8 +19,8 @@ public sealed class FirstLaunchChoice
 }
 
 /// <summary>
-/// The welcome screen's model. A fresh install starts with nothing on; detection only looks at what's
-/// on this PC (local files, Credential Manager — never the network) and preselects what it finds.
+/// The welcome screen's model. A fresh install starts with nothing on; detection preselects
+/// accounts with OpenUsage credentials already saved on this PC without using the network.
 /// Connect turns the picked providers on and refreshes them one at a time; a provider that fails goes
 /// back off and shows why. Scheduled refreshes start once the welcome screen closes.
 /// </summary>
@@ -86,8 +86,7 @@ public sealed class FirstLaunchSetup
     }
 
     /// <summary>
-    /// Probes every provider's local credentials concurrently on the thread pool, so file and Credential
-    /// Manager reads never block the UI thread, then preselects the providers that have a sign-in.
+    /// Probes saved OpenUsage credentials on the thread pool and preselects providers with a sign-in.
     /// </summary>
     public async Task DetectAsync(CancellationToken cancellationToken = default)
     {
