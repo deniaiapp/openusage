@@ -101,25 +101,49 @@ This is an unsigned local build, not an installer or an automatic update channel
 
 ## Prepare the Windows release ZIP
 
-Build from a clean checkout of the approved release tag on Windows x64 with the .NET 8 SDK. Run from
-the repository root, replacing the example value with the approved tag.
+Run [Windows CI](https://github.com/deniaiapp/openusage/actions/workflows/windows-ci.yml) manually on
+the reviewed `main` commit you intend to tag. Download the `windows-x64-unsigned` artifact from the
+successful run for that exact commit, and keep the ZIP inside it. The workflow does not publish a
+release.
+
+In PowerShell, set the approved tag and path to the ZIP (without the extension):
 
 ```powershell
 $tag = "<approved-release-tag>"
+$output = ".\dist\windows-x64-unsigned"
+```
+
+Alternatively, build from a clean checkout of the tag on Windows x64 with the .NET 8 SDK:
+
+```powershell
 $source = git rev-parse --verify "refs/tags/$tag^{commit}"
 if ($LASTEXITCODE -ne 0 -or (git rev-parse HEAD) -ne $source -or (git status --porcelain)) {
     throw "Check out the exact release tag in a clean working tree."
 }
-$output = ".\dist\windows-x64-unsigned"
 .\windows\package.ps1 -OutputDirectory $output -Zip
+```
+
+With either build, check the extracted CLI's version and launch the extracted tray app:
+
+```powershell
 Expand-Archive -LiteralPath "$output.zip" -DestinationPath "$output-smoke"
 & "$output-smoke\cli\openusage.exe" --version
 if ($LASTEXITCODE -ne 0) { throw "The extracted CLI did not start." }
+Start-Process "$output-smoke\app\OpenUsage.exe"
 ```
 
-Check that the printed version matches the release tag and that the extracted `app\OpenUsage.exe`
-opens. After approval, attach the ZIP to the matching [GitHub Release](https://github.com/deniaiapp/openusage/releases);
-do not create a tag, publish a draft, or replace an existing asset as part of the upload:
+The CLI version should match the release tag, ignoring the leading `v` and the CLI's `+commit` suffix.
+
+For a new **stable Windows release**, use the approved tag on the reviewed commit and include
+non-empty Windows release notes. Verify the tag's commit before publishing. This does not run the
+macOS release workflow or update Sparkle.
+
+```powershell
+gh release create $tag "${output}.zip#Windows x64 (unsigned ZIP)" --verify-tag --latest --title "OpenUsage for Windows $tag" --notes-file .\release-notes.md --repo deniaiapp/openusage
+```
+
+If the matching [GitHub Release](https://github.com/deniaiapp/openusage/releases) is already published,
+attach the ZIP instead. Do not replace an existing asset:
 
 ```powershell
 $isDraft = gh release view $tag --repo deniaiapp/openusage --json isDraft --jq '.isDraft'

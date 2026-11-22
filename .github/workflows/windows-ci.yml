@@ -1,6 +1,7 @@
 name: Windows CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
@@ -32,7 +33,7 @@ jobs:
       - name: Verify self-contained x64 ZIP
         shell: pwsh
         run: |
-          $output = Join-Path $env:RUNNER_TEMP 'openusage-win-x64'
+          $output = Join-Path $env:RUNNER_TEMP 'windows-x64-unsigned'
           ./windows/package.ps1 -OutputDirectory $output -Zip
           $extracted = "$output-extracted"
           Expand-Archive -LiteralPath "$output.zip" -DestinationPath $extracted
@@ -44,3 +45,11 @@ jobs:
           }
           & (Join-Path $extracted 'cli/openusage.exe') --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Save verified ZIP
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-x64-unsigned
+          path: ${{ runner.temp }}/windows-x64-unsigned.zip
+          if-no-files-found: error
+          compression-level: 0
