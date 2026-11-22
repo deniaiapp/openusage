@@ -41,6 +41,8 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Devin | Browser sign-in from **Customize → Devin**; the session is stored by OpenUsage |
 | OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
 
+OpenRouter management keys show Yesterday and Prior 30 Days spend when you expand the account card. These periods count only completed days in UTC.
+
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
 Z.ai shows token windows of a day or longer on the Weekly row, with the reported reset time.

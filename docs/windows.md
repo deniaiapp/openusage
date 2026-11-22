@@ -32,7 +32,7 @@ Enable **Usage Notifications** in Settings to get a Windows notification before 
 
 Click the banner or the saved notification in Notification Center to open the dashboard. If Notification Center stays in front, close it to see the dashboard. OpenUsage registers a Start menu shortcut and a dashboard link for the current Windows user while usage notifications are enabled. If Windows can't show an OpenUsage toast, or if OpenUsage runs as administrator but the Windows shell does not, the app falls back to a tray balloon. Click that banner while it's visible, or use the tray icon after it moves to Notification Center.
 
-OpenRouter and Z.ai only use API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY` or `ZAI_API_KEY`, enter the key for that provider in **Customize**. Already saved keys keep working.
+OpenRouter and Z.ai only use API keys saved in OpenUsage. If you previously relied on `OPENROUTER_API_KEY` or `ZAI_API_KEY`, enter the key for that provider in **Customize**. Already saved keys keep working. With a management key, expand the card to see **Yesterday** and **Prior 30 Days** after **This Month**. The prior 30 days exclude today and use UTC.
 
 OpenRouter shows the remaining **Balance** from purchased credits only when it reports both the purchase and usage totals. Only a limit set on the key appears as **Key Limit**; the old purchased-credits meter and its tray pin no longer appear.
 

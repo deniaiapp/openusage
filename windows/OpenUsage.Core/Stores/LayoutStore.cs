@@ -290,6 +290,7 @@ public sealed class LayoutStore
             _settings.EnabledProviders.Add(runtime.Provider.Id);
             var providerId = runtime.Provider.Id.Split('@')[0];
             SeedAccountLayout(runtime, providerId, IsAccountTemplate(providerId) && templatesWithPins.Add(providerId));
+            SeedNewAccountMetrics(runtime, providerId);
         }
         _settings.OpenCards.Clear();
         _settings.Save();
