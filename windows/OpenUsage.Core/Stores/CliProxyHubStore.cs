@@ -43,6 +43,16 @@ internal sealed class CliProxyHubStore(string? path = null)
         }
     }
 
+    internal string? KeyFor(CliProxyHub hub, CliProxyMirroredAccount account)
+    {
+        lock (_gate)
+        {
+            var entry = Load().Find(entry => Matches(entry, hub));
+            return entry?.Accounts?.Any(saved => saved.AccountId == account.AccountId &&
+                saved.ProviderId == account.ProviderId && saved.Link == account.Link) == true ? entry.Key : null;
+        }
+    }
+
     internal IReadOnlyList<CliProxyMirroredAccount> ListAccounts()
     {
         lock (_gate) return Load().SelectMany(entry => entry.Accounts ?? []).ToArray();

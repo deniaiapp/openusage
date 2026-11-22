@@ -97,7 +97,9 @@ public sealed class CliProxyHubTunnelTests
     public async Task RefusalsSayWhatToFixWithoutEchoingTheResponse(int status, string body, string expected)
     {
         using var hub = MakeClient(_ => Reply((HttpStatusCode)status, body));
-        var failure = await Assert.ThrowsAsync<ProviderRequestException>(() => Call(hub, "fixture-key"));
+        var failure = status == 502
+            ? await Assert.ThrowsAsync<CliProxyHubUpstreamUnavailableException>(() => Call(hub, "fixture-key"))
+            : await Assert.ThrowsAsync<ProviderRequestException>(() => Call(hub, "fixture-key"));
         Assert.Contains(expected, failure.Message);
         Assert.Contains("hub.example", failure.Message);
         Assert.DoesNotContain("fixture", failure.Message);
