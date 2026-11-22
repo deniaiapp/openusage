@@ -1,9 +1,9 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OpenUsage.Core.Models;
-using OpenUsage.Core.Providers;
 using OpenUsage.Core.Support;
 
 namespace OpenUsage.Core.Providers.Antigravity;
@@ -23,41 +23,101 @@ public static class AntigravityMetric
 public sealed class AntigravityAuthStore
 {
     public const string CacheRelative = "antigravity/auth.json";
+    internal const string ProtectedCacheRelative = "antigravity/auth.bin";
+    private readonly string _legacyPath;
+    private readonly string _protectedPath;
+    private readonly Func<string, string?> _readCredential;
 
-    public (string? Access, string? Refresh, DateTimeOffset? Expiry)? Load()
+    public AntigravityAuthStore() : this(AppPaths.OpenUsageDir, WindowsCredentialStore.Read) { }
+
+    internal AntigravityAuthStore(string appDirectory, Func<string, string?> readCredential)
+    {
+        _legacyPath = Path.Combine(appDirectory, CacheRelative);
+        _protectedPath = Path.Combine(appDirectory, ProtectedCacheRelative);
+        _readCredential = readCredential;
+    }
+
+    public (string? Access, string? Refresh, DateTimeOffset? Expiry)? Load(bool migrateCache = false)
     {
         foreach (var target in new[] { "gemini:antigravity", "gemini", "Antigravity" })
         {
-            var raw = WindowsCredentialStore.Read(target);
+            var raw = _readCredential(target);
             var token = Extract(raw);
-            if (token is not null) return token;
+            if (token is null) continue;
+            if (migrateCache && File.Exists(_legacyPath)) LoadCache(migrate: true);
+            return token;
         }
-        return LoadCache();
+        return LoadCache(migrateCache);
     }
 
-    public void SaveCache(string access, string? refresh, DateTimeOffset? expiry)
+    public void SaveCache(string? access, string? refresh, DateTimeOffset? expiry)
     {
         try
         {
-            var dir = Path.Combine(AppPaths.OpenUsageDir, "antigravity");
-            Directory.CreateDirectory(dir);
-            File.WriteAllText(Path.Combine(dir, "auth.json"), JsonSerializer.Serialize(new
+            var payload = JsonSerializer.SerializeToUtf8Bytes(new
             {
                 access_token = access,
                 refresh_token = refresh,
                 expiry = expiry?.ToString("O")
-            }));
+            });
+            var encrypted = ProtectedData.Protect(payload, null, DataProtectionScope.CurrentUser);
+            Directory.CreateDirectory(Path.GetDirectoryName(_protectedPath)!);
+            AtomicFile.WriteAllBytes(_protectedPath, encrypted);
         }
-        catch (Exception ex) { AppLog.Warn("antigravity", $"could not cache token: {ex.Message}"); }
+        catch (Exception ex) when (IsCacheFailure(ex))
+        {
+            AppLog.Warn("antigravity", "could not save the protected token cache");
+            return;
+        }
+        RemoveLegacyCache();
     }
 
-    private static (string? Access, string? Refresh, DateTimeOffset? Expiry)? LoadCache()
+    private (string? Access, string? Refresh, DateTimeOffset? Expiry)? LoadCache(bool migrate)
     {
-        var path = Path.Combine(AppPaths.OpenUsageDir, CacheRelative);
-        if (!File.Exists(path)) return null;
-        try { return Extract(File.ReadAllText(path)); }
-        catch { return null; }
+        if (File.Exists(_protectedPath))
+        {
+            try
+            {
+                var encrypted = File.ReadAllBytes(_protectedPath);
+                var payload = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
+                if (JsonUtil.ParseObject(Encoding.UTF8.GetString(payload)) is { } json && FromObject(json) is { } token)
+                {
+                    if (migrate && File.Exists(_legacyPath)) RemoveLegacyCache();
+                    return token;
+                }
+                AppLog.Warn("antigravity", "the protected token cache is invalid");
+            }
+            catch (Exception ex) when (IsCacheFailure(ex))
+            {
+                AppLog.Warn("antigravity", "could not open the protected token cache");
+            }
+        }
+        if (!File.Exists(_legacyPath)) return null;
+        try
+        {
+            var token = Extract(File.ReadAllText(_legacyPath));
+            if (migrate && token is { } legacy)
+                SaveCache(legacy.Access, legacy.Refresh, legacy.Expiry);
+            return token;
+        }
+        catch (Exception ex) when (IsCacheFailure(ex))
+        {
+            AppLog.Warn("antigravity", "could not read the previous token cache");
+            return null;
+        }
     }
+
+    private void RemoveLegacyCache()
+    {
+        try { File.Delete(_legacyPath); }
+        catch (Exception ex) when (IsCacheFailure(ex))
+        {
+            AppLog.Warn("antigravity", "could not remove the previous token cache");
+        }
+    }
+
+    private static bool IsCacheFailure(Exception ex) =>
+        ex is IOException or UnauthorizedAccessException or CryptographicException or PlatformNotSupportedException;
 
     public static (string? Access, string? Refresh, DateTimeOffset? Expiry)? Extract(string? raw)
     {
@@ -182,8 +242,7 @@ public sealed class AntigravityProvider : IProviderRuntime
         WidgetDescriptor.Percent(AntigravityMetric.GeminiId, Provider, AntigravityMetric.SessionLabel, sessionStartSignal: SessionStartSignal.ZeroUsage),
         WidgetDescriptor.Percent(AntigravityMetric.GeminiWeeklyId, Provider, AntigravityMetric.WeeklyLabel),
         WidgetDescriptor.Percent(AntigravityMetric.ClaudeId, Provider, AntigravityMetric.ClaudeLabel, sessionStartSignal: SessionStartSignal.ZeroUsage),
-        WidgetDescriptor.Percent(AntigravityMetric.ClaudeWeeklyId, Provider, AntigravityMetric.ClaudeWeeklyLabel),
-        ..SpendTileMapper.HistoryWidgets(Provider)
+        WidgetDescriptor.Percent(AntigravityMetric.ClaudeWeeklyId, Provider, AntigravityMetric.ClaudeWeeklyLabel)
     ];
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
@@ -191,19 +250,13 @@ public sealed class AntigravityProvider : IProviderRuntime
 
     public async Task<ProviderSnapshot> RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var loaded = _auth.Load();
+        var loaded = _auth.Load(migrateCache: true);
         if (loaded is null)
             return ProviderSnapshot.Error(Provider, "Start Antigravity or run `agy` and try again.");
         try
         {
             var (lines, plan) = await ReadQuotaAsync(loaded.Value,
                 (access, refresh, expiry) => _auth.SaveCache(access, refresh, expiry), cancellationToken);
-            await SpendTileMapper.AppendScanAsync(
-                lines,
-                () => AntigravityDbUsageScanner.Scan(),
-                "From your Antigravity conversations (estimated)",
-                "antigravity",
-                cancellationToken);
             MetricLine.AppendNoDataIfNeeded(lines);
             return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);
         }

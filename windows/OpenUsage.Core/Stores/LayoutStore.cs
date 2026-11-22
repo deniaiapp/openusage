@@ -17,12 +17,6 @@ public sealed class LayoutStore
     {
         _settings = settings;
         _registry = Registry.From(providers.ToArray());
-        if (_settings.EnabledMetrics.Count == 0)
-            _settings.EnabledMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal);
-        if (_settings.PinnedMetrics.Count == 0)
-            _settings.PinnedMetrics = new HashSet<string>(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal);
-        if (_settings.ExpandedMetrics.Count == 0)
-            _settings.ExpandedMetrics = new HashSet<string>(DefaultLayout.ExpandedMetricIds, StringComparer.Ordinal);
         SeedNewDefaultMetrics();
     }
 
@@ -92,6 +86,8 @@ public sealed class LayoutStore
             SeedAccountLayout(runtime, providerId, firstTemplateAccount);
             SetProviderEnabled(id, true);
         }
+        else if (SeedNewAccountMetrics(runtime, providerId))
+            _settings.Save();
         _registry = Registry.From(providers);
     }
 
@@ -109,6 +105,23 @@ public sealed class LayoutStore
                 pins < MaxPinsPerProvider && _settings.PinnedMetrics.Add(descriptor.Id))
                 pins++;
         }
+        SeedNewAccountMetrics(runtime, providerId);
+    }
+
+    private bool SeedNewAccountMetrics(IProviderRuntime runtime, string providerId)
+    {
+        var seeded = _settings.SeededDefaultMetrics!;
+        var changed = false;
+        foreach (var descriptor in runtime.WidgetDescriptors)
+        {
+            var templateId = providerId + descriptor.Id[runtime.Provider.Id.Length..];
+            if (!DefaultLayout.NewAccountMetricIds.Contains(templateId) || !seeded.Add(descriptor.Id))
+                continue;
+            if (_settings.EnabledMetrics.Add(descriptor.Id) && DefaultLayout.ExpandedMetricIds.Contains(templateId))
+                _settings.ExpandedMetrics.Add(descriptor.Id);
+            changed = true;
+        }
+        return changed;
     }
 
     internal void RemoveAccount(string id)
@@ -123,6 +136,7 @@ public sealed class LayoutStore
             _settings.EnabledMetrics.Remove(descriptor.Id);
             _settings.ExpandedMetrics.Remove(descriptor.Id);
             _settings.PinnedMetrics.Remove(descriptor.Id);
+            _settings.SeededDefaultMetrics?.Remove(descriptor.Id);
         }
         SetProviderEnabled(id, false);
     }

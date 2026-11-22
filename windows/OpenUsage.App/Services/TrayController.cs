@@ -20,6 +20,7 @@ public sealed class TrayController : IDisposable
     private readonly Forms.NotifyIcon _notify;
     private readonly DispatcherTimer _clock;
     private readonly PaceAlerts _paceAlerts = new();
+    private readonly UsageToast _usageToast = new();
     private Icon? _icon;
 
     public TrayController(AppContainer container, DashboardWindow window)
@@ -73,7 +74,7 @@ public sealed class TrayController : IDisposable
         var tooltip = pins.Count == 0
             ? "OpenUsage"
             : string.Join(Environment.NewLine,
-                pins.Select(p => $"{p.Descriptor.Title}: {p.Data.MenuBarValue}").Take(8));
+                pins.Select(p => $"{p.Data.Title}: {p.Data.MenuBarValue}").Take(8));
         _notify.Text = tooltip.Length > 63 ? tooltip[..60] + "…" : tooltip;
         var worst = pins.Select(p => p.Data.GetMeterState(now).Severity)
             .Where(s => s is not null)
@@ -94,7 +95,9 @@ public sealed class TrayController : IDisposable
     private void UpdateAlerts(DateTimeOffset now)
     {
         var settings = _container.Settings;
-        if (!settings.NotifyBurningFast && !settings.NotifyUseItOrLoseIt)
+        var enabled = settings.NotifyBurningFast || settings.NotifyUseItOrLoseIt;
+        _usageToast.SetEnabled(enabled);
+        if (!enabled)
         {
             _paceAlerts.Clear();
             return;
@@ -119,7 +122,9 @@ public sealed class TrayController : IDisposable
             : "Over half left; resets within 24 hours.";
         var title = first.Kind == PaceAlertKind.BurningFast ? "Burning Fast" : "Use It or Lose It";
         var summary = alerts.Length > 1 ? $" {alerts.Length - 1} more usage alerts." : "";
-        _notify.ShowBalloonTip(5000, $"OpenUsage — {title}", $"{first.Label}\n{reason}{summary}", Forms.ToolTipIcon.Info);
+        var message = $"{first.Label}\n{reason}{summary}";
+        if (!_usageToast.TryShow(title, message))
+            _notify.ShowBalloonTip(5000, $"OpenUsage — {title}", message, Forms.ToolTipIcon.Info);
     }
 
     private static Icon RenderIcon(MeterSeverity severity)
