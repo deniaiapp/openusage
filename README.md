@@ -121,6 +121,8 @@ If Claude's first check for rate limit resets can't connect, the next refresh tr
 
 Cursor plans that report a request limit instead of a usage percentage show the used and allowed requests.
 
+Cursor's usage history shows actual on-demand charges and reported tokens, not estimated spend.
+
 Windows keeps your metric choices across restarts, even if you unpin every metric.
 
 On Windows, connect ChatGPT for Codex in Customize using a device code. Add OpenRouter and Z.ai API keys in Customize; the app does not read them from the environment.
