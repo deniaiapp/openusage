@@ -120,7 +120,7 @@ public sealed class ZaiProvider : IProviderRuntime, IApiKeyManaging
         WidgetDescriptor.BoundedCount("zai.webSearches", Provider, "Web Searches", 100, "searches", MetricPeriod.MonthMs, "Web searches")
     ];
 
-    public string? LoadKey() => _keys.Get("zai") ?? AppPaths.Env("ZAI_API_KEY");
+    public string? LoadKey() => _keys.Get("zai");
     public void SaveKey(string? key) => _keys.Set("zai", key);
 
     public Task<bool> HasLocalCredentialsAsync(CancellationToken cancellationToken = default) =>
