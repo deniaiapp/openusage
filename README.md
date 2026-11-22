@@ -154,6 +154,8 @@ Saved Windows API-key accounts that this version cannot read stay encrypted when
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
+Expand Antigravity on Windows to see Argon Weekly immediately after Weekly when the account has a separate Argon quota.
+
 ## License
 
 [MIT](LICENSE)

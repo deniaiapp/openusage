@@ -49,6 +49,9 @@ Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
 
 Z.ai shows token windows of a day or longer on the Weekly row, with the reported reset time.
 
+
+Expand Antigravity to see Argon Weekly immediately after Weekly when the account has a separate Argon quota. The CLI reports it as `argonWeekly`.
+
 If a manual and scheduled refresh overlap for one provider, OpenUsage shares the same request
 instead of renewing that sign-in twice.
 

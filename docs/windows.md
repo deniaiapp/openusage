@@ -44,6 +44,7 @@ When Copilot or Antigravity cannot load usage because the provider is rate-limit
 
 In **Customize → Antigravity**, use **Sign In with Google** and finish in your browser. OpenUsage only replaces the connection once it can read that account's quota and encrypt its sign-in for your Windows user. An existing Windows Antigravity connection still works if you haven't signed in through OpenUsage. **Sign In Again** keeps the current layout and pins.
 
+Expanded provider cards keep the configured metric order instead of grouping On Demand rows beneath Always Visible rows. When Antigravity reports a separate Argon quota, expand its card to see **Argon Weekly** immediately after **Weekly**. The CLI reports it as `argonWeekly`.
 
 OpenUsage encrypts its cached Antigravity sign-in for your Windows user. On refresh, it removes the old unencrypted cache only after saving a protected copy.
 
