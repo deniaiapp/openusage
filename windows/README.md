@@ -96,9 +96,9 @@ macOS-only pieces left out on purpose:
 
 You can [connect and disconnect CLIProxyAPI hubs](../docs/windows.md#cliproxyapi-hubs) in Customize.
 The app keeps supported hub logins in sync on startup, on demand, and on scheduled refreshes.
-Failed checks appear next to the hub in Customize; hub accounts are not shown yet.
-Management requests use HTTPS, or HTTP for loopback, local
-network, and Tailscale addresses, without following redirects. The core supports the hub's
-`api-call` transport, but provider refreshes do not use it yet.
+Failed checks appear next to the hub in Customize. Each enabled hub login has its own dashboard card
+and refreshes usage through its hub. Hub metrics aren't pinned to the tray by default.
+Management requests use HTTPS, or HTTP for loopback, local network, and Tailscale addresses,
+without following redirects.
 
 Proxy support still honors `~\.openusage\config.json` (or `%APPDATA%\OpenUsage\config.json`) with a `proxy` URL.

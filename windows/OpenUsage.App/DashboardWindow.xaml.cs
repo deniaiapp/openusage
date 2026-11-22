@@ -180,6 +180,9 @@ public partial class DashboardWindow : Window
     private void Render(bool preserveEditor = false)
     {
         if (preserveEditor && (_deviceLoginEditor is not null || _antigravitySignInEditor is not null)) return;
+        if (_screen == DashboardScreen.CustomizeDetail &&
+            !_container.Layout.Providers.Any(runtime => runtime.Provider.Id == _detailProviderId))
+            _screen = DashboardScreen.Customize;
         _deviceLoginEditor = null;
         _antigravitySignInEditor?.Cancel();
         _antigravitySignInEditor = null;
