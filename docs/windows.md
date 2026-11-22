@@ -40,6 +40,9 @@ Antigravity reads the `gemini:antigravity` Windows credential (or a cached Googl
 
 When Copilot or Antigravity cannot load usage because the provider is rate-limiting requests, OpenUsage reports that error rather than asking you to sign in or replacing cached usage with an empty card.
 
+OpenUsage encrypts its cached Antigravity sign-in for your Windows user. On refresh, it removes the old unencrypted cache only after saving a protected copy.
+
+
 ### Amp on Windows
 
 Use **Customize → Amp → Sign In with Amp** to authorize with a device code. Turn on Amp in Customize to show its usage. You do not need the Amp CLI installed. The collapsed card shows Agent Usage and Amp Free. Expand it for Agent Usage, Orb Hours, Amp Free, and Individual Credits in that order. Amp Free shows the remaining allowance without a countdown because Amp does not report an exact reset time.
@@ -52,7 +55,7 @@ In **Customize → Muse Code**, choose **Sign In with Meta** and confirm the dis
 
 - **Claude:** Rate Limit Resets and a plan badge from the live profile. Resets are checked hourly; if the first check can't connect, the next refresh tries again. Usage limits still show if the resets check fails. Enterprise plans show **Spend** instead of **Extra Usage**. Max 5x shows as Max, and Max 20x shows as Ultra.
 - **Codex:** Pro 100 / 200 / 500 plan names. The Credits row shows a reported balance, including zero. It is hidden if ChatGPT says the account has no credits or does not report a balance.
-- **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, extra usage is measured against the matching personal or pooled budget. Spend history is fetched day by day and finished days are cached per account.
+- **Cursor:** Unified Cursor/X/Grok plans show the dashboard's credits and additional usage. For other plans, personal budgets show **Extra Usage** and team pools show **Team Spend**. Spend history is fetched day by day and finished days are cached per account.
 - **Grok:** The pay-as-you-go limit is shown in dollars.
 - **Ollama:** Monthly and Purchased Credits come from the balance endpoint. Free accounts can show purchased credits without a monthly allowance.
 - **OpenCode:** Add a Go API key in **Customize → OpenCode → Additional Accounts** to see live Session, Weekly, and Monthly limits without a local OpenCode install. Existing local connections still work.

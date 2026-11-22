@@ -36,7 +36,7 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Grok | `%USERPROFILE%\.grok\auth.json` |
 | Muse Code | **Customize → Muse Code → Sign In with Meta** |
 | OpenCode | Go API key in Customize, or `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
-| Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a short-lived cache under `%APPDATA%\OpenUsage\antigravity` |
+| Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a DPAPI-protected cache under `%APPDATA%\OpenUsage\antigravity` |
 | Ollama | Cloud API key in Customize. Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
 | Devin | `credentials.toml` under `.local\share\devin` / `%LOCALAPPDATA%\devin`, or the Devin/Windsurf `state.vscdb` |
 | OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
