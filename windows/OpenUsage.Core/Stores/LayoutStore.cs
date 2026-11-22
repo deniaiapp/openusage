@@ -17,12 +17,6 @@ public sealed class LayoutStore
     {
         _settings = settings;
         _registry = Registry.From(providers.ToArray());
-        if (_settings.EnabledMetrics.Count == 0)
-            _settings.EnabledMetrics = new HashSet<string>(DefaultLayout.MetricIds, StringComparer.Ordinal);
-        if (_settings.PinnedMetrics.Count == 0)
-            _settings.PinnedMetrics = new HashSet<string>(DefaultLayout.PinnedMetricIds, StringComparer.Ordinal);
-        if (_settings.ExpandedMetrics.Count == 0)
-            _settings.ExpandedMetrics = new HashSet<string>(DefaultLayout.ExpandedMetricIds, StringComparer.Ordinal);
         SeedNewDefaultMetrics();
     }
 
