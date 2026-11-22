@@ -161,6 +161,41 @@ public sealed class CliProxyHubTunnelTests
         Assert.Equal("Can't reach the CLIProxyAPI hub at hub.example.", failure.Message);
     }
 
+    [Fact]
+    public async Task ListingAndUsageShareTheSavedKeyGate()
+    {
+        var calls = 0;
+        using var hub = MakeClient(_ =>
+        {
+            calls++;
+            return Reply(HttpStatusCode.Unauthorized, "{}");
+        });
+
+        await Assert.ThrowsAsync<ProviderRequestException>(() => hub.ListAsync(Address, "fixture-key", default, HubId));
+        await Assert.ThrowsAsync<ProviderRequestException>(() => Call(hub, "fixture-key"));
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task AReopenedGateIgnoresOldRefusalsAndDropsQueuedCalls()
+    {
+        var first = new TaskCompletionSource<HttpResponseMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var calls = 0;
+        using var hub = MakeAsyncClient((_, ct) => Interlocked.Increment(ref calls) == 1
+            ? first.Task.WaitAsync(ct)
+            : Task.FromResult(Reply(HttpStatusCode.OK, """{"status_code":200,"body":"{}"}""")));
+
+        var pending = Call(hub, "fixture-key");
+        var queued = Call(hub, "fixture-key");
+        hub.Reopen(HubId);
+        first.SetResult(Reply(HttpStatusCode.Unauthorized, "{}"));
+
+        await Assert.ThrowsAsync<ProviderRequestException>(() => pending);
+        await Assert.ThrowsAsync<ProviderRequestException>(() => queued);
+        Assert.Equal(200, (await Call(hub, "fixture-key")).StatusCode);
+        Assert.Equal(2, calls);
+    }
+
     private static Task<AppHttpResponse> Call(CliProxyHubClient hub, string key) =>
         hub.CallAsync(HubId, Address, key, "idx", new AppHttpRequest("GET", new Uri("https://provider.example/")),
             "Claude", default);

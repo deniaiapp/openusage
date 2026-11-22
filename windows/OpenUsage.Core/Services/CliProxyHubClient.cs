@@ -78,7 +78,8 @@ internal sealed partial class CliProxyHubClient : IDisposable
 
     internal CliProxyHubClient(AppHttp http) => _http = http;
 
-    public async Task<IReadOnlyList<CliProxyHubLogin>> ListAsync(CliProxyHubAddress address, string key, CancellationToken ct)
+    public async Task<IReadOnlyList<CliProxyHubLogin>> ListAsync(
+        CliProxyHubAddress address, string key, CancellationToken ct, Guid? savedHubId = null)
     {
         if (!address.AllowsManagementKey())
             throw new ProviderRequestException("Use HTTPS for a CLIProxyAPI hub outside your local network or Tailscale.");
@@ -88,8 +89,12 @@ internal sealed partial class CliProxyHubClient : IDisposable
         AppHttpResponse response;
         try
         {
-            response = await _http.SendAsync(new AppHttpRequest("GET", address.ListingUrl,
-                new Dictionary<string, string> { ["Authorization"] = $"Bearer {key.Trim()}", ["Accept"] = "application/json" }), ct);
+            key = key.Trim();
+            var request = new AppHttpRequest("GET", address.ListingUrl,
+                new Dictionary<string, string> { ["Authorization"] = $"Bearer {key}", ["Accept"] = "application/json" });
+            response = savedHubId is { } id
+                ? await _gate.SendAsync(id, key, address.BaseUrl.Host, () => _http.SendAsync(request, ct), ct)
+                : await _http.SendAsync(request, ct);
         }
         catch (ProviderRequestException) when (ct.IsCancellationRequested)
         {
