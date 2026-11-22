@@ -95,6 +95,8 @@ On Windows, ChatGPT uses the latest usage response for the available reset count
 
 On Windows, OpenCode shows live Go limits instead of totaling local session history.
 
+Connect Devin from **Customize → Devin** instead of relying on a local CLI or editor login.
+
 Windows distinguishes Cursor's pooled **Team Spend** from personal **Extra Usage**.
 
 Windows reset countdowns show calendar months and years for longer waits.
