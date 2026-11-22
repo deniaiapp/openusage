@@ -131,9 +131,13 @@ Windows shows purchased credits as a remaining balance when OpenRouter supplies 
 
 Cursor keeps using the last known billing plan for the current sign-in when the plan lookup is unavailable.
 
+To connect Antigravity on Windows, choose **Sign In with Google** in Customize.
+
 Windows shows available Z.ai Limit Resets when you expand the account card.
 
 OpenUsage encrypts its Antigravity sign-in cache for your Windows user.
+
+Saved Windows API-key accounts that this version cannot read stay encrypted when you edit other accounts.
 
 The tray app retries briefly when Windows reports no network path and keeps its last usage data if the retries fail.
 
