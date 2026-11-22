@@ -318,6 +318,8 @@ public sealed class WidgetDataStore
     {
         public string Type { get; set; } = "";
         public string Label { get; set; } = "";
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? Title { get; set; }
         public string? Value { get; set; }
         public string? Text { get; set; }
         public double Used { get; set; }
@@ -331,7 +333,14 @@ public sealed class WidgetDataStore
         public List<CachedValue> Values { get; set; } = [];
         public List<DateTimeOffset> ExpiriesAt { get; set; } = [];
 
-        public static CachedLine FromMetric(MetricLine line) => line switch
+        public static CachedLine FromMetric(MetricLine line)
+        {
+            var cached = Encode(line);
+            cached.Title = line.Title;
+            return cached;
+        }
+
+        private static CachedLine Encode(MetricLine line) => line switch
         {
             MetricLine.ProgressLine p => new CachedLine
             {
@@ -372,7 +381,11 @@ public sealed class WidgetDataStore
             _ => new CachedLine { Type = "text", Label = line.Label, Value = "" }
         };
 
-        public static MetricLine? ToMetric(CachedLine line) => line.Type switch
+        public static MetricLine? ToMetric(CachedLine line) => Decode(line) is { } metric
+            ? metric with { Title = line.Title }
+            : null;
+
+        private static MetricLine? Decode(CachedLine line) => line.Type switch
         {
             "progress" => MetricLine.Progress(
                 line.Label, line.Used, line.Limit,
