@@ -127,6 +127,27 @@ public class MapperTests
         Assert.Contains(metrics.Lines, l => l is MetricLine.ProgressLine p && p.Label == "Key Limit" && p.Used == 6);
     }
 
+    [Theory]
+    [InlineData("daily", "2028-02-29T07:30:00+09:00", "2028-02-29T00:00:00Z", 1)]
+    [InlineData("weekly", "2028-02-27T18:30:00Z", "2028-02-28T00:00:00Z", 7)]
+    [InlineData("monthly", "2028-02-29T23:30:00Z", "2028-03-01T00:00:00Z", 29)]
+    [InlineData("monthly", "2028-03-01T00:00:00Z", "2028-04-01T00:00:00Z", 31)]
+    [InlineData("unknown", "2028-02-29T00:00:00Z", null, null)]
+    [InlineData(null, "2028-02-29T00:00:00Z", null, null)]
+    public void OpenRouterMapper_UsesUtcCalendarWindowsForKeyLimits(
+        string? reset, string now, string? nextReset, int? days)
+    {
+        var key = JsonUtil.ParseObject("""{ "limit": 10, "limit_remaining": 4 }""")!;
+        key["limit_reset"] = reset;
+        var mapped = OpenRouterUsageMapper.KeyMetrics(key, now: DateTimeOffset.Parse(now));
+
+        var line = Assert.IsType<MetricLine.ProgressLine>(Assert.Single(mapped.Lines));
+        Assert.Equal("Key Limit", line.Label);
+        Assert.Equal(6, line.Used);
+        Assert.Equal(nextReset is null ? (DateTimeOffset?)null : DateTimeOffset.Parse(nextReset), line.ResetsAt);
+        Assert.Equal(days * 86_400_000L, line.PeriodDurationMs);
+    }
+
     [Fact]
     public void CopilotMapper_CreditsPercent()
     {
