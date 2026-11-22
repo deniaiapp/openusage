@@ -16,11 +16,13 @@ dotnet run --project OpenUsage.App
 
 The app lives in the notification area (system tray). Left-click the icon to open the dashboard popover. Right-click for Options.
 
+In **Priority**, **Use It or Lose It** shows unpinned multi-day limits with most of their quota left and a reset within 24 hours. Turn it off in **Settings → Priority Limits**.
+
 On first launch a welcome screen lists the AI tools already signed in on this PC. Pick the ones to follow and click **Connect Selected**, or **Skip for Now** and turn providers on later in **Customize**. Closing the welcome window quits the app; it shows again next time.
 
 ## What it reads
 
-Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For Ollama, OpenRouter, and Z.ai, use **Additional Accounts** in Customize to connect API keys.
+Unlike the macOS app, the Windows port can use local sign-ins already on the machine. For Ollama, OpenCode Go, OpenRouter, and Z.ai, use **Additional Accounts** in Customize to connect API keys.
 
 | Provider | Windows credential sources |
 |---|---|
@@ -31,13 +33,15 @@ Unlike the macOS app, the Windows port can use local sign-ins already on the mac
 | Copilot | **Customize → Copilot → Sign In with GitHub** (GitHub.com), or existing editor and GitHub CLI credentials |
 | Grok | `%USERPROFILE%\.grok\auth.json` |
 | Muse Code | **Customize → Muse Code → Sign In with Meta** |
-| OpenCode | `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
+| OpenCode | Go API key in Customize, or `%USERPROFILE%\.local\share\opencode` (also `%LOCALAPPDATA%\opencode`): the `opencode*.db` credential table on OpenCode 2, `auth.json` on OpenCode 1 |
 | Antigravity | Windows Credential Manager (`gemini:antigravity`) plus a short-lived cache under `%APPDATA%\OpenUsage\antigravity` |
 | Ollama | Cloud API key in Customize. Reads `/api/balance` for Monthly and Purchased Credits, or Session / Weekly on older plans |
 | Devin | `credentials.toml` under `.local\share\devin` / `%LOCALAPPDATA%\devin`, or the Devin/Windsurf `state.vscdb` |
 | OpenRouter / Z.ai | API key in Customize (DPAPI-protected under `%APPDATA%\OpenUsage`) |
 
 Settings, cache, and logs live in `%APPDATA%\OpenUsage`.
+
+Z.ai shows token windows of a day or longer on the Weekly row, with the reported reset time.
 
 If a manual and scheduled refresh overlap for one provider, OpenUsage shares the same request
 instead of renewing that sign-in twice.
