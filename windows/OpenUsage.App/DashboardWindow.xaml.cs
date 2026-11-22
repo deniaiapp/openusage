@@ -45,6 +45,7 @@ public partial class DashboardWindow : Window
     private DevinSignInView? _devinSignIn;
     private CodexLoginView? _codexLoginEditor;
     private CopilotLoginView? _copilotLoginEditor;
+    private ClaudeSignInView? _claudeSignInEditor;
     private CursorLoginView? _cursorLoginEditor;
     public event Action<string?>? HotkeyChanged;
     private DeviceLoginView? _deviceLoginEditor;
@@ -76,7 +77,7 @@ public partial class DashboardWindow : Window
             Hide();
             return;
         }
-        if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true || _cursorLoginEditor?.ResumeIfPending() == true)
+        if (_codexLoginEditor?.ResumeIfPending() == true || _copilotLoginEditor?.ResumeIfPending() == true || _claudeSignInEditor?.ResumeIfPending() == true || _cursorLoginEditor?.ResumeIfPending() == true)
             Render(preserveEditor: true);
         else if (_devinSignIn?.IsPending != true)
         {
@@ -194,12 +195,13 @@ public partial class DashboardWindow : Window
             _ => ""
         };
 
-        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null || _cursorLoginEditor is not null)) return;
+        if (preserveEditor && (_accountEditor is not null || _devinSignIn is not null || _codexLoginEditor is not null || _copilotLoginEditor is not null || _claudeSignInEditor is not null || _cursorLoginEditor is not null)) return;
         _accountEditor = null;
         _devinSignIn?.Cancel();
         _devinSignIn = null;
         _codexLoginEditor = null;
         _copilotLoginEditor = null;
+        _claudeSignInEditor = null;
         _cursorLoginEditor = null;
         ContentHost.Children.Clear();
         if (ShowPrivacyPlaceholder()) return;
@@ -616,6 +618,12 @@ public partial class DashboardWindow : Window
     {
         var runtime = _container.Layout.Providers.FirstOrDefault(p => p.Provider.Id == _detailProviderId);
         if (runtime is null) return;
+        if (runtime is OpenUsage.Core.Providers.Claude.ClaudeProvider claude)
+        {
+            ContentHost.Children.Add(SectionTitle("Claude Sign-In"));
+            _claudeSignInEditor = new ClaudeSignInView(_container, claude, (Style)FindResource("GhostButton"));
+            ContentHost.Children.Add(_claudeSignInEditor);
+        }
         if (runtime is AntigravityProvider antigravity)
         {
             ContentHost.Children.Add(SectionTitle("Google Sign-In"));
