@@ -134,18 +134,16 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
             }
             catch (Exception ex) { AppLog.Warn("openrouter", $"credits fetch failed: {ex.Message}"); }
 
+            var management = false;
             try
             {
                 var keyResponse = await GetAsync(KeyUrl, key, cancellationToken);
                 if (keyResponse.IsSuccess && JsonUtil.Object(keyResponse.Json?["data"]) is { } data)
                 {
-                    var management = JsonUtil.Bool(data["is_management_key"]) == true;
-                    var listSpend = requireKey && management;
-                    var metrics = OpenRouterUsageMapper.KeyMetrics(data, includeSpend: !listSpend);
+                    management = JsonUtil.Bool(data["is_management_key"]) == true;
+                    var metrics = OpenRouterUsageMapper.KeyMetrics(data, includeSpend: !management);
                     plan = metrics.Plan;
                     lines.AddRange(metrics.Lines);
-                    if (listSpend) lines.AddRange(await ListedKeysSpendAsync(key, cancellationToken));
-                    if (management) lines.AddRange(await _activity.ReadAsync(key, cancellationToken));
                 }
                 else if (requireKey)
                 {
@@ -157,6 +155,11 @@ public sealed class OpenRouterProvider : IProviderRuntime, IApiKeyManaging
             }
             catch (Exception ex) when (!requireKey) { AppLog.Warn("openrouter", $"key fetch failed: {ex.Message}"); }
 
+            if (management)
+            {
+                lines.AddRange(await ListedKeysSpendAsync(key, cancellationToken));
+                lines.AddRange(await _activity.ReadAsync(key, cancellationToken));
+            }
             MetricLine.AppendNoDataIfNeeded(lines);
             return ProviderSnapshot.Make(Provider, plan, lines, DateTimeOffset.Now);
         }
