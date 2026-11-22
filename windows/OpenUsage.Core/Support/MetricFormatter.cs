@@ -8,14 +8,19 @@ public static class MetricFormatter
     public enum Style { Tray, Row, Full }
 
     private static readonly CultureInfo Locale = CultureInfo.GetCultureInfo("en-US");
+    internal const int NonUsdFractionDigits = 6;
+    private static readonly string NonUsdFormat = "#,0." + new string('#', NonUsdFractionDigits);
 
-    public static string Number(double value, MetricKind kind, Style style)
+    public static string Number(double value, MetricKind kind, Style style, string? currencyCode = null)
     {
         switch (kind)
         {
             case MetricKind.Percent:
                 return $"{(int)Math.Round(JsonUtil.ClampPercent(value))}%";
             case MetricKind.Dollars:
+                if (currencyCode is not (null or "USD"))
+                    return $"{currencyCode} " + (Math.Abs(value) >= 1000 && style != Style.Full
+                        ? Compact(value) : value.ToString(NonUsdFormat, Locale));
                 if (Math.Abs(value) >= 1000 && style != Style.Full)
                     return "$" + Compact(value);
                 return style switch
@@ -32,7 +37,7 @@ public static class MetricFormatter
 
     public static string String(MetricValue value, Style style)
     {
-        var text = Number(value.Number, value.Kind, style);
+        var text = Number(value.Number, value.Kind, style, value.CurrencyCode);
         return string.IsNullOrEmpty(value.Label) ? text : $"{text} {value.Label}";
     }
 

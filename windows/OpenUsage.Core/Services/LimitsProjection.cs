@@ -93,7 +93,7 @@ internal static class LimitsProjection
                     var unit = meter.Format.FormatKind switch
                     {
                         ProgressFormat.Kind.Percent => "percent",
-                        ProgressFormat.Kind.Dollars => "usd",
+                        ProgressFormat.Kind.Dollars => meter.Format.CurrencyCode?.ToLowerInvariant() ?? "usd",
                         _ => meter.Format.Suffix?.Trim() is { Length: > 0 } suffix ? suffix : spec.Unit
                     };
                     var ratio = limit > 0 ? used / limit : double.NaN;
@@ -105,7 +105,7 @@ internal static class LimitsProjection
                     if (values.Items.FirstOrDefault(v => v.Kind == valueKind &&
                         (spec.ValueLabel is null || v.Label == spec.ValueLabel)) is { } value && double.IsFinite(value.Number))
                     {
-                        result[spec.Key] = new(kind, spec.Unit,
+                        result[spec.Key] = new(kind, value.CurrencyCode?.ToLowerInvariant() ?? spec.Unit,
                             Used: spec.IsBalance ? null : value.Number,
                             Available: spec.IsBalance ? value.Number : null,
                             ExpiresAt: values.ExpiriesAt is { Count: > 0 } expiries ? expiries.Order().ToArray() : null);
